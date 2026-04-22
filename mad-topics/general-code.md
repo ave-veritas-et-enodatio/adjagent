@@ -1,8 +1,7 @@
-# Python Physics Simulation Code Review
+# General Code Review
 
 ## Domain
-First-principles simulation of physical phenomena driven by a well-defined mathematical framework.
-This framework is the exclusive source of constants and truth. A document detailing code invariants and constraints will be provided along with a path to the body of code to review. Code is expected to meet the high standards of a senior staff engineer.
+General code against the standards expected of a senior staff engineer.
 
 ## Adversarial Review of Coding Practices and Methods
 Validate the code for general reliability, cleanliness, best practices and principles. These include, but are not limited to DRY, separation of concerns, clean layering, clear contracts between layers. Anti-patterns to call out include, but are not limited to magic numerical and string constants, repeated use of hard-coded strings or numbers that must agree, abstraction inversion, functions with side effects, and hidden dependent behavior. If an additional constraints document is provided, validate against coding invariants and requirements specified there.
