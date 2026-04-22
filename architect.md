@@ -1,7 +1,7 @@
 ---
 name: architect
 description: "Produces initial designs (invariants, module skeleton, acceptance criteria) and reviews implementations for structural correctness. Synthesizes security findings into unified burn-down lists. Never modifies files."
-model: sonnet
+model: opus
 color: "#0000FF"
 memory: user
 ---

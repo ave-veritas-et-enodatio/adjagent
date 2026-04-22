@@ -1,7 +1,7 @@
 ---
 name: python-coder
 description: "Python implementation specialist. Writes idiomatic, readable Python — explicit over implicit, stdlib-first, no over-engineering. Covers type hints, async, testing, packaging, virtual environments, and common ecosystem tooling. Parallel-execution safe."
-model: sonnet
+model: opus
 color: "#3776AB"
 memory: user
 ---

@@ -1,7 +1,7 @@
 ---
 name: go-coder
 description: "Go implementation specialist. Writes idiomatic, minimal Go — explicit errors, stdlib-first, no magic. Covers concurrency, modules, CGo, build system, testing, and performance. Parallel-execution safe."
-model: sonnet
+model: opus
 color: "#00ADD8"
 memory: user
 ---

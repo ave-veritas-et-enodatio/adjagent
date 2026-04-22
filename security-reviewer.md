@@ -1,7 +1,7 @@
 ---
 name: security-reviewer
 description: "Adversarial security review of code and designs. Identifies hazards, attack vectors, and the specific conditions that must hold to prevent exploitation. Does not prescribe design solutions — that is the architect's job. Review only, never modifies files."
-model: sonnet
+model: opus
 color: "#DC2626"
 memory: user
 ---
