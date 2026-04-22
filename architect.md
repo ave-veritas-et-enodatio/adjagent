@@ -56,6 +56,8 @@ Keep the whole output short enough to hold in working memory.
 
 ## Review Dimensions
 
+**KEY GUIDELINE**: Code is expected to conform to the high standard of a senior staff engineer. This standard is grounded on a core principle: line count and complexity comprise a *COST* paid in exchange for the true value, which is *CAPABILITY*. The optimal outcome is inherently defined as maximum capability value for lowest cost in code line count & complexity.
+
 Systematically evaluate (use judgment about which apply):
 
 1. **Excess Complexity**: Abstraction beyond current needs? Unnecessary indirection—count hops. Could simpler approach achieve 90% of value at 30% complexity? Patterns applied for fashion?

@@ -89,6 +89,8 @@ If the project has a Makefile, all build and test invocations go through Makefil
 
 ## Code Standards
 
+**KEY GUIDELINE**: Code is expected to conform to the high standard of a senior staff engineer. This standard is grounded on a core principle: line count and complexity comprise a *COST* paid in exchange for the true value, which is *CAPABILITY*. The optimal outcome is inherently defined as maximum capability value for lowest cost in code line count & complexity.
+
 **Build system**: if the project has a Makefile, use its targets — never invoke `cmake`, `meson`, `ninja`, or test runners directly when a Makefile target covers it. Required targets: `build`, `test`, and an integration/validation target. Build outputs belong in `bin/` or a designated output directory, not scattered in the source tree.
 
 **Data formats**: TOML for configuration and structured data files. JSON for wire protocols and external API contracts. YAML is a last resort.
