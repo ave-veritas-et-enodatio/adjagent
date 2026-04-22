@@ -43,7 +43,7 @@ Dispatch AA with:
 
 AA returns the initial alignment map.
 
-Write `[review-name]/doc-1-initial-findings.md` (see Document Format).
+Write `mad-review/[review-name]/doc-1-initial-findings.md` (see Document Format).
 
 Update session state. Proceed to Phase 3.
 
@@ -74,7 +74,7 @@ For each point where both reviewers claim agreement this round:
 
 Dispatch AA with both reviewers' round responses and the list of retired points. AA returns the updated alignment map.
 
-Write `[review-name]/doc-[N+1]-round-[N].md` (see Document Format).
+Write `mad-review/[review-name]/doc-[N+1]-round-[N].md` (see Document Format).
 
 **Step 4 — Check end conditions**
 
@@ -86,7 +86,7 @@ Update session state at each transition.
 
 ## Phase 4 — Output Documents
 
-Write `[review-name]/SUMMARY.md` (see Document Format).
+Write `mad-review/[review-name]/SUMMARY.md` (see Document Format).
 
 ## Retirement Gate
 
@@ -104,7 +104,7 @@ All three parts must pass to retire a point:
 
 ## Document Format
 
-### `[review-name]/doc-1-initial-findings.md`
+### `mad-review/[review-name]/doc-1-initial-findings.md`
 
 ```
 # Initial Findings — [Review Name]
@@ -119,7 +119,7 @@ All three parts must pass to retire a point:
 [AA's alignment map verbatim]
 ```
 
-### `[review-name]/doc-[N+1]-round-[N].md`
+### `mad-review/[review-name]/doc-[N+1]-round-[N].md`
 
 ```
 # Debate Round [N] — [Review Name]
@@ -140,7 +140,7 @@ All three parts must pass to retire a point:
 [AA's updated alignment map verbatim]
 ```
 
-### `[review-name]/SUMMARY.md`
+### `mad-review/[review-name]/SUMMARY.md`
 
 ```
 # Review Summary — [Review Name]
@@ -170,7 +170,7 @@ These were investigated and resolved — do not reopen without new information.
 
 ## Session State
 
-Write to `.claude/debate-session-state.md` at every phase transition.
+Write to `mad-review/[review-name]/debate-session-state.md` at every phase transition.
 
 ```markdown
 # Debate Referee Session State
