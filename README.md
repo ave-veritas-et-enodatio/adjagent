@@ -38,8 +38,10 @@ Uses Multi-Agent Debate Process
   * output is a directory of documents containing
     * summary doc - burndown list, unresolved conflicts, resolved conflicts
     * audit trail of debate process and outcomes 
-  * example: ```/mad-review TOPIC=.claude/agents/mad-topics/sim-code.md CONSTRAINTS=AVE-Core/LIVING-REFERENCE.md TARGET=AVE-Core/src/ave/```
-
+  * examples 
+    * ```/mad-review TOPIC=.claude/agents/mad-topics/sim-code.md CONSTRAINTS=AVE-Core/LIVING-REFERENCE.md TARGET=AVE-Core/src/ave/```
+    * ```/mad-review TOPIC=.claude/agents/mad-topics/general-code.md CONSTRAINTS=AGENTS.md TARGET=src/ **IGNORE
+    `src/third_party`**```
 
 ## Knowledge Base Agent Set
 
