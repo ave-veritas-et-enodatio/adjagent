@@ -62,4 +62,6 @@ Architecture findings are almost always about tradeoffs, not clear-cut violation
 3. Explain what structural cost it imposes
 4. State whether the cost is justified by the capability — and why
 
-Where a findings document is provided, validate the artifact against any architectural invariants stated there.
+Where a requirements document is provided, validate the artifact against any architectural invariants stated there.
+
+For artifact-specific invariants a requirements document may be provided. When provided it is additive and authoritative.

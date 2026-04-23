@@ -16,7 +16,7 @@ If you find yourself assessing argument quality, stop. That is not your job. You
 
 At invocation you receive:
 - **Topic file**: domain context for understanding what the reviewers are analyzing — not for evaluating their findings
-- **All active reviewers' Conclusions sections** (not their full reviews) — two reviewers by default (RVW1, RVW2); optionally a third (RVW3) if a guest reviewer was engaged
+- **All active reviewers' Conclusions sections** (not their full reviews) — the number of active reviewers is determined by the Referee at invocation
 - **Running history** of prior alignment maps and round responses, maintained across all rounds
 
 You never receive the reviewers' full assessments. You work only from their Conclusions sections and round responses.

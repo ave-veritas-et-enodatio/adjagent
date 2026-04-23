@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -o pipefail
 # post_openai.sh — POST a messages array to an OpenAI-compatible chat completions endpoint.
 # Requires: curl; one of: jq, python3, python
 #
@@ -8,9 +9,6 @@
 # Response text is written to stdout. All other output goes to stderr.
 #
 # Optional envars:
-#   MAX_TOKENS=<number>   — passed as max_tokens in the request body
-#   TEMPERATURE=<number>  — passed as temperature in the request body
-#   THINK=true            — passed as enable_thinking: true in the request body
 #   DEBUG_POST=true       — dump the request payload to stderr before sending
 #   DEBUG_RESPONSE=true   — dump the raw API response JSON to stderr
 
@@ -84,39 +82,62 @@ function resolve_model() {
   fi
 }
 
-# build_payload <model> <messages_file> [max_tokens] [temperature]
+# build_payload <model> <messages_file>
 # Writes the JSON payload to a temp file; prints the file path to stdout.
 # Caller is responsible for deleting the file.
 function build_payload() {
-  local model="${1}" msgs_file="${2}" max_tok="${3:-}" temp="${4:-}"
-  local ext_params=""
-  [[ -n "${max_tok}" ]]              && ext_params+=$(printf '"max_tokens": %s,' "${max_tok}")
-  [[ -n "${temp}" ]]                 && ext_params+=$(printf '"temperature": %s,' "${temp}")
-  [[ "${THINK:-false}" == "true" ]]  && ext_params+='"reasoning_effort": "high", "chat_template_kwargs": {"enable_thinking": true},'
+  local model="${1}" msgs_file="${2}"
   local tmp
   tmp=$(mktemp) || { echo "error: mktemp failed" 1>&2; return 1; }
   printf '{"model": "%s", "messages": ' "${model}" > "${tmp}"
   cat "${msgs_file}" >> "${tmp}"
-  if [[ -n "${ext_params}" ]]; then
-    printf ', %s}' "${ext_params%,}" >> "${tmp}"
-  else
-    printf '}' >> "${tmp}"
-  fi
+  printf '}' >> "${tmp}"
   echo "${tmp}"
 }
 
 # extract_content <json_string>
-# Writes the assistant message content to stdout; returns 1 if absent.
+# Writes the assistant message content to stdout.
+# If content is a structured array, joins text items.
+# If no text content but tool_calls present, outputs TOOL_CALLS\n<json>.
 function extract_content() {
   local raw="${1}"
   if [[ -n "${JQ}" ]]; then
-    "${JQ}" -r '.choices[0].message.content // empty' <<< "${raw}"
+    "${JQ}" -r '
+      .choices[0].message as $msg |
+      ($msg.content) as $c |
+      if $c == null or $c == "" then
+        if ($msg.tool_calls // null) != null then
+          "TOOL_CALLS\n" + ($msg.tool_calls | tojson)
+        else
+          empty
+        end
+      elif ($c | type) == "array" then
+        [ $c[] | select(.type == "text") | .text ] | join("")
+      else
+        $c
+      end
+    ' <<< "${raw}"
   else
     "${PYTHON}" -c '
 import sys, json
 resp = json.loads(sys.stdin.read())
-content = resp["choices"][0]["message"]["content"]
-if content: print(content)
+msg = resp.get("choices", [{}])[0].get("message", {})
+content = msg.get("content")
+if isinstance(content, list):
+    text = "".join(item.get("text", "") for item in content if item.get("type") == "text")
+    if text:
+        print(text, end="")
+    else:
+        content = None
+elif isinstance(content, str) and content:
+    print(content, end="")
+else:
+    content = None
+if content is None:
+    tool_calls = msg.get("tool_calls")
+    if tool_calls:
+        print("TOOL_CALLS")
+        print(json.dumps(tool_calls), end="")
 ' <<< "${raw}"
   fi
 }
@@ -140,30 +161,42 @@ try:
   err  = body.get("error") or body.get("detail") or {}
   code = err.get("code", "")
   msg  = err.get("message", "")
-  pat  = r"model_not_found|invalid_model|model_not_allowed|does not exist|not available|no such model"
-  sys.exit(0 if re.search(pat, code + msg, re.I) else 1)
+  code_pat = r"model_not_found|invalid_model|model_not_allowed"
+  msg_pat  = r"does not exist|not available|no such model"
+  sys.exit(0 if re.search(code_pat, code, re.I) or re.search(msg_pat, msg, re.I) else 1)
 except Exception: sys.exit(1)
 ' <<< "${raw}"
   fi
 }
 
 # do_post <model>
-# POSTs with the given model name; writes response JSON to stdout.
+# POSTs with the given model name; writes response body to stdout.
 function do_post() {
   local model="${1}" payload_file
-  payload_file=$(build_payload "${model}" "${MESSAGES_FILE}" "${MAX_TOKENS:-}" "${TEMPERATURE:-}") || {
+  payload_file=$(build_payload "${model}" "${MESSAGES_FILE}") || {
     echo "error: failed to build request payload" 1>&2; return 1
   }
+  trap "rm -f '${payload_file}'" EXIT
   [[ "${DEBUG_POST:-false}" == "true" ]] && \
     echo "POST ${API_BASE_URL}/chat/completions payload:" 1>&2 && cat "${payload_file}" 1>&2
-  local result
-  curl -s -X POST "${API_BASE_URL}/chat/completions" \
+  local bodytmp http_code
+  bodytmp=$(mktemp) || { echo "error: mktemp failed" 1>&2; return 1; }
+  trap "rm -f '${payload_file}' '${bodytmp}'" EXIT
+  http_code=$(curl -s -o "${bodytmp}" -w "%{http_code}" \
+    -X POST "${API_BASE_URL}/chat/completions" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer ${API_KEY}" \
-    -d "@${payload_file}"
-  local rc=$?
-  rm -f "${payload_file}"
-  [[ ${rc} -eq 0 ]] || { echo "error: curl failed" 1>&2; return 1; }
+    -d "@${payload_file}") || { echo "error: curl failed" 1>&2; rm -f "${payload_file}" "${bodytmp}"; trap - EXIT; return 1; }
+  if [[ "${http_code}" -ge 400 ]]; then
+    echo "error: HTTP ${http_code}" 1>&2
+    cat "${bodytmp}" 1>&2
+    rm -f "${payload_file}" "${bodytmp}"
+    trap - EXIT
+    return 1
+  fi
+  cat "${bodytmp}"
+  rm -f "${payload_file}" "${bodytmp}"
+  trap - EXIT
 }
 
 resp=$(do_post "${MODEL}") || exit 1
