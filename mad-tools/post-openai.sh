@@ -3,7 +3,8 @@ set -o pipefail
 # post_openai.sh — POST a messages array to an OpenAI-compatible chat completions endpoint.
 # Requires: curl; one of: jq, python3, python
 #
-# usage: API_BASE_URL=<url> API_KEY=<key> MODEL=<model> post_openai.sh <messages.json>
+# usage: API_BASE_URL=<url> API_KEY_CURL_CFG=<auth-header-curl-config> MODEL=<model> post_openai.sh <messages.json>
+# API_KEY_CURL_CFG format: header = "Authorization: Bearer the-api-key-here"
 #
 # messages.json format: JSON array of {"role": "<role>", "content": "<text>"} objects.
 # Response text is written to stdout. All other output goes to stderr.
@@ -16,18 +17,23 @@ THIS_SCRIPT=$(basename "$0")
 
 function usage() {
   [[ -n "${*}" ]] && echo "error: ${*}" 1>&2
-  echo "usage: API_BASE_URL=<url> API_KEY=<key> MODEL=<model> ${THIS_SCRIPT} <messages.json>" 1>&2
+  echo "usage: API_BASE_URL=<url> API_KEY_CURL_CFG=<curl-auth-header-config-file> MODEL=<model> ${THIS_SCRIPT} <messages.json>" 1>&2
+  echo 'API_KEY_CURL_CFG *exact* file format:' 1>&2
+  echo 'header = "Authorization: Bearer your-api-key-here"' 1>&2
   exit 1
 }
 
-[[ -n "${API_BASE_URL}" ]] || usage "API_BASE_URL must be set"
-[[ -n "${API_KEY}" ]]      || usage "API_KEY must be set"
-[[ -n "${MODEL}" ]]        || usage "MODEL must be set"
-[[ -f "${1}" ]]            || usage "messages file not found: ${1}"
+[[ -n "${API_BASE_URL}" ]]        || usage "API_BASE_URL must be set"
+[[ -n "${API_KEY_CURL_CFG}" ]]        || usage "API_KEY_CURL_CFG must be set"
+[[ -f "${API_KEY_CURL_CFG}" ]]        || usage "API_KEY_CURL_CFG not found: ${API_CURL_CFG}"
+{
+  [[ $(cat "${API_KEY_CURL_CFG}" | wc -l | awk '{print $1}') == 1 ]] && \
+  cat "${API_KEY_CURL_CFG}" | grep '^header = "Authorization: Bearer [a-zA-Z0-9_\-]*"$' > /dev/null
+} || usage "API_KEY_CURL_CFG has has invalid format: ${API_KEY_CURL_CFG}"
+[[ -n "${MODEL}" ]]               || usage "MODEL must be set"
+[[ -f "${MESSAGES_FILE:=${1}}" ]] || usage "messages file not found: ${MESSAGES_FILE}"
 
 command -v curl &>/dev/null || { echo "error: curl is required" 1>&2; exit 1; }
-
-MESSAGES_FILE="${1}"
 
 PYTHON=
 # Resolve JSON tool: jq preferred, fall back to python3/python
@@ -40,8 +46,10 @@ JQ=$(command -v jq 2>/dev/null)
 # Writes newline-separated model IDs to stdout.
 function list_models() {
   local resp
-  resp=$(curl -s "${API_BASE_URL}/models" \
-    -H "Authorization: Bearer ${API_KEY}") || { echo "error: curl failed querying models" 1>&2; return 1; }
+  resp=$(cat "${API_KEY_CURL_CFG}" | curl -K - -s "${API_BASE_URL}/models") || {
+    echo "error: curl failed querying models" 1>&2
+    return 1
+  }
   if [[ -n "${JQ}" ]]; then
     "${JQ}" -r '.data[].id' <<< "${resp}"
   else
@@ -182,10 +190,9 @@ function do_post() {
   local bodytmp http_code
   bodytmp=$(mktemp) || { echo "error: mktemp failed" 1>&2; return 1; }
   trap "rm -f '${payload_file}' '${bodytmp}'" EXIT
-  http_code=$(curl -s -o "${bodytmp}" -w "%{http_code}" \
+  http_code=$(cat "${API_KEY_CURL_CFG}" | curl -K - -s -o "${bodytmp}" -w "%{http_code}" \
     -X POST "${API_BASE_URL}/chat/completions" \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer ${API_KEY}" \
     -d "@${payload_file}") || { echo "error: curl failed" 1>&2; rm -f "${payload_file}" "${bodytmp}"; trap - EXIT; return 1; }
   if [[ "${http_code}" -ge 400 ]]; then
     echo "error: HTTP ${http_code}" 1>&2

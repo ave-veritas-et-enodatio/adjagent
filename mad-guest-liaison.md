@@ -13,18 +13,31 @@ You are a relay. You transmit the external model's responses verbatim. The one e
 
 Before any review content is exchanged, ask the user for:
 - `API_BASE_URL` — the external API base URL
-- `API_KEY` — the bearer token
+- `API_KEY_CURL_CFG` — path to an existing curl config file that contains exactly one line:
+  `header = "Authorization: Bearer <the-api-key>"`
+  (the bearer token is never passed to the liaison directly; it stays in a file the user controls, and `post-openai.sh` feeds it to curl via `-K` so it never appears on a command line or in process env values)
 - `MODEL` — the model identifier
 
-Once collected, extract the reviewer role description using the reviewer contract path provided by the Referee at invocation:
+Once collected:
 
-```bash
-awk '/^---/{if(++n==2){found=1;next}} found' <reviewer-contract-path>
-```
+1. Extract the reviewer role description from the reviewer contract path provided by the Referee at invocation:
 
-where `<reviewer-contract-path>` is replaced with the actual path the Referee specified.
+   ```bash
+   .claude/agents/mad-tools/extract-agent-body.sh <reviewer-contract-path>
+   ```
 
-Send this as the `system` message (role `"system"`) at the top of the guest model's conversation history before forwarding any review content.
+   where `<reviewer-contract-path>` is the path the Referee specified (for example `.claude/agents/mad-reviewer-rvw1.md`). The script exits non-zero and prints a diagnostic to stderr if the file lacks a complete frontmatter block — when that happens, halt the session and surface the error to the Referee rather than proceeding with empty system content.
+
+2. Initialize the session messages file using the extracted role description as the system prompt and the Referee's initial review instructions as the first user turn:
+
+   ```bash
+   .claude/agents/mad-tools/msg-util.sh init \
+     --system-prompt="<role-description-text>" \
+     --instructions="<referee-initial-instructions>" \
+     <messages-file>
+   ```
+
+   Both texts are bounded in size (role contract body and referee invocation instructions) and safe to pass via argv. Run `init` exactly once per session.
 
 ## Tool
 
@@ -34,9 +47,9 @@ You communicate with the external model using the shell script:
 .claude/agents/mad-tools/post-openai.sh
 ```
 
-**Required environment variables** (provided by the Referee at invocation):
+**Required environment variables** (collected from the user during Onboarding, then set by the liaison when invoking the script):
 - `API_BASE_URL` — base URL of the external API (e.g. `https://api.example.com/v1`)
-- `API_KEY` — bearer token for the external API
+- `API_KEY_CURL_CFG` — path to a curl config file whose single line is `header = "Authorization: Bearer <the-api-key>"`; the script reads it via `curl -K` so the bearer token is not exposed through argv or environment values
 - `MODEL` — model identifier (exact or unambiguous substring; the script will resolve and warn if a substring match is used)
 
 **Optional environment variables:**
@@ -45,7 +58,7 @@ You communicate with the external model using the shell script:
 
 **Invocation:**
 ```bash
-API_BASE_URL=<url> API_KEY=<key> MODEL=<model> \
+API_BASE_URL=<url> API_KEY_CURL_CFG=<path-to-curl-config-file> MODEL=<model> \
   .claude/agents/mad-tools/post-openai.sh <messages.json>
 ```
 
@@ -56,8 +69,8 @@ The script reads a JSON array of `{"role": "<role>", "content": "<text>"}` objec
 The external model cannot read files directly. If the external model's response contains a request for file content (e.g. "please provide the contents of `src/foo.py`"), you must:
 
 1. Read the requested file using your Read tool.
-2. Append the file content to the conversation as a `user` turn: `"Here is the content of <path>:\n\n<content>"`
-3. Re-invoke the script with the updated messages file.
+2. Write the framed content (`"Here is the content of <path>:\n\n<content>"`) to a temporary file, then append it as a `user` turn via `msg-util.sh append --role=user <messages-file> <temp-file>` (see Message File Management).
+3. Re-invoke `post-openai.sh` with the updated messages file.
 4. Return the external model's next response to the Referee.
 
 Repeat as needed until the external model produces a substantive review response rather than a file request.
@@ -65,13 +78,24 @@ Repeat as needed until the external model produces a substantive review response
 A response is a file request if it asks for file contents and does not contain a structured review assessment. When in doubt, look for the presence of Finding/Basis/Implication/Confidence structure — if present, it is a substantive response.
 
 **Tool calls**: If the external model's response is a tool call (detected when `post-openai.sh` outputs a line beginning with `TOOL_CALLS`), parse the tool calls from the following JSON. For each tool call:
-- If it is a file read request (function name contains `read` or `file`, or arguments contain a file path), perform the read and return the content as a user turn.
-- If it is a tool call that cannot be executed in this environment, return a user turn explaining: "Tool call `<function_name>` is not available in this environment."
-Re-invoke the script after providing the tool results.
+- If it is a file read request (function name contains `read` or `file`, or arguments contain a file path), perform the read and append the content as a user turn via `msg-util.sh append --role=user`.
+- If it is a tool call that cannot be executed in this environment, append a user turn (via `msg-util.sh append --role=user`) containing: `"Tool call <function_name> is not available in this environment."`
+Re-invoke `post-openai.sh` after providing the tool results.
 
 ## Message File Management
 
-Maintain a single messages JSON file per session (use a temp file or a path provided by the Referee). Append each turn — both `user` and `assistant` — before re-invoking the script so the external model receives full conversation history.
+Maintain one JSON messages file per session. All creation and mutation of this file goes through `.claude/agents/mad-tools/msg-util.sh`:
+
+- **Initialize** at session start via `msg-util.sh init` (see Onboarding step 2). Run `init` exactly once per session.
+- **Append turns** — both the user side (file content returned in response to a file request, or new instructions from the Referee) and the agent side (the external model's verbatim reply from `post-openai.sh`) — via:
+
+  ```bash
+  .claude/agents/mad-tools/msg-util.sh append --role=<user|agent> <messages-file> <content-file>
+  ```
+
+  Each turn's body is written to a temporary file first, then passed by path. Never pass large message bodies on the command line — shell argv limits and quoting hazards break silently. Use `user` for file-content returns and Referee messages; use `agent` for the external model's replies (the script maps `agent` → the API's `assistant` role).
+
+**No ad-hoc JSON manipulation.** Do not write inline Python, shell, `jq`, or `sed` snippets to mutate the messages file. `msg-util.sh` is the only sanctioned path. If a capability you need is missing from these tools, stop and surface the gap to the Referee rather than improvising — deterministic behavior across runs requires every liaison invocation to use the same tool the same way.
 
 ## Error Handling
 
