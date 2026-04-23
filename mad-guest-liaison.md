@@ -15,6 +15,12 @@ A response is a file request if it asks for file contents and does not contain a
 
 TOOL_CALLS responses (detected when `post-openai.sh` outputs a line beginning with `TOOL_CALLS`) are always treated as file requests — see Tool Calls handling below.
 
+## Session Files
+
+The Referee provides at invocation:
+- **Messages file path**: `mad-review/[review-name]/liaison-messages.json` — initialize here; do not delete at the end (permanent audit artifact)
+- **TMPDIR**: set to `mad-review/[review-name]/tmp/`; prefix all `mad-tools` script invocations with this env var so `mktemp` calls land in the review directory
+
 ## Onboarding
 
 Before any review content is exchanged, ask the user for:

@@ -27,8 +27,8 @@ function usage() {
 [[ -n "${API_KEY_CURL_CFG}" ]]        || usage "API_KEY_CURL_CFG must be set"
 [[ -f "${API_KEY_CURL_CFG}" ]]        || usage "API_KEY_CURL_CFG not found: ${API_KEY_CURL_CFG}"
 {
-  [[ $(cat "${API_KEY_CURL_CFG}" | wc -l | awk '{print $1}') -le 1 ]] && \
-  cat "${API_KEY_CURL_CFG}" | grep '^header = "Authorization: Bearer [a-zA-Z0-9_\-+/.]*"$' > /dev/null
+  [[ $(wc -l < "${API_KEY_CURL_CFG}" | awk '{print $1}') -le 1 ]] && \
+  grep '^header = "Authorization: Bearer [a-zA-Z0-9_\-+/.]*"$' < "${API_KEY_CURL_CFG}" > /dev/null
 } || usage "API_KEY_CURL_CFG has invalid format: ${API_KEY_CURL_CFG}"
 [[ -n "${MODEL}" ]]               || usage "MODEL must be set"
 [[ -f "${MESSAGES_FILE:=${1}}" ]] || usage "messages file not found: ${MESSAGES_FILE}"
@@ -46,7 +46,7 @@ JQ=$(command -v jq 2>/dev/null)
 # Writes newline-separated model IDs to stdout.
 function list_models() {
   local resp
-  resp=$(cat "${API_KEY_CURL_CFG}" | curl -K - -s "${API_BASE_URL}/models") || {
+  resp=$(curl -K - < "${API_KEY_CURL_CFG}" -s "${API_BASE_URL}/models") || {
     echo "error: curl failed querying models" 1>&2
     return 1
   }
@@ -181,7 +181,7 @@ function do_post() {
     echo "POST ${API_BASE_URL}/chat/completions payload:" 1>&2 && cat "${payload_file}" 1>&2
 
   bodytmp="${tmpdir}/body.tmp"
-  http_code=$(curl -K "${API_KEY_CURL_CFG}" -s -o "${bodytmp}" -w "%{http_code}" \
+  http_code=$(curl -K - < "${API_KEY_CURL_CFG}" -s -o "${bodytmp}" -w "%{http_code}" \
     -X POST "${API_BASE_URL}/chat/completions" \
     -H "Content-Type: application/json" \
     -d "@${payload_file}") || { echo "error: curl failed" 1>&2; return 1; }

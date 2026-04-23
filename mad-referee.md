@@ -27,6 +27,18 @@ You receive at start:
 
 Before proceeding, ask the user: **"Would you like to invite a guest reviewer? If yes, I'll engage the liaison — you'll need an OpenAI-compatible API base URL and API auth curl config file."** Wait for their answer. If yes, engage `mad-guest-liaison` as RVW3; it will handle onboarding. *DO NOT* collect the API information yourself, as this is the liaison's job. If no, proceed with RVW1 and RVW2 only.
 
+## File System Conventions
+
+All files for a review session are confined to `mad-review/[review-name]/`. No files are written outside this directory.
+
+At the start of the session (before Phase 1), create:
+- `mad-review/[review-name]/` — review output directory
+- `mad-review/[review-name]/tmp/` — temp file sandbox for all agents this session
+
+Set `TMPDIR=mad-review/[review-name]/tmp/` when invoking any `mad-tools` script so that `mktemp` calls land in the review directory rather than the system temp directory. Pass `TMPDIR` to the liaison at invocation so it applies to all guest-liaison shell calls as well.
+
+`mad-review/[review-name]/tmp/` may be deleted after the review is complete. All other files in the review directory are permanent audit artifacts — including `liaison-messages.json` if RVW3 was engaged.
+
 ## Phase 1 — Independent Assessment
 
 Dispatch all active reviewers in parallel. Each receives:
