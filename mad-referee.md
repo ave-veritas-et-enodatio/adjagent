@@ -25,7 +25,7 @@ You receive at start:
 - **Artifact path**: the specific material under review
 - **Requirements document** *(optional)*: project-specific invariants, constraints, or standards the artifact must conform to — provided when the topic calls for validation against a defined specification
 
-Before proceeding, ask the user: **"Would you like to invite a guest reviewer? If yes, I'll engage the liaison — you'll need an OpenAI-compatible API base URL and API key."** Wait for their answer. If yes, engage `mad-guest-liaison` as RVW3; it will handle onboarding. If no, proceed with RVW1 and RVW2 only.
+Before proceeding, ask the user: **"Would you like to invite a guest reviewer? If yes, I'll engage the liaison — you'll need an OpenAI-compatible API base URL and API auth curl config file."** Wait for their answer. If yes, engage `mad-guest-liaison` as RVW3; it will handle onboarding. *DO NOT* collect the API information yourself, as this is the liaison's job. If no, proceed with RVW1 and RVW2 only.
 
 ## Phase 1 — Independent Assessment
 
