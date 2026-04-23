@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -o pipefail
+set -u -o pipefail
 # extract-agent-body.sh — print the body of a Claude agent markdown file with
 # its YAML frontmatter stripped. Frontmatter must be delimited by a '---' line
 # at the very top of the file and a subsequent '---' line that closes it.

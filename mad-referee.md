@@ -29,7 +29,7 @@ Before proceeding, ask the user: **"Would you like to invite a guest reviewer? I
 
 ## Phase 1 — Independent Assessment
 
-Dispatch reviewers in parallel (RVW1, RVW2, and RVW3 if present). Each receives:
+Dispatch all active reviewers in parallel. Each receives:
 - The topic file
 - The artifact (path or content)
 - The requirements document, if provided — reviewers must treat it as the authoritative source of invariants to validate against
@@ -45,13 +45,13 @@ If a reviewer fails to return (timeout, error, no response), note the failure in
 
 Dispatch AA with:
 - The topic file
-- All active reviewers' Conclusions sections (not full reviews) — RVW1, RVW2, and RVW3 if present
+- All active reviewers' Conclusions sections (not full reviews)
 
 AA returns the initial alignment map.
 
-You must have write access to `mad-review/[review-name]/`. If file writes fail, surface the error immediately and halt — do not continue the process without persisting state.
+You must have write access to the output directory (see Output Paths). If file writes fail, surface the error immediately and halt — do not continue the process without persisting state.
 
-Write `mad-review/[review-name]/initial-findings.md` (see Document Format).
+Write `initial-findings.md` (see Document Format).
 
 Update session state. Proceed to Phase 3.
 
@@ -59,7 +59,7 @@ Update session state. Proceed to Phase 3.
 
 **Step 1 — Dispatch reviewers**
 
-Dispatch all active reviewers in parallel (RVW1, RVW2, and RVW3 if present). Each receives:
+Dispatch all active reviewers in parallel. Each receives:
 - Their own full assessment and all prior round responses
 - The current alignment map from AA
 - The specific points of contention to address this round
@@ -70,6 +70,8 @@ They do not receive each other's full reviews or round responses.
 
 Reviewers may flag AA misclassification in their round responses (e.g., a finding attributed to the wrong reviewer, or a finding incorrectly marked as unique when the reviewer did address it). When a reviewer flags a misclassification, verify it against the original assessment documents and correct the alignment map before applying the retirement gate.
 
+**You have process authority to correct AA alignment map errors**, with or without a reviewer challenge. When you correct an error — whether triggered by a reviewer challenge or by your own verification — document the correction and its reason as an explicit warning in the round document. Never correct silently.
+
 **Step 2 — Apply retirement gate**
 
 For each point where all active reviewers claim agreement this round:
@@ -78,15 +80,17 @@ For each point where all active reviewers claim agreement this round:
 
 2. **Implication test**: pose one implication question to yourself: *"Given that [resolution] is true, what follows for [related aspect of the artifact]?"* Answer it by tracing each element of your answer back to a specific sentence in the reviewers' plain-language explanations. If any claim in your answer requires knowledge not present in those explanations, the gate fails — the resolution is not self-contained. Do not retire.
 
-3. **Gate passes**: mark the point retired. Tag as [Conceded by RVW1], [Conceded by RVW2], [Conceded by RVW3], or [Mutual Agreement] as appropriate. [Initial Agreement] or [Eventual Agreement] from the AA map carries forward.
+3. **Gate passes**: mark the point retired. Tag as `[Conceded by RVW1]`, `[Conceded by RVW2]`, `[Conceded by RVW3]`, or `[Mutual Agreement]` as appropriate. `[Initial Agreement]` or `[Eventual Agreement]` from the AA map carries forward.
 
 4. **Gate fails**: point remains contested. Record which check failed and why — this context belongs in the human arbitration queue.
+
+**Solo concessions**: when one reviewer concedes their position while others' positions are unchanged, the conceding reviewer must still provide a plain-language explanation (per the reviewer contract). The consistency check and implication test in Steps 1–2 above apply only when all active reviewers claim agreement simultaneously.
 
 **Step 3 — Update AA**
 
 Dispatch AA with all active reviewers' round responses and the list of retired points. AA returns the updated alignment map.
 
-Write `mad-review/[review-name]/round-[N].md` (see Document Format).
+Write `round-[N].md` (see Document Format).
 
 **Step 4 — Check end conditions**
 
@@ -98,7 +102,7 @@ Update session state at each transition.
 
 ## Phase 4 — Output Documents
 
-Write `mad-review/[review-name]/SUMMARY.md` (see Document Format).
+Write `SUMMARY.md` (see Document Format).
 
 ## Retirement Gate
 
@@ -114,9 +118,22 @@ All three parts must pass to retire a point:
 
 **Exhaustion is not agreement**: if all active reviewers stop arguing without a gate-passing resolution, the point is contested. Record "no gate-passing resolution reached" in the arbitration queue. Do not retire on mutual silence.
 
+**Authoritative record**: `debate-session-state.md` is the authoritative record for retirement status. When it disagrees with AA's running alignment history, the session state governs.
+
 ## Document Format
 
-### `mad-review/[review-name]/initial-findings.md`
+### Output Paths
+
+All output files are written to `mad-review/[review-name]/`:
+
+| Document | Filename |
+|----------|----------|
+| Session state | `debate-session-state.md` |
+| Initial findings | `initial-findings.md` |
+| Round N | `round-[N].md` |
+| Final summary | `SUMMARY.md` |
+
+### `initial-findings.md`
 
 ```
 # Initial Findings — [Review Name]
@@ -134,7 +151,7 @@ All three parts must pass to retire a point:
 [AA's alignment map verbatim]
 ```
 
-### `mad-review/[review-name]/round-[N].md`
+### `round-[N].md`
 
 ```
 # Debate Round [N] — [Review Name]
@@ -154,11 +171,14 @@ All three parts must pass to retire a point:
 ## Points Retired This Round
 [For each: which gate checks passed, plain-language resolution, retirement tag]
 
+## AA Correction Log *(if any)*
+[For each correction: finding ID, error corrected, reason, triggered by reviewer challenge or referee verification]
+
 ## Updated Alignment Map
 [AA's updated alignment map verbatim]
 ```
 
-### `mad-review/[review-name]/SUMMARY.md`
+### `SUMMARY.md`
 
 ```
 # Review Summary — [Review Name]
@@ -183,14 +203,24 @@ These were investigated and resolved — do not reopen without new information.
 
 | Finding | Raised By | Retired By | Round | Plain-Language Resolution |
 |---------|-----------|------------|-------|--------------------------|
-| [description] | RVW1/RVW2/RVW3 | Concession/Mutual | N | [resolution] |
+| [description] | RVW1/RVW2/RVW3 | [Conceded by RVWn] / [Mutual Agreement] | N | [resolution] |
 ```
 
 ## Session State
 
-Write to `mad-review/[review-name]/debate-session-state.md` at every phase transition. Each write replaces the file with the complete current-state snapshot. The file always reflects the current state, not a history — the round documents provide the audit trail.
+Write to `debate-session-state.md` at every phase transition. Each write replaces the file with the complete current-state snapshot. The file always reflects the current state, not a history — the round documents provide the audit trail.
 
 ```markdown
+---
+review: <name>
+phase: <current-phase>
+status: <current-status>
+rounds_complete: <N>
+points_resolved: <N>
+points_remaining: <N>
+end_condition: <none|1|2>
+---
+
 # Debate Referee Session State
 
 ## Review Name
@@ -230,6 +260,7 @@ Points remaining: [list]
 ## Key Principles
 
 - Your authority is process, not content. You do not decide who is right.
+- You have process authority to correct AA alignment map errors — always document corrections explicitly, never silently.
 - A retirement gate failure is informative, not a process failure. Record the reason.
 - Dispatch reviewers in parallel wherever they are not dependent on each other's current-round output.
 - The output documents are the deliverable. SUMMARY.md must be actionable without reading the debate history.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -o pipefail
+set -u -o pipefail
 # post_openai.sh — POST a messages array to an OpenAI-compatible chat completions endpoint.
 # Requires: curl; one of: jq, python3, python
 #
@@ -25,11 +25,11 @@ function usage() {
 
 [[ -n "${API_BASE_URL}" ]]        || usage "API_BASE_URL must be set"
 [[ -n "${API_KEY_CURL_CFG}" ]]        || usage "API_KEY_CURL_CFG must be set"
-[[ -f "${API_KEY_CURL_CFG}" ]]        || usage "API_KEY_CURL_CFG not found: ${API_CURL_CFG}"
+[[ -f "${API_KEY_CURL_CFG}" ]]        || usage "API_KEY_CURL_CFG not found: ${API_KEY_CURL_CFG}"
 {
-  [[ $(cat "${API_KEY_CURL_CFG}" | wc -l | awk '{print $1}') == 1 ]] && \
-  cat "${API_KEY_CURL_CFG}" | grep '^header = "Authorization: Bearer [a-zA-Z0-9_\-]*"$' > /dev/null
-} || usage "API_KEY_CURL_CFG has has invalid format: ${API_KEY_CURL_CFG}"
+  [[ $(cat "${API_KEY_CURL_CFG}" | wc -l | awk '{print $1}') -le 1 ]] && \
+  cat "${API_KEY_CURL_CFG}" | grep '^header = "Authorization: Bearer [a-zA-Z0-9_\-+/.]*"$' > /dev/null
+} || usage "API_KEY_CURL_CFG has invalid format: ${API_KEY_CURL_CFG}"
 [[ -n "${MODEL}" ]]               || usage "MODEL must be set"
 [[ -f "${MESSAGES_FILE:=${1}}" ]] || usage "messages file not found: ${MESSAGES_FILE}"
 
@@ -90,18 +90,6 @@ function resolve_model() {
   fi
 }
 
-# build_payload <model> <messages_file>
-# Writes the JSON payload to a temp file; prints the file path to stdout.
-# Caller is responsible for deleting the file.
-function build_payload() {
-  local model="${1}" msgs_file="${2}"
-  local tmp
-  tmp=$(mktemp) || { echo "error: mktemp failed" 1>&2; return 1; }
-  printf '{"model": "%s", "messages": ' "${model}" > "${tmp}"
-  cat "${msgs_file}" >> "${tmp}"
-  printf '}' >> "${tmp}"
-  echo "${tmp}"
-}
 
 # extract_content <json_string>
 # Writes the assistant message content to stdout.
@@ -180,30 +168,30 @@ except Exception: sys.exit(1)
 # do_post <model>
 # POSTs with the given model name; writes response body to stdout.
 function do_post() {
-  local model="${1}" payload_file
-  payload_file=$(build_payload "${model}" "${MESSAGES_FILE}") || {
-    echo "error: failed to build request payload" 1>&2; return 1
-  }
-  trap "rm -f '${payload_file}'" EXIT
+  local model="${1}" tmpdir payload_file bodytmp http_code
+  tmpdir=$(mktemp -d) || { echo "error: mktemp failed" 1>&2; return 1; }
+  trap "rm -rf '${tmpdir}'" EXIT
+
+  payload_file="${tmpdir}/payload.json"
+  printf '{"model": "%s", "messages": ' "${model}" > "${payload_file}"
+  cat "${MESSAGES_FILE}" >> "${payload_file}"
+  printf '}' >> "${payload_file}"
+
   [[ "${DEBUG_POST:-false}" == "true" ]] && \
     echo "POST ${API_BASE_URL}/chat/completions payload:" 1>&2 && cat "${payload_file}" 1>&2
-  local bodytmp http_code
-  bodytmp=$(mktemp) || { echo "error: mktemp failed" 1>&2; return 1; }
-  trap "rm -f '${payload_file}' '${bodytmp}'" EXIT
-  http_code=$(cat "${API_KEY_CURL_CFG}" | curl -K - -s -o "${bodytmp}" -w "%{http_code}" \
+
+  bodytmp="${tmpdir}/body.tmp"
+  http_code=$(curl -K "${API_KEY_CURL_CFG}" -s -o "${bodytmp}" -w "%{http_code}" \
     -X POST "${API_BASE_URL}/chat/completions" \
     -H "Content-Type: application/json" \
-    -d "@${payload_file}") || { echo "error: curl failed" 1>&2; rm -f "${payload_file}" "${bodytmp}"; trap - EXIT; return 1; }
+    -d "@${payload_file}") || { echo "error: curl failed" 1>&2; return 1; }
+
   if [[ "${http_code}" -ge 400 ]]; then
     echo "error: HTTP ${http_code}" 1>&2
     cat "${bodytmp}" 1>&2
-    rm -f "${payload_file}" "${bodytmp}"
-    trap - EXIT
     return 1
   fi
   cat "${bodytmp}"
-  rm -f "${payload_file}" "${bodytmp}"
-  trap - EXIT
 }
 
 resp=$(do_post "${MODEL}") || exit 1
