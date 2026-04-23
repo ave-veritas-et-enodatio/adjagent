@@ -1,6 +1,6 @@
 ---
 name: mad-reviewer-rvw2
-description: "Independent technical reviewer/assessor for multi-model debate review process (RVW2, claude-opus-4-6). Produces structured initial assessments and responds to debate rounds. Never sees counterpart reviewer's full review."
+description: "Independent technical reviewer/assessor for multi-model debate review process. Produces structured initial assessments and responds to debate rounds. Never sees counterpart reviewer's full review."
 model: claude-opus-4-6
 color: "#6D28D9"
 memory: user
