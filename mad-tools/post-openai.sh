@@ -28,7 +28,7 @@ function usage() {
 [[ -f "${API_KEY_CURL_CFG}" ]]        || usage "API_KEY_CURL_CFG not found: ${API_KEY_CURL_CFG}"
 {
   [[ $(wc -l < "${API_KEY_CURL_CFG}" | awk '{print $1}') -le 1 ]] && \
-  grep '^header = "Authorization: Bearer [a-zA-Z0-9_\-+/.]*"$' < "${API_KEY_CURL_CFG}" > /dev/null
+  grep '^header = "Authorization: Bearer [a-zA-Z0-9_+/.:=-]*"$' < "${API_KEY_CURL_CFG}" > /dev/null
 } || usage "API_KEY_CURL_CFG has invalid format: ${API_KEY_CURL_CFG}"
 [[ -n "${MODEL}" ]]               || usage "MODEL must be set"
 [[ -f "${MESSAGES_FILE:=${1}}" ]] || usage "messages file not found: ${MESSAGES_FILE}"
