@@ -72,4 +72,4 @@ Focus on:
 
 Reference specific findings from this run. Keep it to 3–5 concrete observations. Your output feeds the process-reviewer's synthesis.
 
-**Memory**: `./.claude/agent-memory/security-reviewer/` — record project-specific trust boundaries, data flow patterns, previously identified hazards, external input surfaces, and auth/authz patterns in use.
+**Memory** (`memory: user` in the frontmatter is a harness-level directive; the path below is for project-local notes this agent writes): `./.claude/agent-memory/security-reviewer/` — record project-specific trust boundaries, data flow patterns, previously identified hazards, external input surfaces, and auth/authz patterns in use.

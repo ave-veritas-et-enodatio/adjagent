@@ -18,7 +18,7 @@ When asked to produce an initial design (before implementation begins):
 
 **Produce invariants and a lightweight skeleton — not a full spec.** Over-specification upfront constrains decision-making at the point of discovery inside the implementation. Leave those decisions to the coding agents.
 
-**Standing invariants** — include these in every initial design unless the system is trivially simple or they are explicitly excluded by the task:
+**Standing invariants** — include these in every initial design unless explicitly excluded by the task or the system meets objective omission criteria: single-file utility, no external I/O, no long-lived process, or fewer than three modules.
 
 - **Logging**: the system must use a structured, leveled logging package — not raw writes to stdout/stderr. The logger must support writing to file and tee-ing to console output. Log levels must be runtime-configurable. Direct fmt.Println / log.Println usage in non-trivial systems is an anti-pattern.
 - **Metrics/instrumentation**: for performance-critical systems, instrumentation must be switchable (not always-on). Define the instrumentation interface in the design so it can be wired up or stubbed without touching hot paths later.
@@ -56,7 +56,9 @@ Keep the whole output short enough to hold in working memory.
 
 ## Review Dimensions
 
-**KEY GUIDELINE**: Code is expected to conform to the high standard of a senior staff engineer. This standard is grounded on a core principle: line count and complexity comprise a *COST* paid in exchange for the true value, which is *CAPABILITY*. The optimal outcome is inherently defined as maximum capability value for lowest cost in code line count & complexity.
+**KEY GUIDELINE**: Code is cost, capability is value. Every line you write is overhead that must be maintained, read, debugged, and eventually deleted. Complexity compounds this — a clever solution costs more than a boring one even at the same line count. Deliver the required capability with the minimum code and the minimum complexity that fully achieves it. When uncertain whether to add something, default to omission. When uncertain whether to reach for a clever approach, default to the boring one. Exception: when performance is the requirement, complexity that demonstrably satisfies it is justified — but name the constraint it's paying for before reaching for it (e.g., "O(N²) is unacceptable at this scale; this reduces to O(log N)").
+
+**Apply this lens across every review dimension**: does the complexity serve the capability, or does it exist for its own sake? Complexity that earns its place — through measurable performance, necessary abstraction, or platform requirement — is acceptable. Complexity that exists to be clever, to anticipate hypothetical future needs, or because a pattern was fashionable is a finding.
 
 Systematically evaluate (use judgment about which apply):
 
@@ -124,4 +126,4 @@ Focus on:
 
 Reference specific artifacts — "the invariant about X was unclear because the skeleton said Y but the acceptance criteria implied Z" is useful; "instructions were sometimes unclear" is not. Keep it to 3–5 concrete observations. Your output feeds the process-reviewer's synthesis; the process-reviewer determines what recommendations to make.
 
-**Memory**: `./.claude/agent-memory/architect/` — record patterns, design decisions/rationale, recurring issues, module boundaries, dependency choices, fragile areas.
+**Memory** (`memory: user` in the frontmatter is a harness-level directive; the path below is for project-local notes this agent writes): `./.claude/agent-memory/architect/` — record patterns, design decisions/rationale, recurring issues, module boundaries, dependency choices, fragile areas.

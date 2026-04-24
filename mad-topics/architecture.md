@@ -6,7 +6,9 @@ Software architecture review: package and module structure, abstraction boundari
 
 ## Adversarial Review of Architectural Decisions
 
-Architecture is expected to meet the standard of a senior staff engineer who has maintained large systems over time. The core principle: every structural decision — a package boundary, an abstraction layer, an interface contract, a design pattern — is a *cost* paid in exchange for *capability*. The optimal architecture minimizes structural complexity while maximizing clarity, extensibility, and the ability to reason locally.
+**Structure is cost, capability is value.** Every structural decision — a package boundary, an abstraction layer, an interface contract, a design pattern — is overhead that must be maintained, understood, and navigated by every engineer who touches the system. Complexity compounds this: an indirection that adds a hop costs more than the structural clarity it might provide. The optimal architecture delivers the required clarity, extensibility, and local reasoning with the minimum structural complexity that fully achieves it.
+
+**Apply this lens across every review dimension**: does the structural complexity serve the capability, or does it exist for its own sake? Structure that earns its place — by removing harder complexity, hiding a volatile decision, or making a hard problem locally tractable — is justified. Structure that exists to be elegant, to anticipate hypothetical future needs, or because a pattern was fashionable is a finding.
 
 Review the artifact for architectural soundness. This is a review of *where things live and how they talk to each other*, not of implementation details. Findings should be grounded in specific structural evidence, not general preferences.
 
