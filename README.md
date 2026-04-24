@@ -21,23 +21,31 @@ These are shared among various projects by cloning the repo to the agents/ subdi
   * windows-app-expert.md
 
 ## Math & Code Review Agent Set
-Uses Multi-Agent Debate Process
+Uses Multi-Agent Debate Process.
+Applicable to architecture review, code review, math review, agent definition review.
 
 * mad-referee.md - runs multi-agent debate review process
-* mad-reviewer-rvw1.md - one of two independent reviewers
-* mad-reviewer-rvw2.md - two of two independent reviewers
-* mad-alignment-assessor.md - only assesses alignment/disagreement between reviewers
+* mad-reviewer-rvw1.md - an independent reviewer
+* mad-reviewer-rvw2.md - another independent reviewer
+* mad-guest-liaison.md - a liaison that can loop in an external model via API base url, key, and model name
+* mad-alignment-assessor.md - only assesses alignment/disagreement among reviewers
 * commands
   * mad-review.md - initiates a review process. you must provide:
-    * a topic (see agents/mad-topics/)
+    * a topic from agents/mad-topics/
+      * agent-definition.md 
+      * architecture.md
+      * general-code.md
+      * math-derivation.md
+      * sim-code.md
     * \[optional\] a requirements/constraints doc (e.g. coding invariants, math invariants, etc.)
-    * a review target (path to document or hierarchy)
+    * a review target (path to document, file, or hierarchy)
 * process
   * /mad-review \[your specifics\]
   * referee launches agents and reviews/debate/resolution occurs
-  * output is a directory of documents containing
+  * output is a directory `./mad-review/<review-name>/` of documents containing
     * summary doc - burndown list, unresolved conflicts, resolved conflicts
-    * audit trail of debate process and outcomes 
+    * audit trail of debate process and outcomes
+    * all artifacts, temporary or otherwise, are produced under the review work directory
   * examples 
     * ```/mad-review TOPIC=.claude/agents/mad-topics/sim-code.md CONSTRAINTS=AVE-Core/LIVING-REFERENCE.md TARGET=AVE-Core/src/ave/```
     * ```/mad-review TOPIC=.claude/agents/mad-topics/general-code.md CONSTRAINTS=AGENTS.md TARGET=src/ **IGNORE
