@@ -173,7 +173,7 @@ function do_post() {
   trap "rm -rf '${tmpdir}'" EXIT
 
   payload_file="${tmpdir}/payload.json"
-  printf '{"model": "%s", "messages": ' "${model}" > "${payload_file}"
+  printf '{"model": "%s", "streaming": false, "messages": ' "${model}" > "${payload_file}"
   cat "${MESSAGES_FILE}" >> "${payload_file}"
   printf '}' >> "${payload_file}"
 
