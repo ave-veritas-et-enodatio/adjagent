@@ -31,7 +31,7 @@ Findings where all active reviewers have stated a substantively equivalent posit
 
 For each:
 - Neutral one-sentence description of the agreed point
-- Finding IDs from each reviewer (e.g. RVW1 Finding 3 / RVW2 Finding 7 / RVW3 Finding 2)
+- Finding IDs from each reviewer (e.g. PRT1 Finding 3 / PRT2 Finding 7 / PRT3 Finding 2)
 - Tag: **[Initial Agreement]** if present in all initial assessments; **[Eventual Agreement]** if reached through debate rounds
 
 ### Points of Contention

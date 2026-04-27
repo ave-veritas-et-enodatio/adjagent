@@ -14,12 +14,12 @@ This is the **design** referee — for construction and problem-solving. It is t
 
 ## Agents
 
-- **RVW1** (`mad-participant-1`) — independent participant
-- **RVW2** (`mad-participant-2`) — independent participant
-- **RVW3** (`mad-guest-liaison`) — optional guest participant via external API; presents identical interface as RVW1/RVW2
+- **PRT1** (`mad-participant-1`) — independent participant
+- **PRT2** (`mad-participant-2`) — independent participant
+- **PRT3** (`mad-guest-liaison`) — optional guest participant via external API; presents identical interface as PRT1/PRT2
 - **AA** (`mad-alignment-assessor`) — alignment assessor
 
-The agents are labeled RVW1/RVW2/RVW3 for compatibility with the shared alignment assessor's existing terminology. In design mode, treat them functionally as Proposers — Phase 1 produces an independent end-to-end proposal (a derivation, a design, a construction); subsequent rounds are adversarial defense and refinement.
+The agents are labeled PRT1/PRT2/PRT3 for compatibility with the shared alignment assessor's existing terminology. In design mode, treat them functionally as Proposers — Phase 1 produces an independent end-to-end proposal (a derivation, a design, a construction); subsequent rounds are adversarial defense and refinement.
 
 ## Invocation
 
@@ -31,7 +31,7 @@ You receive at start:
   - **(b) Output location only**: the path is an empty or not-yet-created directory where session output will be written. In this case there is no input brief; the topic of design is gathered from the user via interactive dialogue (see Phase 0 below) before Phase 1 begins.
 - **Requirements document** *(optional)*: project-specific invariants, constraints, or standards the proposed solution must conform to — provided when the topic calls for validation against a defined specification
 
-Before proceeding, ask the user: **"Would you like to invite a guest participant? If yes, I'll engage the liaison — you'll need an OpenAI-compatible API base URL and API auth curl config file."** Wait for their answer. If yes, engage `mad-guest-liaison` as RVW3; it will handle onboarding. *DO NOT* collect the API information yourself, as this is the liaison's job. If no, proceed with RVW1 and RVW2 only.
+Before proceeding, ask the user: **"Would you like to invite a guest participant? If yes, I'll engage the liaison — you'll need an OpenAI-compatible API base URL and API auth curl config file."** Wait for their answer. If yes, engage `mad-guest-liaison` as PRT3; it will handle onboarding. *DO NOT* collect the API information yourself, as this is the liaison's job. If no, proceed with PRT1 and PRT2 only.
 
 ## File System Conventions
 
@@ -43,7 +43,7 @@ At the start of the session (before Phase 1), create:
 
 Set `TMPDIR=mad-design/[design-name]/tmp/` when invoking any `mad-tools` script so that `mktemp` calls land in the design directory rather than the system temp directory. Pass `TMPDIR` to the liaison at invocation so it applies to all guest-liaison shell calls as well.
 
-`mad-design/[design-name]/tmp/` may be deleted after the session is complete. All other files in the design directory are permanent audit artifacts — including `liaison-messages.json` if RVW3 was engaged.
+`mad-design/[design-name]/tmp/` may be deleted after the session is complete. All other files in the design directory are permanent audit artifacts — including `liaison-messages.json` if PRT3 was engaged.
 
 ## Phase 0 — Problem Elicitation *(only when no input brief exists)*
 
@@ -69,7 +69,7 @@ Dispatch all active participants in parallel. Each receives:
 
 Each participant produces a complete, independent end-to-end proposal — not a critique. The shape of the proposal is governed by the topic file (e.g., a derivation chain for `math-derivation`; a software architecture and key interfaces for software-design topics; a circuit topology and parameter set for hardware-design topics).
 
-When dispatching RVW3, include the participant contract path in the invocation: `.claude/agents/mad-participant-1.md`.
+When dispatching PRT3, include the participant contract path in the invocation: `.claude/agents/mad-participant-1.md`.
 
 Wait for all to return before proceeding.
 
@@ -120,7 +120,7 @@ For each point where all active participants claim convergence this round:
 
 4. **Numerical agreement** *(when applicable)*: if the topic specifies a reference value or numerical success criterion, verify that all converging proposals predict the same numerical outcome to within the stated tolerance. Algebraic equivalence implies numerical agreement, so this is typically a redundant check — but explicitly verify when the proposals reach the same answer via different paths (multi-path convergence, see below).
 
-5. **Gate passes**: mark the point retired. Tag as `[Conceded by RVW1]`, `[Conceded by RVW2]`, `[Conceded by RVW3]`, `[Mutual Convergence]`, or `[Convergent — multiple paths]` as appropriate.
+5. **Gate passes**: mark the point retired. Tag as `[Conceded by PRT1]`, `[Conceded by PRT2]`, `[Conceded by PRT3]`, `[Mutual Convergence]`, or `[Convergent — multiple paths]` as appropriate.
 
 6. **Gate fails**: point remains contested. Record which check failed and why — this context belongs in the human arbitration queue.
 
@@ -190,14 +190,14 @@ All output files are written to `mad-design/[design-name]/`:
 ```
 # Initial Proposals — [Design Name]
 
-## RVW1 Conclusions
-[RVW1's Conclusions section verbatim]
+## PRT1 Conclusions
+[PRT1's Conclusions section verbatim]
 
-## RVW2 Conclusions
-[RVW2's Conclusions section verbatim]
+## PRT2 Conclusions
+[PRT2's Conclusions section verbatim]
 
-## RVW3 Conclusions *(if present)*
-[RVW3's Conclusions section verbatim]
+## PRT3 Conclusions *(if present)*
+[PRT3's Conclusions section verbatim]
 
 ## Initial Alignment Map
 [AA's alignment map verbatim]
@@ -211,14 +211,14 @@ All output files are written to `mad-design/[design-name]/`:
 ## Points of Contention This Round
 [List from alignment map]
 
-## RVW1 Response
-[RVW1's round response verbatim]
+## PRT1 Response
+[PRT1's round response verbatim]
 
-## RVW2 Response
-[RVW2's round response verbatim]
+## PRT2 Response
+[PRT2's round response verbatim]
 
-## RVW3 Response *(if present)*
-[RVW3's round response verbatim]
+## PRT3 Response *(if present)*
+[PRT3's round response verbatim]
 
 ## Points Retired This Round
 [For each: which gate checks passed, plain-language convergence statement, retirement tag]
@@ -251,7 +251,7 @@ For under-determination: present the convergent diagnostic statement, identify t
 ## Provenance
 | Element | Originally Proposed By | Survived Through | Final Form |
 |---------|------------------------|------------------|------------|
-| [load-bearing principle, equation, decision] | RVW1 / RVW2 / RVW3 | rounds 1–N / unchanged from initial | [final statement] |
+| [load-bearing principle, equation, decision] | PRT1 / PRT2 / PRT3 | rounds 1–N / unchanged from initial | [final statement] |
 
 ## Validation *(if applicable)*
 For derivations or designs with a reference value: state the converged prediction, the reference, and the agreement margin. Identify whether the reference is empirical (the converged solution is predictive) or itself derived (the agreement confirms a downstream chain).
@@ -259,7 +259,7 @@ For derivations or designs with a reference value: state the converged predictio
 ## Human Arbitration Queue
 Unresolved points after all debate rounds. Require human judgment.
 
-| Issue | RVW1 Position | RVW2 Position | RVW3 Position *(if present)* | Notes |
+| Issue | PRT1 Position | PRT2 Position | PRT3 Position *(if present)* | Notes |
 |-------|---------------|---------------|------------------------------|-------|
 | [description] | [position] | [position] | [position or N/A] | [gate failure reason or rounds exhausted] |
 
@@ -269,7 +269,7 @@ These were investigated and resolved — do not reopen without new information.
 
 | Contention | Raised By | Resolved By | Round | Plain-Language Resolution |
 |------------|-----------|-------------|-------|--------------------------|
-| [description] | RVW1/RVW2/RVW3 | [Conceded by RVWn] / [Mutual Convergence] / [Convergent — multiple paths] / [Under-determined — convergent diagnosis] | N | [resolution] |
+| [description] | PRT1/PRT2/PRT3 | [Conceded by PRTn] / [Mutual Convergence] / [Convergent — multiple paths] / [Under-determined — convergent diagnosis] | N | [resolution] |
 ```
 
 ## Session State
@@ -300,9 +300,9 @@ outcome: <pending|algebraic|multi-path|under-determined|unresolved>
 <problem statement path>
 
 ## Phase 1 — Independent Proposal
-RVW1: complete / pending / failed
-RVW2: complete / pending / failed
-RVW3: complete / pending / not engaged / failed
+PRT1: complete / pending / failed
+PRT2: complete / pending / failed
+PRT3: complete / pending / not engaged / failed
 
 ## Phase 2 — Initial Alignment
 AA: complete / pending
