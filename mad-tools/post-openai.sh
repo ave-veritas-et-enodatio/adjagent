@@ -4,6 +4,7 @@ set -u -o pipefail
 # Requires: curl; one of: jq, python3, python
 #
 # usage: API_BASE_URL=<url> API_KEY_CURL_CFG=<auth-header-curl-config> MODEL=<model> post_openai.sh <messages.json>
+# optional envar param: MAX_TOKENS=<max-response-token-count> (default: 4096)
 # API_KEY_CURL_CFG format: header = "Authorization: Bearer the-api-key-here"
 #
 # messages.json format: JSON array of {"role": "<role>", "content": "<text>"} objects.
@@ -15,9 +16,12 @@ set -u -o pipefail
 
 THIS_SCRIPT=$(basename "$0")
 
+DEFAULT_MAX_TOKENS=$((1024 * 16))
+
 function usage() {
   [[ -n "${*}" ]] && echo "error: ${*}" 1>&2
   echo "usage: API_BASE_URL=<url> API_KEY_CURL_CFG=<curl-auth-header-config-file> MODEL=<model> ${THIS_SCRIPT} <messages.json>" 1>&2
+  echo "optional envar param MAX_TOKENS=<max-response-token-count> (default: ${DEFAULT_MAX_TOKENS})"
   echo 'API_KEY_CURL_CFG *exact* file format:' 1>&2
   echo 'header = "Authorization: Bearer your-api-key-here"' 1>&2
   exit 1
@@ -32,6 +36,9 @@ function usage() {
 } || usage "API_KEY_CURL_CFG has invalid format: ${API_KEY_CURL_CFG}"
 [[ -n "${MODEL}" ]]               || usage "MODEL must be set"
 [[ -f "${MESSAGES_FILE:=${1}}" ]] || usage "messages file not found: ${MESSAGES_FILE}"
+
+# allow specifying max_tokens, default to 4K
+MAX_TOKENS=${MAX_TOKENS:-${DEFAULT_MAX_TOKENS}}
 
 command -v curl &>/dev/null || { echo "error: curl is required" 1>&2; exit 1; }
 
@@ -173,7 +180,7 @@ function do_post() {
   trap "rm -rf '${tmpdir}'" EXIT
 
   payload_file="${tmpdir}/payload.json"
-  printf '{"model": "%s", "temperature": 0.1, "stream": false, "messages": ' "${model}" > "${payload_file}"
+  printf '{"model": "%s", "max_tokens": %s, "top_p": 1.0, "temperature": 0.1, "stream": false, "messages": ' "${model}" "${MAX_TOKENS}" > "${payload_file}"
   cat "${MESSAGES_FILE}" >> "${payload_file}"
   printf '}' >> "${payload_file}"
 
