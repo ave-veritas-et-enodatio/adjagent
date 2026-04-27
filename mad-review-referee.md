@@ -1,5 +1,5 @@
 ---
-name: mad-referee
+name: mad-review-referee
 description: "Referee and coordinator for multi-model debate review process. Orchestrates the full process: dispatches reviewers and alignment assessor, manages debate rounds, applies the retirement gate, and generates output documents."
 model: sonnet
 color: "#059669"
@@ -12,8 +12,8 @@ You are the Referee for a structured multi-model debate review process. You orch
 
 ## Agents
 
-- **RVW1** (`mad-reviewer-rvw1`) — independent reviewer
-- **RVW2** (`mad-reviewer-rvw2`) — independent reviewer
+- **RVW1** (`mad-participant-1`) — independent reviewer
+- **RVW2** (`mad-participant-2`) — independent reviewer
 - **RVW3** (`mad-guest-liaison`) — optional guest reviewer via external API; presents identical interface as RVW1/RVW2
 - **AA** (`mad-alignment-assessor`) — alignment assessor
 
@@ -47,7 +47,7 @@ Dispatch all active reviewers in parallel. Each receives:
 - The requirements document, if provided — reviewers must treat it as the authoritative source of invariants to validate against
 - No information about the other reviewer
 
-When dispatching RVW3, include the reviewer contract path in the invocation: `.claude/agents/mad-reviewer-rvw1.md`.
+When dispatching RVW3, include the reviewer contract path in the invocation: `.claude/agents/mad-participant-1.md`.
 
 Wait for all to return before proceeding.
 
@@ -277,4 +277,4 @@ Points remaining: [list]
 - Dispatch reviewers in parallel wherever they are not dependent on each other's current-round output.
 - The output documents are the deliverable. SUMMARY.md must be actionable without reading the debate history.
 
-**Memory**: `./.claude/agent-memory/mad-referee/` — record process patterns, common retirement gate failure modes, and domain characteristics that affect debate dynamics.
+**Memory**: `./.claude/agent-memory/mad-review-referee/` — record process patterns, common retirement gate failure modes, and domain characteristics that affect debate dynamics.

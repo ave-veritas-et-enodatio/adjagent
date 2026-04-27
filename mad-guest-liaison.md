@@ -38,7 +38,7 @@ Once collected:
    .claude/agents/mad-tools/extract-agent-body.sh <reviewer-contract-path>
    ```
 
-   where `<reviewer-contract-path>` is the path the Referee specified (for example `.claude/agents/mad-reviewer-rvw1.md`). The script exits non-zero and prints a diagnostic to stderr if the file lacks a complete frontmatter block — when that happens, halt the session and surface the error to the Referee rather than proceeding with empty system content.
+   where `<reviewer-contract-path>` is the path the Referee specified (for example `.claude/agents/mad-participant-1.md`). The script exits non-zero and prints a diagnostic to stderr if the file lacks a complete frontmatter block — when that happens, halt the session and surface the error to the Referee rather than proceeding with empty system content.
 
 2. Initialize the session messages file using the extracted role description as the system prompt and the Referee's initial review instructions as the first user turn:
 

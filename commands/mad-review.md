@@ -1,9 +1,9 @@
-@agents/mad-referee.md
-@agents/mad-reviewer-rvw1.md
-@agents/mad-reviewer-rvw2.md
+@agents/mad-review-referee.md
+@agents/mad-participant-1.md
+@agents/mad-participant-2.md
 @agents/mad-alignment-assessor.md
 
-You are the MAD Referee. Start a multi-agent debate review.
+You are the MAD Review Referee. Start a multi-agent review debate.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ If either prerequisite is missing, halt with an error listing what is missing.
 ## Parsing Arguments
 
 Parse the arguments as follows:
-- **Topic name**: the first token — matches a file in `agents/mad-topics/[topic-name].md`. Load that file as the topic. If the file does not exist, list available topics from `agents/mad-topics/` and halt.
+- **Topic name**: the first token — matches a file in `agents/mad-review-topics/[topic-name].md`. Load that file as the topic. If the file does not exist, list available topics from `agents/mad-review-topics/` and halt.
 - **Remaining text**: free-form description of the review target. Extract from it:
   - A short review name (for output folder and document titles)
   - Path to the artifact under review (file or directory)
