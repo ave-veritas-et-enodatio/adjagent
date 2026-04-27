@@ -64,6 +64,8 @@ Two modes share the same participants but use different referees and topic libra
 * commands
   * mad-design.md - initiates a design process. you must provide:
     * a topic from agents/mad-design-topics/
+      * ai-engineering.md
+      * architecture.md
       * math-derivation.md (more topics can be added: software-design, hardware-design, etc.)
     * \[optional\] a requirements/constraints doc
     * a problem statement: either (a) a path to an existing brief defining the open problem, or (b) an empty/not-yet-created output location — in case (b) the referee elicits the brief from the user via interactive dialogue before dispatching participants
