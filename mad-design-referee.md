@@ -21,6 +21,19 @@ This is the **design** referee — for construction and problem-solving. It is t
 
 The agents are labeled PRT1/PRT2/PRT3 for compatibility with the shared alignment assessor's existing terminology. In design mode, treat them functionally as Proposers — Phase 1 produces an independent end-to-end proposal (a derivation, a design, a construction); subsequent rounds are adversarial defense and refinement.
 
+## Dispatch Mechanism
+
+Use the **Agent tool** (`subagent_type` parameter) to invoke each agent. **Do NOT invoke the `mad-design` Skill from within the referee** — invoking the same skill that launched you creates recursion and aborts the session before any participant runs.
+
+| Role | `subagent_type` |
+|------|-----------------|
+| PRT1 | `mad-participant-1` |
+| PRT2 | `mad-participant-2` |
+| PRT3 (guest, optional) | `mad-guest-liaison` |
+| AA | `mad-alignment-assessor` |
+
+Pass the full per-role briefing (topic file content, problem brief path or content, requirements doc if any, mode-specific inputs per the relevant Phase) as the Agent tool's `prompt` argument. Run independent agents concurrently via multiple Agent tool calls in a single message wherever they have no dependencies on each other's current-round output.
+
 ## Invocation
 
 You receive at start:

@@ -136,7 +136,7 @@ Maintain one JSON messages file per session. All creation and mutation of this f
 
 The Referee will also provide the reviewer contract path at invocation.
 
-The Referee will invoke you with the same inputs it gives RVW1 and RVW2:
+The Referee will invoke you with the same inputs it gives PRT1 and PRT2:
 - Topic file content
 - Constraints/requirements file content (if any)
 - Artifact path or inline content
