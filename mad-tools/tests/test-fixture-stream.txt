@@ -1,0 +1,14 @@
+: OPENROUTER PROCESSING
+
+data: {"id":"chatcmpl-test1","choices":[{"delta":{"role":"assistant","content":""},"index":0}]}
+
+data: {"id":"chatcmpl-test1","choices":[{"delta":{"content":"Hel"},"index":0}]}
+
+data: {"id":"chatcmpl-test1","choices":[{"delta":{"content":"lo, "},"index":0}]}
+
+data: {"id":"chatcmpl-test1","choices":[{"delta":{"content":"world!"},"index":0}]}
+
+data: {"id":"chatcmpl-test1","choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}
+
+data: [DONE]
+

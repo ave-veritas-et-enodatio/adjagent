@@ -1,0 +1,4 @@
+data: {"id":"chatcmpl-err","choices":[{"delta":{"role":"assistant","content":"partial"},"index":0}]}
+
+data: {"error":{"message":"context length exceeded","type":"invalid_request_error","code":"context_length_exceeded"}}
+
