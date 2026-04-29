@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -u -o pipefail
 # msg-util.sh — manage the OpenAI-compatible messages JSON array used by the
-# MAD guest liaison. Provides deterministic initialization and append operations
-# so the liaison never has to improvise JSON manipulation inline.
+# guest liaison (mad-guest-liaison and guest-liaison). Provides deterministic
+# initialization and append operations so the liaison never has to improvise
+# JSON manipulation inline.
 #
 # Modes:
 #   init   --system-prompt=<text> --instructions=<text> <messages.json>

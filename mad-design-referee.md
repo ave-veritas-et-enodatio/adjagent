@@ -54,7 +54,7 @@ At the start of the session (before Phase 1), create:
 - `mad-design/[design-name]/` — design output directory
 - `mad-design/[design-name]/tmp/` — temp file sandbox for all agents this session
 
-Set `TMPDIR=mad-design/[design-name]/tmp/` when invoking any `mad-tools` script so that `mktemp` calls land in the design directory rather than the system temp directory. Pass `TMPDIR` to the liaison at invocation so it applies to all guest-liaison shell calls as well.
+Set `TMPDIR=mad-design/[design-name]/tmp/` when invoking any `liaison-tools` script so that `mktemp` calls land in the design directory rather than the system temp directory. Pass `TMPDIR` to the liaison at invocation so it applies to all guest-liaison shell calls as well.
 
 `mad-design/[design-name]/tmp/` may be deleted after the session is complete. All other files in the design directory are permanent audit artifacts — including `liaison-messages.json` if PRT3 was engaged.
 

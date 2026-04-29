@@ -21,7 +21,7 @@ TOOL_CALLS responses (detected when `post-openai.sh` outputs a line beginning wi
 
 The Referee provides at invocation:
 - **Messages file path**: `mad-review/[review-name]/liaison-messages.json` — initialize here; do not delete at the end (permanent audit artifact)
-- **TMPDIR**: set to `mad-review/[review-name]/tmp/`; prefix all `mad-tools` script invocations with this env var so `mktemp` calls land in the review directory
+- **TMPDIR**: set to `mad-review/[review-name]/tmp/`; prefix all `liaison-tools` script invocations with this env var so `mktemp` calls land in the review directory
 
 ## Onboarding
 
@@ -37,7 +37,7 @@ Once collected:
 1. Extract the reviewer role description from the reviewer contract path provided by the Referee at invocation:
 
    ```bash
-   .claude/agents/mad-tools/extract-agent-body.sh <reviewer-contract-path>
+   .claude/agents/liaison-tools/extract-agent-body.sh <reviewer-contract-path>
    ```
 
    where `<reviewer-contract-path>` is the path the Referee specified (for example `.claude/agents/mad-participant-1.md`). The script exits non-zero and prints a diagnostic to stderr if the file lacks a complete frontmatter block — when that happens, halt the session and surface the error to the Referee rather than proceeding with empty system content.
@@ -45,7 +45,7 @@ Once collected:
 2. Initialize the session messages file using the extracted role description as the system prompt and the Referee's initial review instructions as the first user turn:
 
    ```bash
-   .claude/agents/mad-tools/msg-util.sh init \
+   .claude/agents/liaison-tools/msg-util.sh init \
      --system-prompt="<role-description-text>" \
      --instructions="<referee-initial-instructions>" \
      <messages-file>
@@ -58,7 +58,7 @@ Once collected:
 You communicate with the external model using the shell script:
 
 ```
-.claude/agents/mad-tools/post-openai.sh
+.claude/agents/liaison-tools/post-openai.sh
 ```
 
 **Required environment variables** (collected from the user during Onboarding, then set by the liaison when invoking the script):
@@ -73,7 +73,7 @@ You communicate with the external model using the shell script:
 **Invocation:**
 ```bash
 API_BASE_URL=<url> API_KEY_CURL_CFG=<path-to-curl-config-file> MODEL=<model> \
-  .claude/agents/mad-tools/post-openai.sh <messages.json>
+  .claude/agents/liaison-tools/post-openai.sh <messages.json>
 ```
 
 The script reads a JSON array of `{"role": "<role>", "content": "<text>"}` objects from `<messages.json>` and writes the assistant's reply to stdout. All warnings and errors go to stderr.
@@ -115,13 +115,13 @@ Re-invoke `post-openai.sh` after providing the tool results.
 
 ## Message File Management
 
-Maintain one JSON messages file per session. All creation and mutation of this file goes through `.claude/agents/mad-tools/msg-util.sh`:
+Maintain one JSON messages file per session. All creation and mutation of this file goes through `.claude/agents/liaison-tools/msg-util.sh`:
 
 - **Initialize** at session start via `msg-util.sh init` (see Onboarding step 2). Run `init` exactly once per session.
 - **Append turns** — both the user side (file content returned in response to a file request, or new instructions from the Referee) and the agent side (the external model's verbatim reply from `post-openai.sh`) — via:
 
   ```bash
-  .claude/agents/mad-tools/msg-util.sh append --role=<user|agent> <messages-file> <content-file>
+  .claude/agents/liaison-tools/msg-util.sh append --role=<user|agent> <messages-file> <content-file>
   ```
 
   Each turn's body is written to a temporary file first, then passed by path. Never pass large message bodies on the command line — shell argv limits and quoting hazards break silently. Use `user` for file-content returns and Referee messages; use `agent` for the external model's replies (the script maps `agent` → the API's `assistant` role).

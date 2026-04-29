@@ -41,8 +41,8 @@ Two modes share the same participants but use different referees and topic libra
 * mad-guest-liaison.md - a liaison that can loop in an external model via API base url, key, and model name
 * mad-alignment-assessor.md - only assesses alignment/disagreement among participants
 
-### Tooling
-`mad-tools/` contains shell helpers used by the MAD process. The liaison is the primary caller; the referees set TMPDIR for liaison invocations.
+### Liaison Tooling
+`liaison-tools/` contains shell helpers used by both `mad-guest-liaison.md` (MAD process) and `guest-liaison.md` (general guest-model sessions). The liaison agents are the primary callers; MAD referees set `TMPDIR` for liaison invocations to keep `mktemp` output contained in the review/design directory.
 * `post-openai.sh` - posts a message history to an OpenAI-compatible API and prints the assistant reply. Reads the bearer token via `curl -K` so it never enters argv or env.
 * `msg-util.sh` - the only sanctioned path for creating or mutating the messages JSON (init / append). Use this rather than ad-hoc jq or sed.
 * `extract-agent-body.sh` - extracts the body of an agent definition file (drops the frontmatter) for use as a system prompt.
@@ -100,6 +100,78 @@ Two modes share the same participants but use different referees and topic libra
     * **unresolved**: candidates preserved for human arbitration if no convergence within round cap
   * examples
     * ```/mad-design TOPIC=.claude/agents/mad-design-topics/math-derivation.md CONSTRAINTS=AVE-Core/LIVING-REFERENCE.md TARGET=mad-design/inter-alpha-resonance/```
+
+## Guest Liaison
+
+`guest-liaison.md` relays a multi-turn conversation between you and an external "guest" model accessed via an OpenAI-compatible API. Distinct from `mad-guest-liaison.md`, which is the MAD-process-only variant invoked by referees inside review/design debates. Both share `liaison-tools/`.
+
+Properties of the relay:
+* **Verbatim relay** of the system prompt and each user message — no summarizing, paraphrasing, or topic-tailoring. Verified post-write by `diff` against the source; the liaison aborts before sending if the diff is non-empty.
+* **Secrets containment** — the bearer token lives in a curl config file passed to `curl -K`. The liaison treats the file path as opaque and is forbidden from reading the contents.
+* **Audit-permanent session log** — every turn (system, user, agent) is appended to `guest-session/<topic>/messages.json` and never deleted.
+* **File and tool-call services** — when the guest model asks for a file's contents or emits a tool call, the liaison reads the file (using a fixed `Here is the content of <path>:` frame) or returns a "not available in this environment" stub, then re-invokes the model.
+
+### Slash commands
+
+* `/guest-start <ARGS>` — initiate (or resume) a session: onboarding, persist session state, send the first user message, return the guest's reply.
+* `/guest <message>` — append `<message>` as the next user turn in the active session and return the guest's reply.
+* `/guest-end` — clear the active-topic pointer (`guest-session/active-topic.txt`). The session directory itself is preserved as audit history.
+
+### `/guest-start` arguments
+
+Pass as `KEY=VALUE` tokens (any order). Anything not provided is prompted for interactively.
+
+* **`TOPIC_NAME=<slug>`** — required. Names the session directory under `guest-session/`. No path separators, leading dots, or whitespace.
+* **`REMOTE_MODEL_SETTINGS=<path>`** — required. Path to a local settings file containing the keys `API_BASE_URL`, `MODEL`, and `API_KEY_CURL_CFG`. The settings file MUST NOT contain a bearer token directly — only the path to a curl config file that holds it. The liaison refuses to proceed if it detects `Authorization` or `Bearer` substrings in the settings file.
+* **`GUEST_SYSTEM_PROMPT=<agent-name>`** — optional. Names an agent under `.claude/agents/<agent-name>.md` whose body (frontmatter stripped via `extract-agent-body.sh`) is sent verbatim as the guest model's system prompt. If omitted, the guest is given the literal default `You are a helpful assistant.` The agent body is NOT a Claude-only artifact — any agent body that reads as a coherent instruction set works (e.g. `applied-mathematician`, `architect`, `tech-writer-reviewer`).
+
+### Settings file format
+
+`REMOTE_MODEL_SETTINGS` is a `KEY=VALUE`-per-line file (no quoting, no secrets). Example:
+
+```
+API_BASE_URL=https://openrouter.ai/api/v1
+MODEL=google/gemma-4-31b-it
+API_KEY_CURL_CFG=/Users/<you>/.config/curl.cfg
+```
+
+`API_BASE_URL` is the **API root**, not the chat-completions endpoint — `post-openai.sh` appends `/chat/completions` itself. (Including `/chat/completions` in the URL produces a doubled path and a 404.)
+
+### Curl config format (the file at `API_KEY_CURL_CFG`)
+
+Exactly one line:
+
+```
+header = "Authorization: Bearer <your-api-key>"
+```
+
+The liaison never reads this file. `post-openai.sh` passes the path to `curl -K`, which reads it directly into the request — the bearer token does not appear in argv, env, transcripts, or any tool output the liaison sees.
+
+### Session directory layout
+
+```
+guest-session/
+  active-topic.txt              # one line: the currently active topic slug
+  <topic>/
+    messages.json               # full conversation (system + user + agent turns); permanent audit
+    params.env                  # API_BASE_URL, MODEL, API_KEY_CURL_CFG, SYSTEM_PROMPT_AGENT
+    tmp/                        # mktemp scratch space; safe to leave between turns
+```
+
+`guest-session/` is in `.gitignore` so audit logs and `params.env` (which references local curl-config paths) do not leak into commits.
+
+### Resuming and switching topics
+
+Re-running `/guest-start` with an existing `TOPIC_NAME` offers to resume — the prior `messages.json` is preserved and new turns continue from it. To switch active sessions without deleting either, run `/guest-end` then `/guest-start` with the new topic; both session directories survive.
+
+### Example
+
+```
+/guest-start TOPIC_NAME=solar-system REMOTE_MODEL_SETTINGS=~/.config/guest-settings.env GUEST_SYSTEM_PROMPT=applied-mathematician
+/guest how long does light take to get from the sun to the earth?
+/guest now compute the same for Proxima Centauri.
+/guest-end
+```
 
 ## Knowledge Base Agent Set
 
