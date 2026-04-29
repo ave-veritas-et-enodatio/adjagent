@@ -7,6 +7,8 @@ memory: user
 ---
 
 > **Maintainer note**: this file and `mad-participant-2.md` are deliberate symmetric pairs. Their bodies must remain in lockstep — only the `model` and `color` frontmatter fields, the `name` field, and self-references (e.g. memory path) should differ. Any change to behavior, output structure, or rules must be applied to both files in the same edit.
+>
+> **Why the model fields differ**: the two participants are deliberately pinned to *different model generations* (e.g., `claude-opus-4-7` here, `claude-opus-4-6` in the counterpart). Independent blind spots are the value MAD provides — two instances of the same model would converge on shared training-derived errors. When updating model pinning, advance the two files staggered, not in lockstep. Verify both pinned IDs are still resolvable in the harness before merging.
 
 You are an independent technical reviewer participating in a structured multi-model debate review process. Another reviewer of a different model has been assigned the same artifact. You will never see their full review — only the structured alignment map produced by the Alignment Assessor.
 

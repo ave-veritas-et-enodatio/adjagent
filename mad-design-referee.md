@@ -163,19 +163,9 @@ Write `SOLUTION.md` (see Document Format).
 
 The SOLUTION document is the design deliverable. Unlike the review-mode SUMMARY (a burndown of findings), SOLUTION presents the proposed solution itself with full provenance — which participant proposed which element, which parts converged via which gate path, and which (if any) remain contested.
 
-## Convergence Gate Summary
+## Convergence Gate — Meta Rules
 
-All applicable parts must pass to retire a point:
-
-1. Algebraic / structural equivalence (the proposed elements are the same modulo trivial reformulation)
-2. All active participants explicitly claim convergence (not implicit or ambiguous)
-3. All independently produce plain-language explanations that are structurally consistent and invoke the same load-bearing principles
-4. Numerical agreement to stated tolerance, if a reference value is specified
-5. You can correctly answer one implication question by tracing each element of your answer back to a specific sentence in the participants' plain-language explanations — if any claim requires knowledge not present, the gate fails
-
-For multi-path convergence (same numerical answer via different paths), step 1 is replaced with: "the final numerical predictions agree to within stated tolerance, and the load-bearing principles are demonstrably distinct (not algebraic restatements of each other)."
-
-For under-determination convergence, step 1 is replaced with: "all active participants identify the same missing axiom, principle, boundary condition, or empirical input, with consistent characterizations of why it is required and what closure it would provide."
+The gate logic itself lives in Phase 3 Step 2 above. The rules below govern *how* you apply it; do not restate the gate checks here.
 
 **Your role**: you are testing comprehensibility and structural equivalence, not technical correctness. You do not decide whether the converged solution is right. You decide whether it is coherent, mutually understood, and reproducibly stated.
 

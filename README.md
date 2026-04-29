@@ -18,7 +18,16 @@ These are shared among various projects by cloning the repo to the agents/ subdi
   * ios-app-expert.md
   * linux-app-expert.md
   * macos-app-expert.md
+  * web-app-expert.md
   * windows-app-expert.md
+
+The shared sections of these coder/platform files are kept in lockstep by `coders/check-drift.py`. Run it after editing any shared section to confirm consistency.
+
+## Specialists
+Single-purpose agents invoked directly or by the coordinator for non-coding work.
+* prose-architect.md - rhythm and structural review of long-form prose
+* marketing-comms-expert.md - messaging, positioning, copywriting, competitive framing
+* biz-dev-strategist.md - business strategy, market analysis, GTM, monetization
 
 ## Multi-Agent Debate Agent Set
 Uses Multi-Agent Debate Process.
@@ -31,6 +40,13 @@ Two modes share the same participants but use different referees and topic libra
 * mad-participant-2.md - another independent participant
 * mad-guest-liaison.md - a liaison that can loop in an external model via API base url, key, and model name
 * mad-alignment-assessor.md - only assesses alignment/disagreement among participants
+
+### Tooling
+`mad-tools/` contains shell helpers used by the MAD process. The liaison is the primary caller; the referees set TMPDIR for liaison invocations.
+* `post-openai.sh` - posts a message history to an OpenAI-compatible API and prints the assistant reply. Reads the bearer token via `curl -K` so it never enters argv or env.
+* `msg-util.sh` - the only sanctioned path for creating or mutating the messages JSON (init / append). Use this rather than ad-hoc jq or sed.
+* `extract-agent-body.sh` - extracts the body of an agent definition file (drops the frontmatter) for use as a system prompt.
+* `tests/` - fixtures for the above scripts.
 
 ### Review Mode
 

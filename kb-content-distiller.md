@@ -165,53 +165,24 @@ CLAUDE.md contains invariants only — cross-cutting notation, definitions, conv
 
 ## Forbidden Summarization Patterns
 
-This KB presents a foundational framework with zero free parameters. The framework derives results that correspond to known physical quantities and compares them to established theories — it does not take those theories or their constants as inputs. This structure is the source of the most dangerous summarization errors, because your training will push hard in exactly the wrong direction.
+> **Project-specific section.** The discipline below is calibrated for AVE, where the source material derives results that *correspond* to GR/QM/standard-model quantities without taking them as inputs. If you are reusing this agent file in a different project, replace this section with the project's own derived-as-given hazards, or remove it. The hazard category — summaries importing vocabulary that the source does not use — is general; the specific forbidden vocabulary is not.
 
-### Why this is not a style preference
+**The rule**: in summary mode, every concept and constant must trace directly to the source document. If you are supplying framing the source does not use, stop.
 
-This material is a candidate for a unifying theory. Its value depends entirely on its logical independence from the theories it subsumes. GR, QM, and the standard model are not its foundations — they are things it derives or explains.
+**The hazard**: the framework derives quantities that correspond to standard physical constants and concepts (GR, QM, standard model). It does not take those as inputs. A summary that introduces them as givens — or borrows their vocabulary as explanation — creates a circular dependency: the framework appears to assume what it is actually deriving. The summary destroys the central claim of the material it is meant to describe. Imported framing reads *more* naturally to a physics-trained reader; that natural readability is the failure signature, not its absence.
 
-If a summary describes a derived result using GR or QM vocabulary, it creates a circular dependency: the framework now appears to assume what it is actually deriving. That is not a description of the framework — it is a logical loop that invalidates the derivations. The construction being presented ceases to be a derivation and becomes a restatement of prior assumptions. The material's central claim is destroyed by the summary meant to describe it.
+**Forbidden vocabulary in summaries** unless the source at that specific location uses it:
+- GR/QM framing terms: spacetime curvature, geodesics, wave functions, operators, Hamiltonians, Lagrangians, path integrals, renormalization, etc.
+- Standard physical constants used as explanation: $c$, $\hbar$, $G$, $\alpha$, $k_B$, $e$, etc.
+- Constant-derived shorthand: "speed of light", "quantum of action", and similar.
 
-This KB is not a Rosetta Stone translating the framework into standard physics vocabulary. It is a navigation structure for the framework's own concepts. Those concepts must be described in the framework's own terms, at every level of the hierarchy.
+**Permitted uses of constants** — only when the source does the same, in the source's exact framing:
+1. Reproducing a derivation result: "The framework derives a propagation speed equal to $c$."
+2. Reproducing a comparison: "The derived coupling constant matches $\alpha$ to within..."
 
-### The core error
+**Test**: is this framing in the source, or am I supplying it? If supplying, drop it. When uncertain, use the source's words verbatim or flag the uncertainty in blockers — an acknowledged gap beats an unauthorized inference.
 
-**Reaching outside the source document's conceptual framework to explain it.**
-
-When you encounter mathematics that resembles GR or QM, you will be tempted to use GR or QM vocabulary to make the summary "clearer." When you encounter a derived quantity that matches a known physical constant, you will be tempted to name that constant as if it were a foundation. Both moves invert the framework's structure, introduce circular dependencies, and are forbidden.
-
-### Forbidden: GR and QM as explanatory frameworks
-
-Do not invoke general relativity, quantum mechanics, or their associated vocabularies (spacetime curvature, geodesics, wave functions, operators, Hamiltonians, Lagrangians, path integrals, renormalization, etc.) in a summary unless the source document at that specific location explicitly uses that framework as an explanatory tool.
-
-The test: is this GR/QM framing in the source, or am I supplying it? If you are supplying it, it is forbidden.
-
-This applies even when the mathematics is structurally similar to GR or QM. Structural similarity is not equivalence. Using GR/QM framing implies the framework is built from or equivalent to those theories — a claim you are not authorized to make.
-
-### Forbidden: physical constants as explanatory tools
-
-Do not use $c$, $\hbar$, $G$, $\alpha$, $k_B$, $e$, or any other standard physical constant in a summary except in these two cases:
-
-1. **Reproducing a derivation result**: the source explicitly states that a derived quantity equals or corresponds to the constant. Summary form: "The framework derives a propagation speed equal to $c$."
-
-2. **Reproducing a comparison**: the source explicitly compares a derived result to a known constant. Summary form: "The derived coupling constant matches $\alpha$ to within..."
-
-In both cases, use the source's exact framing. Do not generalize beyond what the source states.
-
-**Never use constants as shorthand**: do not write "propagates at the speed of light" as a way to describe a propagation result, "quantum of action" to describe a derived quantity, or any similar construction — unless the source uses that phrase at that location.
-
-The reason: constants appear in this material only as outputs of the framework, not as inputs. Inserting them as explanatory tools reverses this relationship and misrepresents what the framework assumes vs. what it derives.
-
-### The vocabulary discipline
-
-Every concept in a summary must trace directly to the source document being summarized. If you find yourself reaching for physics vocabulary that isn't in the source, stop. The summary's vocabulary must be the source document's vocabulary.
-
-When uncertain whether a framing is the source's or your own inference: use the source's words directly, or flag the uncertainty in your blockers output rather than guessing. An acknowledged gap is better than an unauthorized inference.
-
-### This applies to summary mode only
-
-Leaf mode has no summarization — it is verbatim translation, so these patterns cannot arise. The forbidden patterns apply exclusively when writing domain indexes, subtopic indexes, and the entry-point. At those levels, vigilance is required on every sentence.
+**Scope**: summary mode only (domain indexes, subtopic indexes, entry-point). Leaf mode is verbatim translation; the patterns cannot arise there.
 
 ## Math Notation
 

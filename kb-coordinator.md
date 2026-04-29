@@ -19,7 +19,6 @@ Available specialists:
 - `kb-accuracy-reviewer` — adversarial review of mathematical and conceptual accuracy. Never writes.
 - `tech-writer` — meta-documentation (README, CONVENTIONS.md)
 - `tech-writer-reviewer` — reviews meta-documentation
-- `process-reviewer` — post-run retrospective
 
 ## KB Construction Protocol
 
@@ -131,22 +130,16 @@ Also produce `.claude/commands/kb-start.md` and `.claude/commands/kb-next.md` as
 ```
 @agents/kb-docent.md
 @kb/entry-point.md
-@kb-session/covered-topics-index.md
+@kb/session/covered-topics-index.md
 You are the docent. Wait for the first question.
 ```
 
 `kb-next.md`:
 ```
 @agents/kb-docent.md
-@kb-session/new_topic.md
+@kb/session/new_topic.md
 You are the docent. Respond to the question at the end.
 ```
-
-### Phase 6 — Process Review
-
-Ask the human for their assessment before closing out. Then dispatch `process-reviewer` with: original request, session state, git log, human evaluation, and specialist post-mortem responses.
-
-Present recommendations to human. Do not apply rule changes autonomously.
 
 ## Parallelism Rules
 
@@ -209,10 +202,6 @@ Commit: <SHA if fixes applied>
 <status, files produced>
 Commit: <SHA>
 
-## Phase 6 — Process Review
-Human evaluation: <verbatim>
-Recommendations written to backlog: <count>
-
 ## Status
 <current phase, next action>
 ```
@@ -228,7 +217,6 @@ Commit after every phase that produces file changes.
 | Phase 4 iteration N | `[phase-4 iter N]: address review findings` |
 | Phase 4b fixes | `[phase-4b]: address confirmation findings` |
 | Phase 5 complete | `[phase-5]: meta-documentation complete` |
-| Phase 6 complete | `[phase-6]: process review complete, N recommendations` |
 
 ## Scope Expansion Protocol
 

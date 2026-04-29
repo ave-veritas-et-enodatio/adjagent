@@ -56,6 +56,7 @@ When a shared section is intentionally changed, update the relevant string in
 CHECKS below, then run this script to confirm all files are in sync.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -195,6 +196,61 @@ EXCEPTIONS: dict[str, list[str]] = {
 }
 
 
+# Files in agents/ that are NOT expected to appear in coordinator.md's
+# "Available specialists" list. The coordinator dispatches coder, platform-expert,
+# reviewer, and specialist agents; it does not dispatch the MAD or KB orchestrators
+# (those have their own referees/coordinators) or itself.
+COORDINATOR_LIST_EXCLUSIONS = {
+    "coordinator.md",
+    "README.md",
+}
+
+
+def extract_coordinator_specialists() -> tuple[set[str], list[str]]:
+    """Return (agent names listed in coordinator.md, error messages)."""
+    coord = AGENTS_DIR / "coordinator.md"
+    if not coord.exists():
+        return set(), ["coordinator.md not found"]
+    text = coord.read_text(encoding="utf-8")
+    # Section starts at "Available specialists" and ends at the next "## " heading.
+    match = re.search(
+        r"Available specialists.*?(?=^##\s)", text, re.DOTALL | re.MULTILINE
+    )
+    if not match:
+        return set(), ["could not find 'Available specialists' section"]
+    section = match.group(0)
+    # Agent names appear as `agent-name` (backtick-wrapped, lowercase, hyphens).
+    names = set(re.findall(r"`([a-z][a-z0-9-]+)`", section))
+    return names, []
+
+
+def check_coordinator_specialists() -> list[str]:
+    """Verify coordinator.md's specialist list matches the agent directory."""
+    listed, errors = extract_coordinator_specialists()
+
+    expected: set[str] = set()
+    for path in AGENTS_DIR.glob("*.md"):
+        if path.name in COORDINATOR_LIST_EXCLUSIONS:
+            continue
+        name = path.stem
+        if name.startswith("mad-") or name.startswith("kb-"):
+            continue
+        expected.add(name)
+
+    missing = sorted(expected - listed)
+    extra = sorted(listed - expected)
+
+    if missing:
+        errors.append(
+            f"agent file(s) exist but not listed in coordinator.md: {missing}"
+        )
+    if extra:
+        errors.append(
+            f"listed in coordinator.md but no agent file exists: {extra}"
+        )
+    return errors
+
+
 def check_file(filepath: Path) -> list[str]:
     content = filepath.read_text(encoding="utf-8")
     filename = filepath.name
@@ -241,6 +297,17 @@ def main() -> None:
                 print(f"      missing: {f}")
         elif verbose:
             print(f"  {'OK':<30} {filename}")
+
+    print()
+    print("Coordinator specialist list check")
+    print("=" * 60)
+    coord_errors = check_coordinator_specialists()
+    if coord_errors:
+        all_clean = False
+        for err in coord_errors:
+            print(f"  DRIFT  {err}")
+    elif verbose:
+        print("  OK")
 
     print()
     if all_clean:
