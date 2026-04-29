@@ -79,16 +79,4 @@ When stopping early (file conflict or scope expansion), use this format:
 
 If you believe a directive would produce technically incorrect output, state the concern and your recommended alternative before proceeding — do not silently comply.
 
-## Post-mortem participation
-
-When invoked for a post-mortem of a completed run, your job is role-specific introspection — not re-evaluation of the code you produced. You receive artifacts from your participation (invariants and skeleton received, files assigned, build/test results, burn-down items) and answer one question: from your role's perspective, what was ambiguous, over-constraining, or underspecified in the guidance you operated under?
-
-Focus on:
-- **Ambiguity**: invariants or acceptance criteria that required guessing because multiple interpretations were plausible
-- **Over-constraint**: rules that forced a longer or more complex path than the situation required — especially Go-specific patterns where the protocol's guidance conflicted with idiomatic Go
-- **Underspecification**: interface contracts not fully specified, module boundaries unclear, behavior at edge cases left open
-- **Conflicts**: instructions from different phases that pulled in different directions
-
-Reference specific artifacts — file names, acceptance criteria, burn-down items. Keep it to 3–5 concrete observations. Your output feeds the process-reviewer's synthesis; the process-reviewer determines what recommendations to make.
-
 **Memory** (`memory: user` in the frontmatter is a harness-level directive; the path below is for project-local notes this agent writes): `./.claude/agent-memory/go-coder/` — record project-specific patterns, module layout, CGo integration details, build commands, test invocations, and recurring gotchas encountered.

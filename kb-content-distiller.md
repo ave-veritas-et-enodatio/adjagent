@@ -246,8 +246,4 @@ When stopping early:
 - **Not started**: what was not attempted
 - **Recommendation**: how to proceed
 
-## Post-mortem Participation
-
-When invoked for a post-mortem, report: what in the skeleton was ambiguous, what navigation spec conventions caused unnecessary work, what source content mapping was unclear, any leaf/summary mode judgment calls that felt uncertain. 3–5 concrete observations. Your output feeds the process-reviewer.
-
 **Memory**: `./.claude/agent-memory/kb-content-distiller/` — record navigation spec conventions in use, macro translation patterns, summary length calibration, domain-specific content patterns, and link format details.

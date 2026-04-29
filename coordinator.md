@@ -60,7 +60,6 @@ Available specialists (consult current agent list for updates):
 - `tech-writer` — authors technical documentation (READMEs, architecture docs, LAST_WORK_SUMMARY.md)
 - `tech-writer-reviewer` — reviews documentation, never authors
 - `prose-architect` — review of long-form prose and essays, never authors
-- `process-reviewer` — post-run retrospective analyst; identifies over/underspecification inefficiencies and recommends rule changes to any agent
 - `marketing-comms-expert` — messaging, positioning, audience
 - `biz-dev-strategist` — business strategy, partnerships, GTM
 
@@ -157,45 +156,11 @@ After Wave 2 is complete, dispatch `tech-writer` to produce `LAST_WORK_SUMMARY.m
 
 Do not skip this phase.
 
-**Phase 5 — Process review**
-
-After Phase 4 completes, ask the human for their assessment:
-
-> "Before closing out: how did the results look from your perspective? What worked well, what was frustrating, and was anything surprising — good or bad?"
-
-Wait for the human's response. Then run two waves:
-
-**Wave 1 — Specialist perspectives (parallel)**
-
-Check the session state for which agent types participated. Invoke each with its specific artifacts and this post-mortem framing:
-
-> "This is a post-mortem invocation. You participated as [agent type]. Here are your artifacts: [role-specific artifacts per table below]. From your role's perspective: what was ambiguous in your instructions, what did you have to decide by assumption, and what caused unnecessary work?"
-
-Artifact reference by agent type:
-
-| Agent | Provide |
-|---|---|
-| `architect` | Phase 1 design output (invariants, skeleton, acceptance criteria); all burn-down lists produced (Phase 3 iterations + Phase 3b); any retractions issued |
-| `security-reviewer` | Security findings produced (Phase 1a + Phase 3 iterations + Phase 3b); how each finding was classified by architect; any avoidance requirements that were modified or dropped |
-| `go-coder` / `python-coder` / `generalist-coder` / platform specialists | Invariants and skeleton received; files assigned; build/test results from Phase 2a/2c; burn-down items assigned to this agent type; any retractions received |
-| `tech-writer` | Documentation scope received; Wave 1/2/3 drafts produced; tech-writer-reviewer findings received and how they were addressed |
-| `tech-writer-reviewer` | Docs reviewed; findings produced; how tech-writer addressed them |
-
-**Wave 2 — Synthesis**
-
-Dispatch `process-reviewer` with: the original request, `.claude/session-state.md`, the git commit log (`git log --oneline` from project root), the human's evaluation, and all specialist responses from Wave 1 labeled by agent type. The process-reviewer produces prioritized recommended rule changes and appends them to the improvement backlog at `./.claude/agent-memory/process-reviewer/improvement-backlog.md`.
-
-Present the recommendations to the human. The coordinator does not apply agent rule changes autonomously.
-
-Do not skip Phase 5 for complex task runs.
-
 **Bailout (iteration 3 exhausted with issues remaining)**
 Stop the loop. Proceed to Phase 4 — `LAST_WORK_SUMMARY.md` is especially important in the bailout case; the summary must clearly reflect the partial state. Report to the human:
 - Which findings were resolved across all iterations
 - Which findings remain unresolved and why
 - Your assessment of whether remaining issues are implementation problems or design problems requiring human architectural input
-
-Then run Phase 5 — a bailout is especially valuable input for the process reviewer.
 
 ## Session State Persistence
 
@@ -254,11 +219,6 @@ Commit: <SHA if fixes applied>
 <status, files updated>
 Commit: <SHA>
 
-## Phase 5 — Process Review
-Human evaluation: <verbatim>
-Findings summary: <overspecification / underspecification findings>
-Recommendations written to backlog: <count>
-
 ## Scope Expansions
 <date/phase, what was discovered, branch renamed to, iteration counter reset>
 
@@ -287,7 +247,6 @@ Commit at these points, using the message convention `[phase]: <brief descriptio
 | Phase 3 fix cycle N | `[phase-3 iter N]: address review findings` |
 | Phase 3b fix cycle | `[phase-3b]: address confirmation findings` |
 | Phase 4 complete | `[phase-4]: documentation updated` |
-| Phase 5 complete | `[phase-5]: process review complete, N recommendations` |
 
 For scope expansion resets: commit any completed work before renaming the branch to `-rescoped[N]`.
 

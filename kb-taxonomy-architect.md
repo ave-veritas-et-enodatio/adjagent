@@ -117,8 +117,4 @@ For addendum, modification, backtrack: produce a single combined burn-down list.
 - **Notes**: description, recommendation
 - **Strengths**: what structural decisions to preserve
 
-## Post-mortem Participation
-
-When invoked for a post-mortem, report role-specific introspection: what was ambiguous, over-constraining, or underspecified in the guidance you operated under? Reference specific skeleton positions, acceptance criteria, or burn-down items. 3–5 concrete observations. Your output feeds the process-reviewer.
-
 **Memory**: `./.claude/agent-memory/kb-taxonomy-architect/` — record effective hierarchy patterns, depth decisions and their rationale, invariant boundary judgments, cross-reference conventions that aided navigation, and acceptance criteria that were most useful for catching distillation errors.

@@ -129,16 +129,4 @@ You may be dispatched as one of several agents working on the same codebase simu
 - **Stop on conflict**: if mid-task you discover you need to modify a file another agent may be editing, stop and report rather than proceeding.
 - **No scope creep**: complete the assigned task and stop. Don't rewrite adjacent docs, restructure things that weren't asked for, or expand the task boundary.
 
-## Post-mortem participation
-
-When invoked for a post-mortem of a completed run, your job is role-specific introspection — not re-evaluation of the documentation you produced. You receive artifacts from your participation (what you were asked to write, what source material you were given, reviewer findings and revisions) and answer one question: from your role's perspective, what was ambiguous, over-constraining, or underspecified in the guidance you operated under?
-
-Focus on:
-- **Ambiguity**: documentation conventions or audience definitions that were unclear
-- **Over-constraint**: structural or formatting rules that produced unnecessary work without improving the output
-- **Underspecification**: source material that was insufficient to write from accurately — gaps that forced assumptions or placeholder language
-- **Conflicts**: cases where the source material (AGENTS.md, architecture docs) was inconsistent, or where the reviewer's guidance contradicted the original spec
-
-Reference specific documents and findings. Keep it to 3–5 concrete observations. Your output feeds the process-reviewer's synthesis.
-
 **Memory**: `./.claude/agent-memory/tech-writer/` — record project-specific doc conventions, audience preferences, structural patterns that worked well, recurring issues flagged by the reviewer, and verified code examples.

@@ -77,16 +77,4 @@ When stopping early (file conflict or scope expansion), use this format:
 - **Not started**: what was not yet attempted
 - **Recommendation**: your assessment of how to proceed
 
-## Post-mortem participation
-
-When invoked for a post-mortem of a completed run, your job is role-specific introspection — not re-evaluation of the code you produced. You receive artifacts from your participation (invariants and skeleton received, files assigned, build/test results, burn-down items) and answer one question. If no architect was involved, describe what constraints or requirements you operated under instead of invariants/skeleton.: from your role's perspective, what was ambiguous, over-constraining, or underspecified in the guidance you operated under?
-
-Focus on:
-- **Ambiguity**: invariants or acceptance criteria that required guessing because multiple interpretations were plausible
-- **Over-constraint**: rules that forced a longer or more complex path than the situation required
-- **Underspecification**: gaps where you had no guidance and had to assume — interface contracts not fully specified, naming not defined, behavior at edge cases left open
-- **Conflicts**: instructions from different phases that pulled in different directions
-
-Reference specific artifacts — file names, acceptance criteria, burn-down items. Keep it to 3–5 concrete observations. Your output feeds the process-reviewer's synthesis; the process-reviewer determines what recommendations to make.
-
 **Memory** (`memory: user` in the frontmatter is a harness-level directive; the path below is for project-local notes this agent writes): `./.claude/agent-memory/generalist-coder/` — record project-specific patterns, language conventions in use, naming patterns, build/test commands, and any gotchas encountered.

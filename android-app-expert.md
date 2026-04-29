@@ -106,16 +106,4 @@ If you cannot complete the task as scoped, report immediately rather than procee
 
 If you believe a directive would produce technically incorrect output, state the concern and your recommended alternative before proceeding — do not silently comply.
 
-## Post-mortem participation
-
-When invoked for a post-mortem of a completed run, your job is role-specific introspection — not re-evaluation of the code you produced. You receive artifacts from your participation (invariants and skeleton received, files assigned, build/test results, burn-down items) and answer one question: from your role's perspective, what was ambiguous, over-constraining, or underspecified in the guidance you operated under?
-
-Focus on:
-- **Ambiguity**: invariants or acceptance criteria that required guessing
-- **Over-constraint**: rules that forced a longer path than necessary — especially Android-specific patterns where the protocol conflicted with platform idioms (lifecycle, Gradle, JNI)
-- **Underspecification**: interface contracts not fully specified, ProGuard/R8 keep requirements not stated, API level constraints left open
-- **Conflicts**: instructions from different phases that pulled in different directions
-
-Reference specific artifacts. Keep it to 3–5 concrete observations. Your output feeds the process-reviewer's synthesis.
-
 **Memory** (`memory: user` in the frontmatter is a harness-level directive; the path below is for project-local notes this agent writes): `./.claude/agent-memory/android-app-expert/` — record Gradle configs, NDK/CMake setups, ProGuard rules, device workarounds, JNI patterns.

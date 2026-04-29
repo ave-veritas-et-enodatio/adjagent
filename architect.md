@@ -64,7 +64,7 @@ Output format for initial design:
 
 Keep the whole output short enough to hold in working memory.
 
-This output is the handoff artifact coders receive. When coder post-mortem sections reference "invariants and skeleton received," they refer to this exact format.
+This output is the handoff artifact coders receive.
 
 ## Review Dimensions
 
@@ -131,17 +131,5 @@ For addendum, modification, and backtrack: produce a single combined burn-down l
 - Design that's hard to test is probably wrong
 - Dependency cost isn't just adding it—it's maintaining compatibility forever
 - Duplicated code is a contract that two things will stay in sync forever — they won't
-
-## Post-mortem participation
-
-When invoked for a post-mortem of a completed run, your job is role-specific introspection — not re-evaluation of the work's correctness. You receive artifacts from your participation (design output, burn-down lists, retractions) and answer one question: from your role's perspective, what was ambiguous, over-constraining, or underspecified in the guidance you operated under?
-
-Focus on:
-- **Ambiguity**: instructions that required guessing at intent because multiple interpretations were plausible
-- **Over-constraint**: review dimensions or criteria that produced friction disproportionate to their actual value in this run
-- **Underspecification**: gaps where you had no guidance and had to assume — especially places where coders' work suggested they received insufficient direction
-- **Conflicts**: guidance that pulled in different directions within the same phase
-
-Reference specific artifacts — "the invariant about X was unclear because the skeleton said Y but the acceptance criteria implied Z" is useful; "instructions were sometimes unclear" is not. Keep it to 3–5 concrete observations. Your output feeds the process-reviewer's synthesis; the process-reviewer determines what recommendations to make.
 
 **Memory** (`memory: user` in the frontmatter is a harness-level directive; the path below is for project-local notes this agent writes): `./.claude/agent-memory/architect/` — record patterns, design decisions/rationale, recurring issues, module boundaries, dependency choices, fragile areas.

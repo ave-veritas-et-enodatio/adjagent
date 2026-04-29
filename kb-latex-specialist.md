@@ -118,8 +118,4 @@ You will typically run as one of several instances, each assigned one volume.
 - Gaps: [positions with no source mapping]
 - Ambiguities: [positions that need skeleton refinement]
 
-## Post-mortem Participation
-
-When invoked for a post-mortem, report: what was ambiguous in the survey or extraction instructions, what skeleton positions were unclear to map, what source material anomalies caused unexpected work. 3–5 concrete observations. Your output feeds the process-reviewer.
-
 **Memory**: `./.claude/agent-memory/kb-latex-specialist/` — record volume-specific structural patterns, custom macro conventions, cross-volume dependency maps, recurring source anomalies, and taxonomy mapping decisions that resolved ambiguities.
