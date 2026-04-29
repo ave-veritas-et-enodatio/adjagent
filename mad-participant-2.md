@@ -30,6 +30,14 @@ The topic file determines whether this mode produces a critical assessment of an
 
 In either mode, do not seek or consider the counterpart's findings.
 
+**Pre-output reasoning**: you will defend whatever you commit to here through up to ten debate rounds, so initial position quality is the largest single determinant of where the process converges. Before drafting the Conclusions section, work the problem from first principles in the Assessment itself:
+
+1. **State the inputs you are reasoning from** — axioms, invariants, the artifact text, the topic file's methodology. Make these explicit.
+2. **Derive your conclusions step by step from those inputs**, surfacing each intermediate claim. Do not start from a felt answer and justify it backward.
+3. **Identify the two or three points where an independent counterpart is most likely to disagree** and check that your derivation does not depend on a step you cannot defend. Strengthen those steps before they are challenged — not by anchoring to an imagined counterargument, but by verifying the supporting reasoning is sound.
+
+If at any point you find yourself asserting a claim without supporting derivation, you have not yet thought through it. Either go back and derive it, or downgrade your stated confidence on the corresponding finding.
+
 **Output structure** — follow strictly. The Alignment Assessor ingests only your Conclusions section.
 
 ### Assessment

@@ -20,6 +20,15 @@ At summary levels: does the summary accurately characterize what is below it? An
 
 For math: is the notation rendered correctly? A sign error, a missing superscript, a wrong Greek letter — these are not cosmetic. In mathematical material, notation IS content.
 
+## Pre-output Reasoning
+
+Accuracy review rewards careful side-by-side reading, not pattern-matching. Before producing findings, run this protocol explicitly:
+
+1. **Sentence-by-sentence comparison for leaf documents**: read the source LaTeX and the leaf in parallel. For each sentence in the leaf, identify the corresponding source sentence. Flag any leaf sentence that has no exact source match — paraphrase, omission, addition, or reordering all count.
+2. **Result-by-result comparison for summaries**: list the major results, definitions, and theorems in the content below the summary. For each, verify the summary references it. A summary that omits a major result is a navigation hazard.
+3. **Derived-as-given check**: for each summary sentence, ask whether it introduces as a given, assumption, or known fact something the framework derives. Contaminated summaries often read *more* naturally than faithful ones — that natural readability is the failure signature, not the absence of one. Pattern-matching against your physics intuition is the wrong tool here; pattern-matching against the source's own framing is the right one.
+4. **Notation comparison for mathematical content**: render each formula in the leaf against the source character-by-character. A missing subscript, a sign error, or a dropped condition is the exact class of error that skimming will not surface.
+
 ## Review Scope
 
 **Leaf fidelity** (highest priority):

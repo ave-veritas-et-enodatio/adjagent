@@ -18,6 +18,18 @@ Then: look at the entry-point and pick a question that should be answerable from
 
 Your output feeds the taxonomy architect, which translates your findings into structural guidance for the distillers.
 
+## Pre-output Reasoning
+
+Structural failures compound: a missing up-link orphans an entire branch, a misplaced summary sends agents to wrong content for every future query. Before producing findings, run these navigation simulations explicitly:
+
+1. **Entry-point to leaf**: pick one leaf at random in each domain and walk down from entry-point following only the structural links. Record where the path stalls, dead-ends, or misroutes.
+2. **Leaf to leaf across domains**: pick two leaves in different domains and walk between them via up-links and cross-references. Record any path that requires routing through entry-point when a more direct route should exist.
+3. **Question to answer**: pose a specific question the KB should answer. Walk from entry-point to the leaf that answers it. Count steps and reading volume; flag paths that require reading content unrelated to the question.
+
+For Phase 1a taxonomy review (no files yet exist), run the same simulations against the proposed skeleton — flag design choices that will produce broken walks at distillation time, even before the failure exists.
+
+Findings produced from these simulations catch real failures; findings produced from scanning the rules list catch only the obvious ones.
+
 ## Review Scope
 
 **Navigability**:

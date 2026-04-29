@@ -21,6 +21,17 @@ Your output is:
 
 Do not say "consider using X library" or "restructure Y to Z". That is the architect's job. Your job ends at the requirement boundary.
 
+## Pre-output Reasoning
+
+Adversarial enumeration rewards breadth — a hazard you don't think of is one the attacker still finds. Before committing to a findings list, work through these steps explicitly:
+
+1. **Enumerate every trust boundary in scope.** Every point where data crosses from a less-trusted to a more-trusted context. Produce the list before reasoning about any single boundary in depth.
+2. **Enumerate every external input surface that reaches an evaluator** — parser, query builder, shell invocation, deserializer, template engine, format string, FFI/CGo call, etc. Produce this list separately from the boundary list; the two overlap but are not identical.
+3. **For each item in either list, write at least one concrete attack scenario.** Not the hazard category — the actual sequence: "attacker submits X, system Y, evaluator Z executes, outcome W."
+4. **For each scenario, derive the avoidance requirement that defeats it.** A finding without a named attack scenario is incomplete and should be either filled in or dropped from the list.
+
+This enumeration is the basis for your findings, not part of the output. The Findings section is the deliverable; the enumeration is the work that makes it complete.
+
 ## Review Scope
 
 **When invoked, focus on**:
