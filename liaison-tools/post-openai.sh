@@ -7,17 +7,22 @@ set -u -o pipefail
 # Requires: curl, python3 (stdlib only — no third-party packages)
 #
 # usage: API_BASE_URL=<url> API_KEY_CURL_CFG=<auth-header-curl-config> MODEL=<model> post_openai.sh <messages.json>
-# optional envar param: MAX_TOKENS=<max-response-token-count> (default: 32768)
+# optional envar params:
+#   MAX_TOKENS=<max-response-token-count>     (default: 32768)
+#   TEMPERATURE=<float in [0,2]>  (default: 0.0)
 # API_KEY_CURL_CFG format: header = "Authorization: Bearer the-api-key-here"
 #
 # messages.json format: JSON array of {"role": "<role>", "content": "<text>"} objects.
 # Response text is written to stdout. All other output goes to stderr.
 #
 # Optional envars:
-#   DEBUG_POST=true       — dump the request payload to stderr before sending
-#   DEBUG_RESPONSE=true   — dump the raw SSE stream + reassembled output to stderr
-#   POST_OPENAI_TEST=1    — self-test mode: read SSE fixture from $1 instead of curling.
-#                           No auth, no network, no envvar checks beyond MAX_TOKENS.
+#   DEBUG_POST=true              — dump the request payload to stderr before sending
+#   DEBUG_RESPONSE=true          — dump the raw SSE stream + reassembled output to stderr
+#   TEMPERATURE=...  — float in [0.0, 2.0]; default 0.0 for determinism.
+#                                  Bump for variance assessment, MAD-design exploration,
+#                                  or any "show me a few angles" prompt.
+#   POST_OPENAI_TEST=1           — self-test mode: read SSE fixture from $1 instead of curling.
+#                                  No auth, no network, no envvar checks beyond MAX_TOKENS.
 
 THIS_SCRIPT=$(basename "$0")
 
@@ -27,6 +32,7 @@ function usage() {
   [[ -n "${*}" ]] && echo "error: ${*}" 1>&2
   echo "usage: API_BASE_URL=<url> API_KEY_CURL_CFG=<curl-auth-header-config-file> MODEL=<model> ${THIS_SCRIPT} <messages.json>" 1>&2
   echo "optional envar param MAX_TOKENS=<max-response-token-count> (default: ${DEFAULT_MAX_TOKENS})"
+  echo "optional envar param TEMPERATURE=<float in [0.0, 2.0]> (default: 0.0)"
   echo 'API_KEY_CURL_CFG *exact* file format:' 1>&2
   echo 'header = "Authorization: Bearer your-api-key-here"' 1>&2
   exit 1
@@ -38,6 +44,18 @@ PYTHON=$(command -v python3 2>/dev/null)
 [[ -x "${PYTHON}" ]] || { echo "error: python3 is required for JSON handling" 1>&2; exit 1; }
 
 MAX_TOKENS=${MAX_TOKENS:-${DEFAULT_MAX_TOKENS}}
+
+TEMPERATURE="${TEMPERATURE:-0.0}"
+# Validate: must be a non-negative real in [0.0, 2.0] (typical OpenAI-API range).
+# Reject negatives, non-numerics, or out-of-range values.
+if ! [[ "${TEMPERATURE}" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "error: TEMPERATURE must be a non-negative number (got '${TEMPERATURE}')" 1>&2
+  exit 1
+fi
+if (( $(echo "${TEMPERATURE} > 2.0" | bc -l 2>/dev/null) )); then
+  echo "error: TEMPERATURE must be in [0.0, 2.0] (got '${TEMPERATURE}')" 1>&2
+  exit 1
+fi
 
 # reassemble_stream <chunks_file>
 # Reads a file containing one JSON chunk per line (already de-SSE'd; "[DONE]" marker
@@ -292,8 +310,8 @@ function do_post_streaming() {
   tmpdir=$(dirname "${chunks_file}")
   payload_file="${tmpdir}/payload.json"
 
-  printf '{"model": "%s", "max_tokens": %s, "top_p": 1.0, "temperature": 0.1, "stream": true, "messages": ' \
-    "${model}" "${MAX_TOKENS}" > "${payload_file}"
+  printf '{"model": "%s", "max_tokens": %s, "top_p": 1.0, "temperature": %s, "stream": true, "messages": ' \
+    "${model}" "${MAX_TOKENS}" "${TEMPERATURE}" > "${payload_file}"
   cat "${MESSAGES_FILE}" >> "${payload_file}"
   printf '}' >> "${payload_file}"
 
