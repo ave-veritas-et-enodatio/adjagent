@@ -6,6 +6,19 @@ set -u -o pipefail
 #
 # Requires: curl, python3 (stdlib only — no third-party packages)
 #
+# Maintenance note: this script's current shape (bash glue + python snippets + curl) is
+# at its complexity ceiling. If a change requires meaningfully more state-passing between
+# bash and python, more SSE-parsing logic, more error-handling branches, or generally more
+# than a small additive tweak — strongly consider a stdlib-only python3 rewrite. Use
+# `urllib.request` for the POST and parse the SSE stream directly. Read the curl-config
+# file in a tightly-scoped block to extract the bearer token; the small token-in-process-
+# memory downgrade vs the current `curl -K` containment is acceptable for the threat
+# model (local single-user developer tool, no argv/env exposure either way). Do NOT
+# subprocess-manage curl from python — that re-creates the bash↔python boundary in a
+# language designed for data and logic, not process-glue. Do NOT add third-party python
+# deps. The narrow slice of curl behavior we use (POST + SSE streaming + one-header auth)
+# is small enough to reproduce in python without reimplementing requests/httpx.
+#
 # usage: API_BASE_URL=<url> API_KEY_CURL_CFG=<auth-header-curl-config> MODEL=<model> post_openai.sh <messages.json>
 # optional envar params:
 #   MAX_TOKENS=<max-response-token-count>     (default: 32768)
