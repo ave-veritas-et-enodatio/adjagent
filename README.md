@@ -28,6 +28,18 @@ Single-purpose agents invoked directly or by the coordinator for non-coding work
 * prose-architect.md - rhythm and structural review of long-form prose
 * marketing-comms-expert.md - messaging, positioning, copywriting, competitive framing
 * biz-dev-strategist.md - business strategy, market analysis, GTM, monetization
+* applied-mathematician.md - rigorous derivation, model construction, dimensional analysis, claim classification (identity / manifestation / consistency check / derived prediction). Takes given axioms at face value and derives consequences honestly. Use when working inside a formal system — established, novel, or mid-construction — and the task requires careful step-by-step reasoning rather than retrieval of textbook results.
+* applied-mathematician-strict.md - same role with added foundational-gap discipline: when the stated postulate set is incomplete, halt and surface the gap (or stipulate a closure explicitly) rather than silently filling with textbook defaults. Use for smaller / less-priored models that tend to silently interpolate when axioms are underspecified. **Avoid for frontier models** — the same clauses that protect a small model from gap-filling tend to over-constrain a frontier model that already does the right thing on its own (see "Variants and platform compatibility" below).
+
+### Variants and platform compatibility
+A few agents in this set ship as a base + a defensive variant: `applied-mathematician.md` and `applied-mathematician-strict.md` are the current example. The variant adds clauses targeted at specific failure modes observed in smaller / less-priored models; the base relies on the model's own discipline.
+
+The two-variant pattern is a response to a real phenomenon: agent definitions tend to accumulate defensive language that's keyed to the *specific* model they were tested against. Defensive clauses that *protect* one model can *smother* another — same clause, opposite effect, no error event. (Example: probe data from 2026-04-29 showed Gemma 4 31B-it silently filling axiom gaps with textbook conventions, while Gemini 3.1 Pro spontaneously surfaced the same gaps. A "do not fill gaps" clause helps the first model and slows the second.)
+
+The operating rule when porting an agent definition to a new model:
+**strip first, observe, patch.** Run with the base variant and the new model on a known-shape probe set. Watch for failure modes; only then add defensive language targeted at the failure modes you actually observed. Heavy scaffolding hides the model's true tendencies; you can't engineer for failure modes you never see.
+
+When adding defensive clauses, record *what tendency the clause was added to correct, against which model*. Without that record, future maintainers can't distinguish "still load-bearing" from "residue from a model we don't use anymore." Comment agent defs like code: not what the clause says, but why and against which observed behavior it was added.
 
 ## Multi-Agent Debate Agent Set
 Uses Multi-Agent Debate Process.
