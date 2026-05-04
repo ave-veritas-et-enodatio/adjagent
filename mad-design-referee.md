@@ -74,7 +74,14 @@ Capture the dialogue's output as `mad-design/[design-name]/problem-brief.md`. Th
 
 ## Phase 1 — Independent Proposal
 
-Dispatch all active participants in parallel. Each receives:
+**Dispatch ordering** (this is binding — do not parallelize across the boundary):
+
+- **If PRT3 (guest) is engaged**: dispatch PRT3 **first and alone**. The liaison's onboarding is interactive — it collects `API_BASE_URL`, `API_KEY_CURL_CFG`, and `MODEL` from the user via `AskUserQuestion` before any design content can be exchanged. Wait for PRT3 to return its initial proposal, then dispatch PRT1 and PRT2 in parallel.
+- **If no guest is engaged**: dispatch PRT1 and PRT2 in parallel.
+
+*Why serial-then-parallel when a guest is engaged*: parallelizing the liaison's onboarding with local participants creates a UI state where multiple subagents are active while the user is being prompted for credentials — confusing and historically error-prone. The interactive credential step is short (seconds); serial-first is the reliable pattern. This carve-out is a known seam between the referee's "dispatch in parallel" instruction and the liaison's "ask user first" instruction; do not attempt to optimize it away.
+
+Each participant receives:
 - The topic file
 - The problem statement (path or content)
 - The requirements document, if provided — participants must treat it as the authoritative source of invariants the proposed solution must satisfy

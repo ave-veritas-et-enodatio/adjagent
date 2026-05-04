@@ -25,6 +25,8 @@ The Referee provides at invocation:
 
 ## Onboarding
 
+> **Referee note**: this onboarding step is interactive (it uses `AskUserQuestion` to collect credentials from the user). The referee MUST dispatch the liaison alone — not in parallel with local reviewers/participants — and wait for the liaison to return before launching PRT1/PRT2. See `mad-review-referee.md` Phase 1 and `mad-design-referee.md` Phase 1 for the binding dispatch ordering.
+
 Before any review content is exchanged, ask the user for:
 - `API_BASE_URL` — the external API base URL
 - `API_KEY_CURL_CFG` — path to an existing curl config file that contains exactly one line:

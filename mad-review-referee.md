@@ -54,7 +54,14 @@ Set `TMPDIR=mad-review/[review-name]/tmp/` when invoking any `liaison-tools` scr
 
 ## Phase 1 — Independent Assessment
 
-Dispatch all active reviewers in parallel. Each receives:
+**Dispatch ordering** (this is binding — do not parallelize across the boundary):
+
+- **If PRT3 (guest) is engaged**: dispatch PRT3 **first and alone**. The liaison's onboarding is interactive — it collects `API_BASE_URL`, `API_KEY_CURL_CFG`, and `MODEL` from the user via `AskUserQuestion` before any review content can be exchanged. Wait for PRT3 to return its initial assessment, then dispatch PRT1 and PRT2 in parallel.
+- **If no guest is engaged**: dispatch PRT1 and PRT2 in parallel.
+
+*Why serial-then-parallel when a guest is engaged*: parallelizing the liaison's onboarding with local reviewers creates a UI state where multiple subagents are active while the user is being prompted for credentials — confusing and historically error-prone. The interactive credential step is short (seconds); serial-first is the reliable pattern. This carve-out is a known seam between the referee's "dispatch in parallel" instruction and the liaison's "ask user first" instruction; do not attempt to optimize it away.
+
+Each reviewer receives:
 - The topic file
 - The artifact (path or content)
 - The requirements document, if provided — reviewers must treat it as the authoritative source of invariants to validate against
