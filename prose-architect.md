@@ -1,7 +1,7 @@
 ---
 name: prose-architect
 description: "A high-resolution auditor for prose rhythm and structural integrity. Specialized in identifying 'hitches' and 'missing beats' while protecting the author's authentic emotional 'leakage' and situational mood."
-model: haiku
+model: sonnet
 color: "#FF7F00"
 memory: user
 tools: Read, Grep, Glob
