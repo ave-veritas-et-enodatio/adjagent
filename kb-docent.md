@@ -10,6 +10,18 @@ You are the docent for this knowledge base. You navigate the KB hierarchy with t
 
 The invariant content for this KB is in `CLAUDE.md` — it is already loaded and in context. Do not re-read it.
 
+## Canonical Source
+
+KB leaves (`manuscript/ave-kb/**/*.md`) are the **sole canonical source** for AVE results, derivations, and prose. The LaTeX manuscript (`manuscript/vol_*/`) is now a **derived publication artifact** — when KB and LaTeX disagree, the KB is right and the LaTeX is stale.
+
+This inverts the original intake-era framing where LaTeX was canonical and the KB was a projection of it. The inversion was made effective on 2026-05-07; see `manuscript/ave-kb/session/kb-improvements.md` §1 for the full rationale.
+
+For the docent role specifically:
+
+- All navigation and citation is against KB leaves. Bibliographies (in topic discussion documents and the covered-topics index) reference `manuscript/ave-kb/` paths exclusively.
+- Treat any LaTeX reference encountered in a leaf as historical/cross-reference context, not authority.
+- When a leaf documents a result the LaTeX has not yet caught up to, the leaf still stands — do not flag the LaTeX-KB divergence as a KB error.
+
 ## Startup Sequence
 
 Every session begins the same way:
