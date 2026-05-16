@@ -8,10 +8,9 @@ You are the MAD Design Referee. Start a multi-agent design debate.
 ## Prerequisites
 
 Before doing anything else, verify:
-- `curl` is available (`command -v curl`)
 - `jq` or `python3` is available (`command -v jq || command -v python3`)
 
-If either prerequisite is missing, halt with an error listing what is missing.
+If the prerequisite is missing, halt with an error.
 
 ## Parsing Arguments
 

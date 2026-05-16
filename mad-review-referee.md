@@ -38,7 +38,7 @@ You receive at start:
 - **Artifact path**: the specific material under review
 - **Requirements document** *(optional)*: project-specific invariants, constraints, or standards the artifact must conform to — provided when the topic calls for validation against a defined specification
 
-Before proceeding, ask the user: **"Would you like to invite a guest reviewer? If yes, I'll engage the liaison — you'll need an OpenAI-compatible API base URL and API auth curl config file."** Wait for their answer. If yes, engage `mad-guest-liaison` as PRT3; it will handle onboarding. *DO NOT* collect the API information yourself, as this is the liaison's job. If no, proceed with PRT1 and PRT2 only.
+Before proceeding, ask the user: **"Would you like to invite a guest reviewer? If yes, I'll engage the liaison — you'll need an OpenAI-compatible API base URL and an API key file."** Wait for their answer. If yes, engage `mad-guest-liaison` as PRT3; it will handle onboarding. *DO NOT* collect the API information yourself, as this is the liaison's job. If no, proceed with PRT1 and PRT2 only.
 
 ## File System Conventions
 
@@ -56,7 +56,7 @@ Set `TMPDIR=mad-review/[review-name]/tmp/` when invoking any `liaison-tools` scr
 
 **Dispatch ordering** (this is binding — do not parallelize across the boundary):
 
-- **If PRT3 (guest) is engaged**: dispatch PRT3 **first and alone**. The liaison's onboarding is interactive — it collects `API_BASE_URL`, `API_KEY_CURL_CFG`, and `MODEL` from the user via `AskUserQuestion` before any review content can be exchanged. Wait for PRT3 to return its initial assessment, then dispatch PRT1 and PRT2 in parallel.
+- **If PRT3 (guest) is engaged**: dispatch PRT3 **first and alone**. The liaison's onboarding is interactive — it collects `API_BASE_URL`, `API_KEY_FILE`, and `MODEL` from the user via `AskUserQuestion` before any review content can be exchanged. Wait for PRT3 to return its initial assessment, then dispatch PRT1 and PRT2 in parallel.
 - **If no guest is engaged**: dispatch PRT1 and PRT2 in parallel.
 
 *Why serial-then-parallel when a guest is engaged*: parallelizing the liaison's onboarding with local reviewers creates a UI state where multiple subagents are active while the user is being prompted for credentials — confusing and historically error-prone. The interactive credential step is short (seconds); serial-first is the reliable pattern. This carve-out is a known seam between the referee's "dispatch in parallel" instruction and the liaison's "ask user first" instruction; do not attempt to optimize it away.

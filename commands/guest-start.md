@@ -5,7 +5,6 @@ You are starting a new guest-model session via the `guest-liaison` subagent.
 ## Prerequisites
 
 Before doing anything else, verify:
-- `curl` is available (`command -v curl`)
 - `jq` or `python3` is available (`command -v jq || command -v python3`)
 - The `guest-liaison` subagent contract was loaded above
 
@@ -27,7 +26,7 @@ Parse `$ARGUMENTS` as follows:
 
 3. Collect connection parameters from the user:
    - `API_BASE_URL` — e.g. `https://api.example.com/v1`
-   - `API_KEY_CURL_CFG` — path to a curl config file containing exactly one line: `header = "Authorization: Bearer <token>"`. **Do not read or display this file's contents** — only confirm presence with `test -f`.
+   - `API_KEY_FILE` — path to a file containing only the API key (entire content trimmed of leading/trailing whitespace, no internal whitespace). **Do not read or display this file's contents** — only confirm presence with `test -f`.
    - `MODEL` — the model identifier
 
 4. **New session only** — collect the system-prompt source:
@@ -40,11 +39,11 @@ Parse `$ARGUMENTS` as follows:
 
 6. Create the session directory: `mkdir -p guest-session/<topic>/tmp`.
 
-7. Write the connection params to `guest-session/<topic>/params.env` as KEY=VALUE lines (one per line, no quoting, no secrets — only the curl config *path*, which is not itself a secret):
+7. Write the connection params to `guest-session/<topic>/params.env` as KEY=VALUE lines (one per line, no quoting, no secrets — only the API key file *path*, which is not itself a secret):
 
    ```
    API_BASE_URL=<url>
-   API_KEY_CURL_CFG=<path>
+   API_KEY_FILE=<path>
    MODEL=<model>
    ```
 
@@ -56,7 +55,7 @@ Parse `$ARGUMENTS` as follows:
 
 9. Invoke the `guest-liaison` subagent. Pass it:
    - Session topic
-   - `API_BASE_URL`, `API_KEY_CURL_CFG`, `MODEL`
+   - `API_BASE_URL`, `API_KEY_FILE`, `MODEL`
    - System-prompt source (agent path or literal default)
    - Initial user message (skip if resuming)
 

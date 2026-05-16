@@ -15,7 +15,7 @@ Before doing anything else, verify:
 2. Verify `guest-session/<topic>/messages.json` exists and is non-empty. If missing, halt with:
    `"Active topic '<topic>' has no session log at guest-session/<topic>/messages.json — run /guest-start <topic> to initialize."`
 
-3. Read connection params from `guest-session/<topic>/params.env`. Expected keys: `API_BASE_URL`, `API_KEY_CURL_CFG`, `MODEL`, optionally `SYSTEM_PROMPT_AGENT`. Treat `API_KEY_CURL_CFG` as an opaque path — do not read its contents. If the file is missing or any required key is absent, halt with a diagnostic asking the user to re-supply via `/guest-start <topic>`.
+3. Read connection params from `guest-session/<topic>/params.env`. Expected keys: `API_BASE_URL`, `API_KEY_FILE`, `MODEL`, optionally `SYSTEM_PROMPT_AGENT`. Treat `API_KEY_FILE` as an opaque path — do not read its contents. If the file is missing or any required key is absent, halt with a diagnostic asking the user to re-supply via `/guest-start <topic>`.
 
 ## Parsing Arguments
 
@@ -25,7 +25,7 @@ Before doing anything else, verify:
 
 5. Invoke the `guest-liaison` subagent in **continuation mode**. Pass it:
    - Session topic (`<topic>`)
-   - `API_BASE_URL`, `API_KEY_CURL_CFG`, `MODEL` (from params.env)
+   - `API_BASE_URL`, `API_KEY_FILE`, `MODEL` (from params.env)
    - User message (from `$ARGUMENTS`)
 
    The liaison will detect the existing `messages.json`, append the user message as a new turn, send to the guest model, service any file or tool requests, and return the substantive reply.

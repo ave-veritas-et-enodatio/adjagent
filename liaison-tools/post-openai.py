@@ -10,30 +10,35 @@ Adding `pip install` of anything is not on the table — if you reach for one,
 stop and find a stdlib path, or talk it through with the maintainer first.
 
 usage:
-  API_BASE_URL=<url> API_KEY_CURL_CFG=<curl-config> MODEL=<model> \\
+  API_BASE_URL=<url> API_KEY_FILE=<api-key-file> MODEL=<model> \\
       post-openai.py <messages.json>
 
 env vars:
   API_BASE_URL       (required) OpenAI-compatible base URL, e.g. https://api.openai.com/v1
-  API_KEY_CURL_CFG   (required) path to a curl -K config file containing exactly one line:
-                                header = "Authorization: Bearer <token>"
+  API_KEY_FILE       (required) path to a file containing only the API key. Its
+                                entire content, with leading and trailing
+                                whitespace trimmed, is the key; the key must
+                                contain no internal whitespace.
   MODEL              (required) model id; substring resolution is attempted on
                                 pre-stream model-not-found errors.
   MAX_TOKENS         (optional) integer max response tokens (default: 32768)
   TEMPERATURE        (optional) float in [0.0, 2.0] (default: 0.0)
   DEBUG_POST         (optional) "true" to dump the request payload to stderr
   DEBUG_RESPONSE     (optional) "true" to tee the raw SSE stream + reassembled output to stderr
-  POST_OPENAI_TEST   (optional) "1" enables self-test mode: read SSE fixture from $1
-                                instead of contacting the network.
+  POST_OPENAI_TEST   (optional) "1" runs the offline self-test suite (SSE
+                                demux/reassembly + API key validation against
+                                the fixtures in tests/) instead of contacting
+                                the network.
 
-The bearer token is read from API_KEY_CURL_CFG into process memory rather than
-piped to curl via -K. The maintenance note in the original bash script flagged
-this as an acceptable downgrade for the local single-user developer threat
-model — neither argv nor env exposure changes between the two approaches.
+The API key is read from API_KEY_FILE into process memory. It is never placed
+on the command line or into an environment variable, so it is not exposed
+through argv or the process environment.
 """
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import re
@@ -44,11 +49,6 @@ from pathlib import Path
 from typing import IO, Iterable
 
 DEFAULT_MAX_TOKENS = 1024 * 32
-
-# Strict pattern that the curl-config file must match: one line, exactly this
-# shape. Token characters mirror the bash regex so the validation surface
-# stays identical.
-_TOKEN_RE = re.compile(r'^header = "Authorization: Bearer ([a-zA-Z0-9_+/.:=-]*)"$')
 
 _TEMPERATURE_RE = re.compile(r"^[0-9]+(\.[0-9]+)?$")
 
@@ -66,7 +66,7 @@ def _usage(msg: str = "") -> None:
     if msg:
         sys.stderr.write(f"error: {msg}\n")
     sys.stderr.write(
-        f"usage: API_BASE_URL=<url> API_KEY_CURL_CFG=<curl-auth-header-config-file> "
+        f"usage: API_BASE_URL=<url> API_KEY_FILE=<api-key-file> "
         f"MODEL=<model> {script} <messages.json>\n"
     )
     sys.stderr.write(
@@ -76,8 +76,10 @@ def _usage(msg: str = "") -> None:
     sys.stderr.write(
         "optional envar param TEMPERATURE=<float in [0.0, 2.0]> (default: 0.0)\n"
     )
-    sys.stderr.write('API_KEY_CURL_CFG *exact* file format:\n')
-    sys.stderr.write('header = "Authorization: Bearer your-api-key-here"\n')
+    sys.stderr.write(
+        "API_KEY_FILE file format: the file contains only the API key "
+        "(leading/trailing whitespace trimmed; no internal whitespace).\n"
+    )
     sys.exit(1)
 
 
@@ -94,20 +96,21 @@ def _parse_temperature(raw: str) -> float:
     return v
 
 
-def _read_bearer_token(cfg_path: Path) -> str | None:
-    """Parse the curl-config file and return the bearer token, or None on
-    invalid format. Validation matches the bash gate: ≤1 newline in the file
-    and the single content line matches the strict regex.
+def _read_api_key(key_path: Path) -> str | None:
+    """Read the API key file and return the key, or None on invalid format.
+
+    The file must contain a single contiguous string. Leading and trailing
+    whitespace is trimmed; the result is the key. The key is invalid (None) if
+    it is empty after trimming or contains any internal whitespace.
     """
     try:
-        text = cfg_path.read_text(encoding="utf-8")
+        text = key_path.read_text(encoding="utf-8")
     except OSError:
         return None
-    if text.count("\n") > 1:
+    key = text.strip()
+    if not key or any(ch.isspace() for ch in key):
         return None
-    line = text.rstrip("\n")
-    m = _TOKEN_RE.match(line)
-    return m.group(1) if m else None
+    return key
 
 
 def demux_sse(
@@ -369,46 +372,82 @@ def _emit(reassembled: str) -> None:
 
 
 def _self_test_main() -> int:
-    """POST_OPENAI_TEST=1 path: read fixture file, demux, reassemble, print.
-    No env validation, no auth, no network.
+    """POST_OPENAI_TEST=1 path: run the full offline self-test suite — SSE
+    demux/reassembly plus API key validation — against the fixtures in the
+    tests/ directory beside this script. No env validation, no auth, no
+    network. Prints one PASS/FAIL line per case; returns non-zero if any fail.
     """
-    args = sys.argv[1:]
-    fixture = Path(args[0]) if args else None
-    if fixture is None or not fixture.is_file():
-        sys.stderr.write(
-            "error: POST_OPENAI_TEST=1 requires a fixture file path as $1\n"
+    tests_dir = Path(__file__).resolve().parent / "tests"
+    results: list[tuple[str, bool, str]] = []
+
+    def check(name: str, ok: bool, detail: str = "") -> None:
+        results.append((name, ok, detail))
+
+    def reassemble_fixture(fixture: str) -> tuple[int, str]:
+        with (tests_dir / fixture).open("r", encoding="utf-8") as f:
+            with contextlib.redirect_stderr(io.StringIO()):
+                chunks, status = demux_sse(f)
+        return status, reassemble_stream(chunks)
+
+    status, text = reassemble_fixture("test-fixture-stream.txt")
+    check(
+        "stream: plain content reassembled",
+        status == 0 and text == "Hello, world!",
+        f"status={status} text={text!r}",
+    )
+
+    status, text = reassemble_fixture("test-fixture-tool-calls.txt")
+    ok = False
+    if status == 0 and text.startswith("TOOL_CALLS\n"):
+        calls = json.loads(text[len("TOOL_CALLS\n") :])
+        ok = (
+            len(calls) == 1
+            and calls[0]["id"] == "call_abc"
+            and calls[0]["function"]["name"] == "read_file"
+            and calls[0]["function"]["arguments"] == '{"path":"src/foo.py"}'
         )
-        return 1
+    check("tool-calls: single call reassembled", ok, f"status={status} text={text!r}")
 
-    debug_response = os.environ.get("DEBUG_RESPONSE", "false") == "true"
-
-    chunk_payloads: list[str] = []
-    with fixture.open("r", encoding="utf-8") as f:
-        chunks, status = demux_sse(f, chunk_payloads=chunk_payloads)
-
-    if status == 2:
-        return 1
-    if status == 1:
-        sys.stderr.write("error: fixture contained no data events\n")
-        return 1
-
-    reassembled = reassemble_stream(chunks)
-
-    if debug_response:
-        sys.stderr.write("--- chunks ---\n")
-        for cp in chunk_payloads:
-            sys.stderr.write(cp + "\n")
-        sys.stderr.write("--- reassembled ---\n")
-        sys.stderr.write(
-            reassembled if reassembled.endswith("\n") else reassembled + "\n"
+    status, text = reassemble_fixture("test-fixture-multi-tc.txt")
+    ok = False
+    if status == 0 and text.startswith("TOOL_CALLS\n"):
+        calls = json.loads(text[len("TOOL_CALLS\n") :])
+        ok = (
+            len(calls) == 2
+            and calls[0]["function"]["name"] == "first"
+            and calls[0]["function"]["arguments"] == '{"a":1}'
+            and calls[1]["function"]["name"] == "second"
+            and calls[1]["function"]["arguments"] == '{"b":2}'
         )
+    check("multi-tc: two calls ordered by index", ok, f"status={status} text={text!r}")
 
-    if not reassembled:
-        sys.stderr.write("error: empty reassembled output\n")
-        return 1
+    with (tests_dir / "test-fixture-error.txt").open("r", encoding="utf-8") as f:
+        with contextlib.redirect_stderr(io.StringIO()):
+            _, err_status = demux_sse(f)
+    check(
+        "error: mid-stream error event detected",
+        err_status == 2,
+        f"status={err_status}",
+    )
 
-    _emit(reassembled)
-    return 0
+    good = _read_api_key(tests_dir / "test-fixture-good-key.txt")
+    check(
+        "key: surrounding whitespace trimmed",
+        good == "this-is_an-0-AccePtable-key-1",
+        f"got {good!r}",
+    )
+
+    bad = _read_api_key(tests_dir / "test-fixture-bad-key.txt")
+    check("key: internal whitespace rejected", bad is None, f"got {bad!r}")
+
+    passed = sum(1 for _, case_ok, _ in results if case_ok)
+    for name, case_ok, detail in results:
+        line = f"{'PASS' if case_ok else 'FAIL'}  {name}"
+        if not case_ok and detail:
+            line += f"  ({detail})"
+        sys.stdout.write(line + "\n")
+    sys.stdout.write(f"{passed}/{len(results)} passed\n")
+    return 0 if passed == len(results) else 1
 
 
 def main() -> int:
@@ -416,20 +455,20 @@ def main() -> int:
         return _self_test_main()
 
     api_base_url = os.environ.get("API_BASE_URL", "")
-    api_key_curl_cfg = os.environ.get("API_KEY_CURL_CFG", "")
+    api_key_file = os.environ.get("API_KEY_FILE", "")
     model = os.environ.get("MODEL", "")
 
     if not api_base_url:
         _usage("API_BASE_URL must be set")
-    if not api_key_curl_cfg:
-        _usage("API_KEY_CURL_CFG must be set")
-    cfg_path = Path(api_key_curl_cfg)
-    if not cfg_path.is_file():
-        _usage(f"API_KEY_CURL_CFG not found: {api_key_curl_cfg}")
+    if not api_key_file:
+        _usage("API_KEY_FILE must be set")
+    key_path = Path(api_key_file)
+    if not key_path.is_file():
+        _usage(f"API_KEY_FILE not found: {api_key_file}")
 
-    token = _read_bearer_token(cfg_path)
+    token = _read_api_key(key_path)
     if token is None:
-        _usage(f"API_KEY_CURL_CFG has invalid format: {api_key_curl_cfg}")
+        _usage(f"API_KEY_FILE has invalid format: {api_key_file}")
 
     if not model:
         _usage("MODEL must be set")

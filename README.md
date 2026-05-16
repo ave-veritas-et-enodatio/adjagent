@@ -55,7 +55,7 @@ Two modes share the same participants but use different referees and topic libra
 
 ### Liaison Tooling
 `liaison-tools/` contains shell helpers used by both `mad-guest-liaison.md` (MAD process) and `guest-liaison.md` (general guest-model sessions). The liaison agents are the primary callers; MAD referees set `TMPDIR` for liaison invocations to keep `mktemp` output contained in the review/design directory.
-* `post-openai.sh` - posts a message history to an OpenAI-compatible API and prints the assistant reply. Reads the bearer token via `curl -K` so it never enters argv or env.
+* `post-openai.sh` - posts a message history to an OpenAI-compatible API and prints the assistant reply. Reads the API key from a file so it never enters argv or env.
 * `msg-util.sh` - the only sanctioned path for creating or mutating the messages JSON (init / append). Use this rather than ad-hoc jq or sed.
 * `extract-agent-body.sh` - extracts the body of an agent definition file (drops the frontmatter) for use as a system prompt.
 * `tests/` - fixtures for the above scripts.
@@ -119,7 +119,7 @@ Two modes share the same participants but use different referees and topic libra
 
 Properties of the relay:
 * **Verbatim relay** of the system prompt and each user message — no summarizing, paraphrasing, or topic-tailoring. Verified post-write by `diff` against the source; the liaison aborts before sending if the diff is non-empty.
-* **Secrets containment** — the bearer token lives in a curl config file passed to `curl -K`. The liaison treats the file path as opaque and is forbidden from reading the contents.
+* **Secrets containment** — the API key lives in a file read directly by `post-openai.sh`. The liaison treats the file path as opaque and is forbidden from reading the contents.
 * **Audit-permanent session log** — every turn (system, user, agent) is appended to `guest-session/<topic>/messages.json` and never deleted.
 * **File and tool-call services** — when the guest model asks for a file's contents or emits a tool call, the liaison reads the file (using a fixed `Here is the content of <path>:` frame) or returns a "not available in this environment" stub, then re-invokes the model.
 
@@ -134,7 +134,7 @@ Properties of the relay:
 Pass as `KEY=VALUE` tokens (any order). Anything not provided is prompted for interactively.
 
 * **`TOPIC_NAME=<slug>`** — required. Names the session directory under `guest-session/`. No path separators, leading dots, or whitespace.
-* **`REMOTE_MODEL_SETTINGS=<path>`** — required. Path to a local settings file containing the keys `API_BASE_URL`, `MODEL`, and `API_KEY_CURL_CFG`. The settings file MUST NOT contain a bearer token directly — only the path to a curl config file that holds it. The liaison refuses to proceed if it detects `Authorization` or `Bearer` substrings in the settings file.
+* **`REMOTE_MODEL_SETTINGS=<path>`** — required. Path to a local settings file containing the keys `API_BASE_URL`, `MODEL`, and `API_KEY_FILE`. The settings file MUST NOT contain the API key directly — only the path (`API_KEY_FILE`) to the file that holds it.
 * **`GUEST_SYSTEM_PROMPT=<agent-name>`** — optional. Names an agent under `.claude/agents/<agent-name>.md` whose body (frontmatter stripped via `extract-agent-body.sh`) is sent verbatim as the guest model's system prompt. If omitted, the guest is given the literal default `You are a helpful assistant.` The agent body is NOT a Claude-only artifact — any agent body that reads as a coherent instruction set works (e.g. `applied-mathematician`, `architect`, `tech-writer-reviewer`).
 
 ### Settings file format
@@ -144,20 +144,16 @@ Pass as `KEY=VALUE` tokens (any order). Anything not provided is prompted for in
 ```
 API_BASE_URL=https://openrouter.ai/api/v1
 MODEL=google/gemma-4-31b-it
-API_KEY_CURL_CFG=/Users/<you>/.config/curl.cfg
+API_KEY_FILE=/Users/<you>/.config/openrouter.key
 ```
 
 `API_BASE_URL` is the **API root**, not the chat-completions endpoint — `post-openai.sh` appends `/chat/completions` itself. (Including `/chat/completions` in the URL produces a doubled path and a 404.)
 
-### Curl config format (the file at `API_KEY_CURL_CFG`)
+### API key file format (the file at `API_KEY_FILE`)
 
-Exactly one line:
+The file contains only the API key. Its entire content, with leading and trailing whitespace trimmed, is the key; the key must contain no internal whitespace.
 
-```
-header = "Authorization: Bearer <your-api-key>"
-```
-
-The liaison never reads this file. `post-openai.sh` passes the path to `curl -K`, which reads it directly into the request — the bearer token does not appear in argv, env, transcripts, or any tool output the liaison sees.
+The liaison never reads this file. `post-openai.sh` reads the key directly — the key does not appear in argv, env, transcripts, or any tool output the liaison sees.
 
 ### Session directory layout
 
@@ -166,11 +162,11 @@ guest-session/
   active-topic.txt              # one line: the currently active topic slug
   <topic>/
     messages.json               # full conversation (system + user + agent turns); permanent audit
-    params.env                  # API_BASE_URL, MODEL, API_KEY_CURL_CFG, SYSTEM_PROMPT_AGENT
+    params.env                  # API_BASE_URL, MODEL, API_KEY_FILE, SYSTEM_PROMPT_AGENT
     tmp/                        # mktemp scratch space; safe to leave between turns
 ```
 
-`guest-session/` is in `.gitignore` so audit logs and `params.env` (which references local curl-config paths) do not leak into commits.
+`guest-session/` is in `.gitignore` so audit logs and `params.env` (which references local API key file paths) do not leak into commits.
 
 ### Resuming and switching topics
 

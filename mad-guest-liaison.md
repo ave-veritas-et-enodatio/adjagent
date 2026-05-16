@@ -29,9 +29,10 @@ The Referee provides at invocation:
 
 Before any review content is exchanged, ask the user for:
 - `API_BASE_URL` — the external API base URL
-- `API_KEY_CURL_CFG` — path to an existing curl config file that contains exactly one line:
-  `header = "Authorization: Bearer <the-api-key>"`
-  (The bearer token is never exposed through argv or environment variables — `post-openai.sh` passes the file path to curl via `-K` so the token does not appear on a command line or in process env values. See **Secrets handling** below — the liaison must treat this path as opaque.)
+- `API_KEY_FILE` — path to a file containing only the API key. The file's
+  entire content, with leading and trailing whitespace trimmed, is the key;
+  the key must contain no internal whitespace.
+  (The API key is never exposed through argv or environment variables — `post-openai.sh` reads it directly from the file so it does not appear on a command line or in process env values. See **Secrets handling** below — the liaison must treat this path as opaque.)
 - `MODEL` — the model identifier
 
 Once collected:
@@ -65,7 +66,7 @@ You communicate with the external model using the shell script:
 
 **Required environment variables** (collected from the user during Onboarding, then set by the liaison when invoking the script):
 - `API_BASE_URL` — base URL of the external API (e.g. `https://api.example.com/v1`)
-- `API_KEY_CURL_CFG` — path to the curl config file whose single line is `header = "Authorization: Bearer <the-api-key>"`; the script reads it via `curl -K` so the bearer token is not exposed through argv or environment values
+- `API_KEY_FILE` — path to the file containing only the API key; the script reads the key directly so it is not exposed through argv or environment values
 - `MODEL` — model identifier (exact or unambiguous substring; the script will resolve and warn if a substring match is used)
 
 **Optional environment variables:**
@@ -74,7 +75,7 @@ You communicate with the external model using the shell script:
 
 **Invocation:**
 ```bash
-API_BASE_URL=<url> API_KEY_CURL_CFG=<path-to-curl-config-file> MODEL=<model> \
+API_BASE_URL=<url> API_KEY_FILE=<path-to-api-key-file> MODEL=<model> \
   .claude/agents/liaison-tools/post-openai.sh <messages.json>
 ```
 
@@ -82,15 +83,15 @@ The script reads a JSON array of `{"role": "<role>", "content": "<text>"}` objec
 
 ## Secrets handling
 
-The `API_KEY_CURL_CFG` file contains a bearer token. **You MUST NOT load its contents into your context.** Specifically:
+The `API_KEY_FILE` file contains the API key. **You MUST NOT load its contents into your context.** Specifically:
 
-- **Never `Read` the file.** Loading it via the Read tool puts the bearer token into your conversation history, which would defeat the entire purpose of the curl `-K` containment.
+- **Never `Read` the file.** Loading it via the Read tool puts the API key into your conversation history, which would defeat the entire purpose of the secrets-containment design.
 - **Never `cat`, `head`, `tail`, `grep`, `awk`, `sed`, or otherwise inspect it via Bash.** The contents must not appear in any tool output you receive.
-- **Treat the path as opaque.** Pass it through to `post-openai.sh` as a path argument and stop there. The script handles it via `curl -K`, which reads the file directly into curl's request and never surfaces it to your context.
-- **If you need to confirm the file exists**, use `test -f "$API_KEY_CURL_CFG" && echo present || echo missing` — this returns only a presence flag, not the contents.
-- **If `post-openai.sh` reports an auth failure**, surface the stderr verbatim (per Error Handling) but do not attempt to "debug" by reading the curl config. The liaison's error-handling path is to surface, not introspect.
+- **Treat the path as opaque.** Pass it through to `post-openai.sh` as a path argument and stop there. The script reads the key directly and never surfaces it to your context.
+- **If you need to confirm the file exists**, use `test -f "$API_KEY_FILE" && echo present || echo missing` — this returns only a presence flag, not the contents.
+- **If `post-openai.sh` reports an auth failure**, surface the stderr verbatim (per Error Handling) but do not attempt to "debug" by reading the API key file. The liaison's error-handling path is to surface, not introspect.
 
-Rationale: the bearer token authorizes the entire external model account. Loading it into context risks transmission to other model providers, persistence in transcripts, or echo through summarization. The `curl -K` pattern keeps the secret in a single file the LLM never reads.
+Rationale: the API key authorizes the entire external model account. Loading it into context risks transmission to other model providers, persistence in transcripts, or echo through summarization. Keeping the secret in a single file the LLM never reads is what preserves the containment.
 
 ## File Access
 
