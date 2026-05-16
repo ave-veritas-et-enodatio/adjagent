@@ -125,29 +125,21 @@ Properties of the relay:
 
 ### Slash commands
 
-* `/guest-start <ARGS>` — initiate (or resume) a session: onboarding, persist session state, send the first user message, return the guest's reply.
+* `/guest-start <topic>` — initiate (or resume) a session: onboarding, persist session state, send the first user message, return the guest's reply.
 * `/guest <message>` — append `<message>` as the next user turn in the active session and return the guest's reply.
 * `/guest-end` — clear the active-topic pointer (`guest-session/active-topic.txt`). The session directory itself is preserved as audit history.
 
 ### `/guest-start` arguments
 
-Pass as `KEY=VALUE` tokens (any order). Anything not provided is prompted for interactively.
+`/guest-start` takes one argument: the **topic slug**, which names the session directory under `guest-session/`. It must contain no path separators, leading dots, or whitespace.
 
-* **`TOPIC_NAME=<slug>`** — required. Names the session directory under `guest-session/`. No path separators, leading dots, or whitespace.
-* **`REMOTE_MODEL_SETTINGS=<path>`** — required. Path to a local settings file containing the keys `API_BASE_URL`, `MODEL`, and `API_KEY_FILE`. The settings file MUST NOT contain the API key directly — only the path (`API_KEY_FILE`) to the file that holds it.
-* **`GUEST_SYSTEM_PROMPT=<agent-name>`** — optional. Names an agent under `.claude/agents/<agent-name>.md` whose body (frontmatter stripped via `extract-agent-body.sh`) is sent verbatim as the guest model's system prompt. If omitted, the guest is given the literal default `You are a helpful assistant.` The agent body is NOT a Claude-only artifact — any agent body that reads as a coherent instruction set works (e.g. `applied-mathematician`, `architect`, `tech-writer-reviewer`).
+Everything else is collected interactively after the command starts:
 
-### Settings file format
+* `API_BASE_URL`, `API_KEY_FILE`, `MODEL` — the connection parameters. `API_BASE_URL` is the **API root**, not the chat-completions endpoint — `post-openai.sh` appends `/chat/completions` itself. (Including `/chat/completions` in the URL produces a doubled path and a 404.)
+* **System prompt source** *(new session only)* — either a path to an agent definition under `.claude/agents/` whose body (frontmatter stripped via `extract-agent-body.sh`) is sent verbatim as the guest model's system prompt, or, if you decline to pick one, the literal default `You are a helpful assistant.` The agent body is not a Claude-only artifact — any agent body that reads as a coherent instruction set works (e.g. `applied-mathematician`, `architect`, `tech-writer-reviewer`).
+* **Initial message** *(new session only)* — the first prompt sent to the guest model.
 
-`REMOTE_MODEL_SETTINGS` is a `KEY=VALUE`-per-line file (no quoting, no secrets). Example:
-
-```
-API_BASE_URL=https://openrouter.ai/api/v1
-MODEL=google/gemma-4-31b-it
-API_KEY_FILE=/Users/<you>/.config/openrouter.key
-```
-
-`API_BASE_URL` is the **API root**, not the chat-completions endpoint — `post-openai.sh` appends `/chat/completions` itself. (Including `/chat/completions` in the URL produces a doubled path and a 404.)
+The collected connection parameters are persisted to `guest-session/<topic>/params.env` so `/guest` can reuse them on later turns.
 
 ### API key file format (the file at `API_KEY_FILE`)
 
@@ -170,12 +162,12 @@ guest-session/
 
 ### Resuming and switching topics
 
-Re-running `/guest-start` with an existing `TOPIC_NAME` offers to resume — the prior `messages.json` is preserved and new turns continue from it. To switch active sessions without deleting either, run `/guest-end` then `/guest-start` with the new topic; both session directories survive.
+Re-running `/guest-start` with an existing topic slug offers to resume — the prior `messages.json` is preserved and new turns continue from it. To switch active sessions without deleting either, run `/guest-end` then `/guest-start` with the new topic; both session directories survive.
 
 ### Example
 
 ```
-/guest-start TOPIC_NAME=solar-system REMOTE_MODEL_SETTINGS=~/.config/guest-settings.env GUEST_SYSTEM_PROMPT=applied-mathematician
+/guest-start solar-system
 /guest how long does light take to get from the sun to the earth?
 /guest now compute the same for Proxima Centauri.
 /guest-end
