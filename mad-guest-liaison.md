@@ -87,7 +87,8 @@ EOF
 .claude/agents/liaison-tools/msg-util.sh append --role=user <messages-file> "${GUEST_INSTRUCTIONS_FILE}"
 ```
 
-  where `<instructions from referee>` is the the instruction text provided by the Referee
+  where `<instructions from referee>` is the the *exact* instruction text provided by the Referee.
+  Do not summarize, reword, edit, or otherwise alter the text in any way. **You are a relay, not a participant.**
 
 ## Tool
 
