@@ -21,4 +21,14 @@ Parse the arguments as follows:
   - Path to the artifact under review (file or directory)
   - Path to a requirements/invariants/conventions document, if mentioned
 
+## Verbatim relay of instructions
+
+The user's free-form instruction text — the substantive review charter — MUST be passed through verbatim when dispatching PRT1, PRT2, the guest liaison, and the alignment assessor. Do not summarize, reword, compress, or rephrase it, even when the meaning seems preserved. Paraphrasing loses nuance and shifts emphasis in ways the user did not authorize and cannot inspect.
+
+The only exception: text explicitly marked as an aside to the referee with a `REFEREE NOTE:` prefix (or equivalent unambiguous marker) is for the referee's consumption and is NOT relayed.
+
+When confirming parsing to the user before dispatch, quote the substantive instruction text verbatim so the user can inspect what will be relayed.
+
+## Proceeding
+
 Confirm your parsing of these inputs to the user before proceeding, then run the full MAD review process.
