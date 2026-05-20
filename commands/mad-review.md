@@ -8,7 +8,7 @@ You are the MAD Review Referee. Start a multi-agent review debate.
 ## Prerequisites
 
 Before doing anything else, verify:
-- `jq` or `python3` is available (`command -v jq || command -v python3`)
+- `python3` is available (`command -v python3`)
 
 If the prerequisite is missing, halt with an error.
 

@@ -48,7 +48,7 @@ For a **new session only**, additionally collect:
 - **Guest system prompt source**, one of:
   1. **Agent identity**: a path to an agent definition under `.claude/agents/` whose body (frontmatter stripped) becomes the guest model's system prompt. Capture the body to a temporary file via:
      ```bash
-     SYS_PROMPT_FILE=$(TMPDIR=guest-session/<topic>/tmp/ mktemp)
+     SYS_PROMPT_FILE=$(TMPDIR=guest-session/<topic>/tmp/ mktemp -t sys-prompt)
      .claude/agents/liaison-tools/extract-agent-body.sh <agent-path> > "${SYS_PROMPT_FILE}"
      ```
      The script exits non-zero and prints a diagnostic to stderr if the file lacks a complete frontmatter block — when that happens, halt and surface the error to the user rather than proceeding with empty system content.
@@ -66,28 +66,15 @@ For a **new session only**, additionally collect:
 >
 > If you find yourself thinking "this prompt is long, let me condense it" or "the user is asking X, so I should narrow the system prompt to X," **stop**. That impulse is the failure mode this section exists to prevent. The caller chose this exact text deliberately.
 
-Once the new-session inputs are captured to files, initialize the session messages file by reading the files into argv (jq's `--arg` handles all escaping; argv-length limits do not apply at the sizes involved):
-
 ```bash
 TMPDIR=guest-session/<topic>/tmp/ \
   .claude/agents/liaison-tools/msg-util.sh init \
-    --system-prompt="$(cat "${SYS_PROMPT_FILE}")" \
-    --instructions="$(cat "${INIT_MSG_FILE}")" \
+    --system-prompt="${SYS_PROMPT_FILE}" \
+    --instructions="${INIT_MSG_FILE}" \
     guest-session/<topic>/messages.json
 ```
 
 Run `init` exactly once per session.
-
-**Post-init verification (mandatory):** confirm the system prompt and initial message landed verbatim. Compute byte-for-byte equality on both:
-
-```bash
-diff <(jq -r '.[0].content' guest-session/<topic>/messages.json) "${SYS_PROMPT_FILE}" \
-  || { echo "liaison error: system prompt did not match source — aborting" 1>&2; exit 1; }
-diff <(jq -r '.[1].content' guest-session/<topic>/messages.json) "${INIT_MSG_FILE}" \
-  || { echo "liaison error: initial message did not match source — aborting" 1>&2; exit 1; }
-```
-
-If either diff is non-empty, do **not** proceed to `post-openai.sh`. Surface the discrepancy to the caller and stop. A non-empty diff is evidence that the verbatim-relay rule above was violated; the correct response is to halt, not to "fix" the file by editing it.
 
 For a **continuation invocation**, skip init; append the new user message via `msg-util.sh append --role=user` (see Message File Management) before invoking `post-openai.sh`.
 
@@ -147,7 +134,7 @@ Here is the content of <path>:
 
 Repeat as needed until the external model produces a substantive response rather than another file request.
 
-**Tool calls**: If the external model's response is a tool call (detected when `post-openai.sh` outputs a line beginning with `TOOL_CALLS`), parse the tool calls from the following JSON. Parsing tool call JSON from `post-openai.sh` output with inline jq or python is permitted — this is structured output from a controlled tool, not ad-hoc manipulation of the messages file. For each tool call:
+**Tool calls**: If the external model's response is a tool call (detected when `post-openai.sh` outputs a line beginning with `TOOL_CALLS`), parse the tool calls from the following JSON. Parsing tool call JSON from `post-openai.sh` output with inline python is permitted — this is structured output from a controlled tool, not ad-hoc manipulation of the messages file. For each tool call:
 - If it is a file read request (function name contains `read` or `file`, or arguments contain a file path), perform the read and append the content using the file content frame as a user turn via `msg-util.sh append --role=user`.
 - If it is a tool call that cannot be executed in this environment, append a user turn (via `msg-util.sh append --role=user`) containing: `"Tool call <function_name> is not available in this environment."`
 

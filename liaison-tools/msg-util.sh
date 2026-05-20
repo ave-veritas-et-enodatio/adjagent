@@ -18,7 +18,7 @@ set -u -o pipefail
 # - init takes its two texts on the command line — both are small fixed inputs.
 # - append reads message bodies from a file to avoid shell arg-length limits
 #   and quoting hazards when turns carry large or multi-line content.
-# - All JSON construction goes through jq (preferred) or python3/python, never
+# - All JSON construction goes through python3/python, never
 #   string concatenation, so escaping is always correct.
 
 THIS_SCRIPT=$(basename "$0")
@@ -27,17 +27,15 @@ function usage() {
   [[ -n "${*}" ]] && echo "error: ${*}" 1>&2
   cat <<USAGE 1>&2
 usage:
-  ${THIS_SCRIPT} init   --system-prompt=<text> --instructions=<text> <messages.json>
+  ${THIS_SCRIPT} init   --system-prompt=<system-prompt-file> --instructions=<intstructions-file> <messages.json>
   ${THIS_SCRIPT} append --role=<user|agent> <messages.json> <content-file>
 USAGE
   exit 1
 }
 
-PYTHON=
-JQ=$(command -v jq 2>/dev/null)
-[[ -x "${JQ}" ]] || PYTHON=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
-[[ -x "${JQ}" || -x "${PYTHON}" ]] || \
-  { echo "error: jq or python3 required for JSON handling" 1>&2; exit 1; }
+PYTHON=$(command -v python3 2>/dev/null || command -v python 2>/dev/null)
+[[ "${PYTHON}" ]] || \
+  { echo "error: python3 required for JSON handling" 1>&2; exit 1; }
 
 # map_role <input>
 # Maps the user-facing role name to the OpenAI API role. Writes result to stdout.
@@ -55,8 +53,8 @@ function mode_init() {
   local have_sys=0 have_instr=0
   while [[ $# -gt 0 ]]; do
     case "${1}" in
-      --system-prompt=*) sys_prompt="${1#*=}"; have_sys=1 ;;
-      --instructions=*)  instructions="${1#*=}"; have_instr=1 ;;
+      --system-prompt=*) sys_prompt="${1#*=}";;
+      --instructions=*)  instructions="${1#*=}";;
       --system-prompt|--instructions) usage "${1} must use '=<value>' form" ;;
       -*) usage "unknown option: ${1}" ;;
       *)
@@ -68,25 +66,22 @@ function mode_init() {
   done
 
   [[ -n "${msgs_file}"  ]] || usage "init requires <messages.json>"
-  [[ "${have_sys}"   -eq 1 ]] || usage "init requires --system-prompt=<text>"
-  [[ "${have_instr}" -eq 1 ]] || usage "init requires --instructions=<text>"
+  [[ -n "${sys_prompt}" ]] || usage "init requires --system-prompt=<system-prompt-file>"
+  [[ -n "${instructions}" ]] || usage "init requires --instructions=<instructions-file>"
+  [[ -f "${sys_prompt}" ]] || usage "sys-prompt file ${sys_prompt} does not exist."
+  [[ -f "${instructions}" ]] || usage "instructions file ${instructions} does not exist."
 
   local tmp
   tmp=$(mktemp) || { echo "error: mktemp failed" 1>&2; exit 1; }
   trap "rm -f '${tmp}'" EXIT
 
-  if [[ -n "${JQ}" ]]; then
-    "${JQ}" -n --arg sys "${sys_prompt}" --arg usr "${instructions}" \
-      '[{role:"system",content:$sys},{role:"user",content:$usr}]' > "${tmp}" || \
-      { echo "error: jq init failed" 1>&2; exit 1; }
-  else
-    SYS="${sys_prompt}" USR="${instructions}" "${PYTHON}" - > "${tmp}" <<'PY' || \
-      { echo "error: python init failed" 1>&2; exit 1; }
+  SYS="${sys_prompt}" USR="${instructions}" "${PYTHON}" - > "${tmp}" << 'PY' || { echo "error: python init failed" 1>&2; exit 1; }
 import json, os, sys
+from pathlib import Path
 json.dump(
   [
-    {"role": "system", "content": os.environ["SYS"]},
-    {"role": "user",   "content": os.environ["USR"]},
+    {"role": "system", "content": Path(os.environ["SYS"]).read_text()},
+    {"role": "user",   "content": Path(os.environ["USR"]).read_text()},
   ],
   sys.stdout, indent=2,
 )
@@ -128,13 +123,7 @@ function mode_append() {
   tmp=$(mktemp) || { echo "error: mktemp failed" 1>&2; exit 1; }
   trap "rm -f '${tmp}'" EXIT
 
-  if [[ -n "${JQ}" ]]; then
-    "${JQ}" --arg role "${role}" --rawfile c "${content_file}" \
-      '. + [{role:$role, content:$c}]' "${msgs_file}" > "${tmp}" || \
-      { echo "error: jq append failed" 1>&2; exit 1; }
-  else
-    MSGS="${msgs_file}" ROLE="${role}" CF="${content_file}" "${PYTHON}" - > "${tmp}" <<'PY' || \
-      { echo "error: python append failed" 1>&2; exit 1; }
+  MSGS="${msgs_file}" ROLE="${role}" CF="${content_file}" "${PYTHON}" - > "${tmp}" <<'PY' || { echo "error: python append failed" 1>&2; exit 1; }
 import json, os, sys
 with open(os.environ["MSGS"]) as f:
     msgs = json.load(f)
@@ -143,7 +132,6 @@ with open(os.environ["CF"]) as f:
 msgs.append({"role": os.environ["ROLE"], "content": content})
 json.dump(msgs, sys.stdout, indent=2)
 PY
-  fi
 
   mv "${tmp}" "${msgs_file}"
   trap - EXIT

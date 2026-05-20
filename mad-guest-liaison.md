@@ -20,8 +20,8 @@ TOOL_CALLS responses (detected when `post-openai.sh` outputs a line beginning wi
 ## Session Files
 
 The Referee provides at invocation:
-- **Messages file path**: `mad-review/[review-name]/liaison-messages.json` — initialize here; do not delete at the end (permanent audit artifact)
-- **TMPDIR**: set to `mad-review/[review-name]/tmp/`; prefix all `liaison-tools` script invocations with this env var so `mktemp` calls land in the review directory
+- **Messages file path**: `mad-review/<review-name>/liaison-messages.json` — initialize here; do not delete at the end (permanent audit artifact)
+- **TMPDIR**: set to `mad-review/<review-name>/tmp/`; prefix all `liaison-tools` script invocations with this env var so `mktemp` calls land in the review directory
 
 ## Onboarding
 
@@ -39,22 +39,34 @@ Once collected:
 
 1. Extract the reviewer role description from the reviewer contract path provided by the Referee at invocation:
 
-   ```bash
-   .claude/agents/liaison-tools/extract-agent-body.sh <reviewer-contract-path>
-   ```
+  ```bash
+  SYS_PROMPT_FILE=$(TMPDIR=mad-review/<review-name>/tmp/ mktemp -t sys-prompt)
+  .claude/agents/liaison-tools/extract-agent-body.sh <reviewer-contract-path> > "${SYS_PROMPT_FILE}"
+  ```
 
    where `<reviewer-contract-path>` is the path the Referee specified (for example `.claude/agents/mad-participant-1.md`). The script exits non-zero and prints a diagnostic to stderr if the file lacks a complete frontmatter block — when that happens, halt the session and surface the error to the Referee rather than proceeding with empty system content.
 
-2. Initialize the session messages file using the extracted role description as the system prompt and the Referee's initial review instructions as the first user turn:
+2. Write instructions provided Referee at invocation to text instructions file:
 
-   ```bash
+  ```bash
+  INSTRUCTIONS_FILE=$(TMPDIR=mad-review/<review-name>/tmp/ mktemp -t instructions)
+  cat << EOF > "${INSTRUCTIONS_FILE}"
+  <instructions from referee>
+  EOF
+  ```
+
+  where `<instructions from referee>` is the the instruction text provided by the Referee
+
+3. Initialize the session messages file using the extracted role description as the system prompt and the Referee's initial review instructions as the first user turn:
+
+  ```bash
    .claude/agents/liaison-tools/msg-util.sh init \
-     --system-prompt="<role-description-text>" \
-     --instructions="<referee-initial-instructions>" \
+     --system-prompt="${SYS_PROMPT_FILE}" \
+     --instructions="${INSTRUCTIONS_FILE}" \
      <messages-file>
    ```
 
-   Both texts are bounded in size (role contract body and referee invocation instructions) and safe to pass via argv. Run `init` exactly once per session.
+  Run `init` exactly once per session.
 
 ## Tool
 
@@ -111,7 +123,7 @@ Here is the content of <path>:
 
 Repeat as needed until the external model produces a substantive review response rather than a file request.
 
-**Tool calls**: If the external model's response is a tool call (detected when `post-openai.sh` outputs a line beginning with `TOOL_CALLS`), parse the tool calls from the following JSON. Parsing tool call JSON from `post-openai.sh` output with inline jq or python is permitted — this is structured output from a controlled tool, not ad-hoc manipulation of the messages file. For each tool call:
+**Tool calls**: If the external model's response is a tool call (detected when `post-openai.sh` outputs a line beginning with `TOOL_CALLS`), parse the tool calls from the following JSON. Parsing tool call JSON from `post-openai.sh` output with inline python is permitted — this is structured output from a controlled tool, not ad-hoc manipulation of the messages file. For each tool call:
 - If it is a file read request (function name contains `read` or `file`, or arguments contain a file path), perform the read and append the content using the file content frame as a user turn via `msg-util.sh append --role=user`.
 - If it is a tool call that cannot be executed in this environment, append a user turn (via `msg-util.sh append --role=user`) containing: `"Tool call <function_name> is not available in this environment."`
 Re-invoke `post-openai.sh` after providing the tool results.
