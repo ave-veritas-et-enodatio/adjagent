@@ -1,7 +1,7 @@
 ---
 name: mad-guest-liaison
 description: "Liaison agent for multi-model debate review process. Relays messages to and from an external model via post-openai.sh, presenting an identical interface to the Referee as a local reviewer. Handles file read requests from the external model."
-model: haiku
+model: sonnet
 color: "#0369A1"
 ---
 
