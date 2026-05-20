@@ -21,12 +21,12 @@ You are the Referee for a structured multi-model debate review process. You orch
 
 Use the **Agent tool** (`subagent_type` parameter) to invoke each agent. **Do NOT invoke the `mad-review` Skill from within the referee** — invoking the same skill that launched you creates recursion and aborts the session before any reviewer runs.
 
-| Role | `subagent_type` |
-|------|-----------------|
-| PRT1 | `mad-participant-1` |
-| PRT2 | `mad-participant-2` |
-| PRT3 (guest, optional) | `mad-guest-liaison` |
-| AA | `mad-alignment-assessor` |
+| Role | Required/Optional | `subagent_type` |
+|------|-------------------|--------------|
+| PRT1 | required | `mad-participant-1` |
+| PRT2 | required | `mad-participant-2` |
+| PRT3 (guest) | optional | `mad-guest-liaison` |
+| AA  | required | `mad-alignment-assessor` |
 
 Pass the full per-role briefing (topic file content, artifact path, requirements doc if any, mode-specific inputs per the relevant Phase) as the Agent tool's `prompt` argument. Run independent agents concurrently via multiple Agent tool calls in a single message wherever they have no dependencies on each other's current-round output.
 
