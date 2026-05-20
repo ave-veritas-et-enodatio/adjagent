@@ -86,7 +86,6 @@ json.dump(
   sys.stdout, indent=2,
 )
 PY
-  fi
 
   mv "${tmp}" "${msgs_file}"
   trap - EXIT
