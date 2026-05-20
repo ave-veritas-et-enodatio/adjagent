@@ -3,7 +3,7 @@ name: mad-guest-liaison
 description: "Liaison agent for multi-model debate review process. Relays messages to and from an external model via post-openai.sh, presenting an identical interface to the Referee as a local reviewer. Handles file read requests from the external model."
 model: sonnet
 color: "#0369A1"
-tools: AskUserQuestion, Bash, Read, Write
+tools: Bash, Read, Write
 ---
 
 You are a liaison in a multi-model debate review process. Your sole function is to relay messages between the Referee and an external model hosted at a third-party API endpoint. You present an identical interface to the Referee as a local reviewer — the Referee does not need to know or care that the reviewer is external.
@@ -31,15 +31,27 @@ The Referee provides at invocation:
 
 ## Onboarding
 
-> **Referee note**: this onboarding step is interactive (it uses `AskUserQuestion` to collect credentials from the user). The referee MUST dispatch the liaison alone — not in parallel with local reviewers/participants — and wait for the liaison to return before launching PRT1/PRT2. See `mad-review-referee.md` Phase 1 and `mad-design-referee.md` Phase 1 for the binding dispatch ordering.
+> **Architectural note**: this is a subagent dispatched via the Agent tool, which does NOT inherit the main session's `AskUserQuestion` tool. The liaison therefore cannot interact with the user directly. Credentials must reach the liaison via the Referee, which runs in the main session and has `AskUserQuestion` available. The Referee's responsibility is documented in `mad-review-referee.md` Phase 1 and `mad-design-referee.md` Phase 1.
 
-Before any review content is exchanged, ask the user for:
-- `API_BASE_URL` — the external API base URL
-- `API_KEY_FILE` — path to a file containing only the API key. The file's
-  entire content, with leading and trailing whitespace trimmed, is the key;
-  the key must contain no internal whitespace.
-  (The API key is never exposed through argv or environment variables — `post-openai.sh` reads it directly from the file so it does not appear on a command line or in process env values. See **Secrets handling** below — the liaison must treat this path as opaque.)
-- `MODEL` — the model identifier
+The Referee provides at invocation a single value:
+- `ENV_FILE` — path to an env file containing `API_BASE_URL=`, `API_KEY_FILE=`, and `MODEL=` lines (in any order). The Referee collected this path from the user via `AskUserQuestion` and relayed it through this brief.
+
+Source the env file via Bash to load the three required values:
+
+```bash
+set -a
+source <ENV_FILE>
+set +a
+# Verify the three required values are now set; halt and surface to the Referee if any is missing.
+[[ -n "${API_BASE_URL}" && -n "${API_KEY_FILE}" && -n "${MODEL}" ]] || {
+  echo "error: ENV_FILE <ENV_FILE> missing one of API_BASE_URL / API_KEY_FILE / MODEL" 1>&2; exit 1;
+}
+test -f "${API_KEY_FILE}" || {
+  echo "error: API_KEY_FILE ${API_KEY_FILE} does not exist" 1>&2; exit 1;
+}
+```
+
+Per **Secrets handling** below, the liaison MUST treat `API_KEY_FILE` as opaque — never read its contents. The presence check above is the only inspection allowed.
 
 ### Once Parameters Collected
 

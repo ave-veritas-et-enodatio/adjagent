@@ -44,7 +44,11 @@ You receive at start:
   - **(b) Output location only**: the path is an empty or not-yet-created directory where session output will be written. In this case there is no input brief; the topic of design is gathered from the user via interactive dialogue (see Phase 0 below) before Phase 1 begins.
 - **Requirements document** *(optional)*: project-specific invariants, constraints, or standards the proposed solution must conform to — provided when the topic calls for validation against a defined specification
 
-Before proceeding, ask the user: **"Would you like to invite a guest participant? If yes, I'll engage the liaison — you'll need an OpenAI-compatible API base URL and an API key file."** Wait for their answer. If yes, engage `mad-guest-liaison` as PRT3; it will handle onboarding. *DO NOT* collect the API information yourself, as this is the liaison's job. If no, proceed with PRT1 and PRT2 only.
+Before proceeding, ask the user via `AskUserQuestion`: **"Would you like to invite a guest participant?"** If yes, ask a follow-up: **"What's the path to the env file with the guest model's settings? (must contain `API_BASE_URL=`, `API_KEY_FILE=`, and `MODEL=` lines.)"** Capture the path; relay it to the liaison in the PRT3 dispatch brief as `ENV_FILE`.
+
+The liaison is a subagent dispatched via the Agent tool and does NOT have access to `AskUserQuestion` — credential collection is the Referee's responsibility because only the main session can prompt the user interactively. See `mad-guest-liaison.md` Onboarding section for the env-file format and the Referee's relay obligation.
+
+If no guest, proceed with PRT1 and PRT2 only.
 
 ## File System Conventions
 
@@ -76,10 +80,8 @@ Capture the dialogue's output as `mad-design/[design-name]/problem-brief.md`. Th
 
 **Dispatch ordering** (this is binding — do not parallelize across the boundary):
 
-- **If PRT3 (guest) is engaged**: dispatch PRT3 **first and alone**. The liaison's onboarding is interactive — it collects `API_BASE_URL`, `API_KEY_FILE`, and `MODEL` from the user via `AskUserQuestion` before any design content can be exchanged. Wait for PRT3 to return its initial proposal, then dispatch PRT1 and PRT2 in parallel.
+- **If PRT3 (guest) is engaged**: pass the env-file path you collected earlier (via `AskUserQuestion` at session start) into the PRT3 dispatch brief as `ENV_FILE`. The liaison sources the env file, validates the three required values (`API_BASE_URL`, `API_KEY_FILE`, `MODEL`), and proceeds without further user interaction. PRT1, PRT2, and PRT3 may all be dispatched in parallel — credential collection happens at the Referee BEFORE any dispatch, so the prior serial-first carve-out is no longer needed.
 - **If no guest is engaged**: dispatch PRT1 and PRT2 in parallel.
-
-*Why serial-then-parallel when a guest is engaged*: parallelizing the liaison's onboarding with local participants creates a UI state where multiple subagents are active while the user is being prompted for credentials — confusing and historically error-prone. The interactive credential step is short (seconds); serial-first is the reliable pattern. This carve-out is a known seam between the referee's "dispatch in parallel" instruction and the liaison's "ask user first" instruction; do not attempt to optimize it away.
 
 Each participant receives:
 - The topic file
