@@ -84,23 +84,23 @@ Per **Secrets handling** below, the liaison MUST treat `API_KEY_FILE` as opaque 
    .claude/agents/liaison-tools/msg-util.sh append --role=user <messages-file> <requirements-file>
   ```
 
-  construct the guest instruction file and append it to the messages file
+  **The Referee's instructions arrive as a FILE PATH, never as inline text.** The Referee writes the *exact* verbatim instruction text to a file in the review directory (e.g. `mad-review/<review-name>/referee-instructions.md`) and passes you that path as `REFEREE_INSTRUCTIONS_FILE`. You assemble the guest instruction block by **concatenation** — the caller-authored instruction text flows ONLY through `cat "${REFEREE_INSTRUCTIONS_FILE}"`; only the tiny static header/footer go through `echo`:
 
 ```bash
 GUEST_INSTRUCTIONS_FILE=$(TMPDIR=mad-review/<review-name>/tmp/ mktemp -t instructions)
-cat << EOF >> "${GUEST_INSTRUCTIONS_FILE}"
-# Referee Instructions
-<instructions from referee>
-
-## Remote Participant
-You are a remote participant in this process with a local liaison acting as a bidirectional relay.
-EOF
+{
+  echo "# Referee Instructions"
+  echo
+  cat "${REFEREE_INSTRUCTIONS_FILE}"
+  echo
+  echo "## Remote Participant"
+  echo "You are a remote participant in this process with a local liaison acting as a bidirectional relay."
+} > "${GUEST_INSTRUCTIONS_FILE}"
 
 .claude/agents/liaison-tools/msg-util.sh append --role=user <messages-file> "${GUEST_INSTRUCTIONS_FILE}"
 ```
 
-  where `<instructions from referee>` is the the *exact* instruction text provided by the Referee.
-  Do not summarize, reword, edit, or otherwise alter the text in any way. **You are a relay, not a participant.**
+  > **⚠ Never construct instruction content with a heredoc (`cat << EOF`) or by passing it as a command-line argument.** Caller-authored text contains markdown, backticks, `$`, and other shell-significant characters that silently corrupt or empty a heredoc — this is a known failure mode that has produced empty instruction files and sent the guest a context-less prompt. Caller-authored text reaches the messages file ONLY by `cat`-ing a file the Referee wrote, or by `msg-util.sh append` of a file path. You never reproduce, retype, or embed the instruction text yourself — the Referee authored it once to a file; you concatenate that file by path. **You are a relay, not a participant** — do not summarize, reword, or alter the Referee's file in any way.
 
 ## Tool
 
@@ -173,7 +173,7 @@ Maintain one JSON messages file per session. All creation and mutation of this f
   .claude/agents/liaison-tools/msg-util.sh append --role=<user|agent> <messages-file> <content-file>
   ```
 
-  Each turn's body is written to a temporary file first, then passed by path. Never pass large message bodies on the command line — shell argv limits and quoting hazards break silently. Use `user` for file-content returns and Referee messages; use `agent` for the external model's replies (the script maps `agent` → the API's `assistant` role).
+  Each turn's body is written to a temporary file first, then passed by path. **Never pass large message bodies on the command line, and never construct caller-authored content with a heredoc (`cat << EOF`)** — shell argv limits, heredoc variable-expansion, and quoting hazards break silently (markdown, backticks, and `$` in instruction text have produced empty/corrupt files). Caller-authored text (Referee instructions, round inputs, file-content returns) reaches the messages file ONLY by `cat`-ing or `msg-util.sh append`-ing a file the author wrote — the liaison never retypes or embeds it. Use `user` for file-content returns and Referee messages; use `agent` for the external model's replies (the script maps `agent` → the API's `assistant` role).
 
 **No ad-hoc JSON manipulation.** Do not write inline Python, shell, `jq`, or `sed` snippets to mutate the messages file. `msg-util.sh` is the only sanctioned path. If a capability you need is missing from these tools, stop and surface the gap to the Referee rather than improvising — deterministic behavior across runs requires every liaison invocation to use the same tool the same way.
 
@@ -187,11 +187,11 @@ Maintain one JSON messages file per session. All creation and mutation of this f
 
 The Referee will also provide the reviewer contract path at invocation.
 
-The Referee will invoke you with the same inputs it gives PRT1 and PRT2:
-- Topic file content
-- Constraints/requirements file content (if any)
+The Referee will invoke you with the same inputs it gives PRT1 and PRT2, **all caller-authored text supplied as FILE PATHS the Referee wrote** (never inline in your brief):
+- Topic file (path)
+- Constraints/requirements file (path, if any)
 - Artifact path or inline content
 - Mode (Initial Assessment or Debate Round Response)
-- Round-specific inputs (alignment map, contention points, prior exchanges)
+- Round-specific inputs as file paths: the referee-instructions file for this round, plus the alignment-map / contention-points / prior-exchange artifact paths (e.g. `initial-findings.md`, `round-N.md`)
 
-Assemble these into the message history *EXACTLY AS SPECIFIED* in the `Onboarding Process` `Once Parameters Collected` section and relay to the external model with `post-openai.sh`. Return the external model's response verbatim as your output.
+Assemble these into the message history *EXACTLY AS SPECIFIED* in the `Onboarding Process` `Once Parameters Collected` section — for every round, the Referee's instruction text and any large round inputs arrive as files; you `cat`/`msg-util.sh append` them by path, never heredoc or retype them. Relay to the external model with `post-openai.sh`. Return the external model's response verbatim as your output.

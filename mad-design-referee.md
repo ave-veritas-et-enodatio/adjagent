@@ -32,7 +32,16 @@ Use the **Agent tool** (`subagent_type` parameter) to invoke each agent. **Do NO
 | PRT3 (guest) | optional | `mad-guest-liaison` |
 | AA  | required | `mad-alignment-assessor` |
 
-Pass the full per-role briefing (topic file content, problem brief path or content, requirements doc if any, mode-specific inputs per the relevant Phase) as the Agent tool's `prompt` argument. Run independent agents concurrently via multiple Agent tool calls in a single message wherever they have no dependencies on each other's current-round output.
+Run independent agents concurrently via multiple Agent tool calls in a single message wherever they have no dependencies on each other's current-round output.
+
+### Instruction transport — file-based (binding)
+
+**The verbatim instruction text and any large round inputs are authored ONCE as files in the design directory, and every participant receives PATHS — never inline instruction text pasted into Agent-tool prompts.** This is the single source of truth and eliminates two failure modes: (a) the liaison's heredoc corrupting markdown/backtick-laden text into empty files, and (b) verbatim drift from re-pasting the charter into N per-participant briefs.
+
+- At the start of the run, write the user's **exact verbatim design charter / problem brief** to `mad-design/[design-name]/referee-instructions.md` using the **Write tool** (never a heredoc — Write handles arbitrary markdown). Per debate round, write that round's instruction text (the round directive + the specific contention points to address) to `mad-design/[design-name]/round-N-instructions.md` the same way.
+- **Local participants (PRT1, PRT2, AA)**: the Agent-tool `prompt` carries only small per-dispatch metadata — role identity ("you are PRT1"), mode, round number, and the **paths** to read: the referee-instructions file, the problem statement, the requirements file (if any), and the relevant artifact files (`initial-proposals.md`, `round-N.md`) for alignment map / contention / prior exchanges. They `Read` those paths. Do NOT paste the charter or large inputs inline.
+- **Liaison (PRT3)**: pass the referee-instructions file path as `REFEREE_INSTRUCTIONS_FILE` (and per-round, the round-instructions file path), plus the topic-file path, requirements-file path, problem statement, mode, and the participant contract path. The liaison `cat`s these files into the guest message per its onboarding — it never receives the charter as inline text.
+- The problem statement and tiny metadata may remain inline; only the topic/charter/requirements/round-input *text* must be file-borne.
 
 ## Invocation
 
@@ -83,15 +92,15 @@ Capture the dialogue's output as `mad-design/[design-name]/problem-brief.md`. Th
 - **If PRT3 (guest) is engaged**: pass the env-file path you collected earlier (via `AskUserQuestion` at session start) into the PRT3 dispatch brief as `ENV_FILE`. The liaison sources the env file, validates the three required values (`API_BASE_URL`, `API_KEY_FILE`, `MODEL`), and proceeds without further user interaction. PRT1, PRT2, and PRT3 may all be dispatched in parallel — credential collection happens at the Referee BEFORE any dispatch, so the prior serial-first carve-out is no longer needed.
 - **If no guest is engaged**: dispatch PRT1 and PRT2 in parallel.
 
-Each participant receives:
-- The topic file
+Before dispatching, write the verbatim charter/problem brief to `mad-design/[design-name]/referee-instructions.md` (Write tool) per **Instruction transport** above. Each participant receives (as paths, not inline text):
+- The referee-instructions file path + the topic file path
 - The problem statement (path or content)
-- The requirements document, if provided — participants must treat it as the authoritative source of invariants the proposed solution must satisfy
+- The requirements document path, if provided — participants must treat it as the authoritative source of invariants the proposed solution must satisfy
 - No information about the other participant
 
 Each participant produces a complete, independent end-to-end proposal — not a critique. The shape of the proposal is governed by the topic file (e.g., a derivation chain for `math-derivation`; a software architecture and key interfaces for software-design topics; a circuit topology and parameter set for hardware-design topics).
 
-When dispatching PRT3, include the participant contract path in the invocation: `.claude/agents/mad-participant-1.md`.
+When dispatching PRT3, include the participant contract path (`.claude/agents/mad-participant-1.md`) and pass the referee-instructions file path as `REFEREE_INSTRUCTIONS_FILE`.
 
 Wait for all to return before proceeding.
 
@@ -117,10 +126,9 @@ Design debates require more rounds than review debates. Construction is iterativ
 
 **Step 1 — Dispatch participants**
 
-Dispatch all active participants in parallel. Each receives:
-- Their own full proposal and all prior round responses
-- The current alignment map from AA
-- The specific points of contention to address this round
+First write this round's instruction text (round directive + the specific contention points to address) to `mad-design/[design-name]/round-N-instructions.md` (Write tool) per **Instruction transport**. Dispatch all active participants in parallel. Each receives (as paths, not inline text):
+- The round-N-instructions file path (the specific points of contention to address this round)
+- Their own full proposal and all prior round responses, and the current alignment map — via the existing artifact paths (`initial-proposals.md`, `round-[1..N-1].md`); for PRT3 the liaison already holds prior turns in `liaison-messages.json`
 
 They do not receive each other's full proposals or round responses.
 

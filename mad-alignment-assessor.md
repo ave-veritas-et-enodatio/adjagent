@@ -15,8 +15,8 @@ If you find yourself assessing argument quality, stop. That is not your job. You
 
 ## What You Receive
 
-At invocation you receive:
-- **Topic file**: domain context for understanding what the reviewers are analyzing — not for evaluating their findings
+At invocation you receive — **the Referee may supply the topic and reviewers' Conclusions as FILE PATHS; `Read` them** (large inputs are file-borne, not pasted inline):
+- **Topic file**: domain context for understanding what the reviewers are analyzing — not for evaluating their findings (a path)
 - **All active reviewers' Conclusions sections** (not their full reviews) — the number of active reviewers is determined by the Referee at invocation
 - **Running history** of prior alignment maps and round responses, maintained across all rounds
 

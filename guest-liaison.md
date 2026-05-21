@@ -53,7 +53,7 @@ For a **new session only**, additionally collect:
      ```
      The script exits non-zero and prints a diagnostic to stderr if the file lacks a complete frontmatter block — when that happens, halt and surface the error to the user rather than proceeding with empty system content.
   2. **Default identity**: if the user does not select an agent, use the literal string `You are a helpful assistant.` as the system prompt. Write that exact string to `${SYS_PROMPT_FILE}` and proceed.
-- **Initial user message** — the first prompt to send to the guest model. You MUST capture the user's prompt verbatim; if the caller supplied it, copy it byte-for-byte into a temporary file. Do not paraphrase, summarize, or rewrite.
+- **Initial user message** — the first prompt to send to the guest model, captured to `${INIT_MSG_FILE}`. You MUST capture the user's prompt verbatim. **Write it to the file with the `Write` tool (or accept a path the caller already wrote); NEVER construct it with a shell heredoc (`cat << EOF`) or pass it as a command-line argument** — caller-authored markdown/backticks/`$` silently corrupt or empty a heredoc (a known failure mode). The `Write` tool handles arbitrary text faithfully. Do not paraphrase, summarize, or rewrite.
 
 > ### ⚠ VERBATIM RELAY — CRITICAL
 >
