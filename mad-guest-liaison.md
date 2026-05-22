@@ -95,6 +95,9 @@ GUEST_INSTRUCTIONS_FILE=$(TMPDIR=mad-review/<review-name>/tmp/ mktemp -t instruc
   echo
   echo "## Remote Participant"
   echo "You are a remote participant in this process with a local liaison acting as a bidirectional relay."
+  echo
+  echo "### Source-grounding mandate (binding, always in force)"
+  echo "You cannot see the repository, run tools, or read files yourself. Any statement you make about the code MUST be grounded in file contents your liaison has actually delivered to you in this conversation. You MUST NOT infer, guess, or reconstruct code behavior from file names, line counts, the diff stat, the artifact description, the requirements documents, summaries, or your prior knowledge of similar projects. Before making ANY claim about a file, request its contents from the liaison — name the exact path, and line ranges if useful — and wait for them to be delivered. Issuing several file-read requests before you produce any findings is the expected and correct behavior, not a delay. A finding you cannot tie to file contents the liaison delivered to you is not permitted: request the source instead of asserting. When you do cite, reference the delivered file and the specific lines."
 } > "${GUEST_INSTRUCTIONS_FILE}"
 
 .claude/agents/liaison-tools/msg-util.sh append --role=user <messages-file> "${GUEST_INSTRUCTIONS_FILE}"
