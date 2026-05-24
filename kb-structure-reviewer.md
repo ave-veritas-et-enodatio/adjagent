@@ -71,6 +71,12 @@ Findings produced from these simulations catch real failures; findings produced 
 - Any file in the `kb/` tree not reachable via down-links from entry-point?
 - Any file created but not listed in its parent's contents table?
 
+**Claim-graph structural integrity** (the second graph — INVARIANT-S5/S8/S9/S10/S11). The coordinator runs `make verify-kb-metadata` + `verify-md-links` as the Phase 3a machine gate (id coverage, link integrity, acyclicity, `.index/` consistency). Your adversarial role is to catch what *passes* the verifier yet is still wrong, via grep/inspection (you have Grep/Glob, not Bash):
+- **Bidirectional id coverage** (rely on the S8 grep-guarantee): for `clm-`/`exp-`/`sup-` ids — every sidecar entry cited by ≥1 leaf's `claims:`, and every leaf claim has a sidecar entry. An id that *resolves to the wrong claim* (passes the existence check but is semantically miscovered) is exactly the failure the tool can't catch — flag it.
+- **Frontmatter presence**: every content leaf carries an S5 kb-frontmatter block (`kind:` + ≥1 of `claims:` / `no-claim:` / `exp-id:` / `sup-id:`). A leaf with no frontmatter is dropped from the claim graph — Critical.
+- **Single id system (S11)**: no parallel/local id scheme has crept in alongside `clm-`/`exp-`/`sup-`.
+- `subtree-claims:` and `solidity` are tool-derived — flag drift as a refresh-needed signal; never recommend hand-edits.
+
 ## Severity Calibration
 
 - **Critical**: violates a load-bearing property — must be addressed before the artifact is fit for purpose. A navigation path that cannot reach a leaf, an orphaned document, or a broken up-link chain is Critical.

@@ -39,7 +39,7 @@ If a macro cannot be translated (e.g., a custom `\newcommand` with no standard e
 **Leaf document format:**
 
 ```markdown
-[Up: Parent Subtopic Name](../index.md)
+[↑ Parent Subtopic Name](../index.md)
 
 ---
 
@@ -53,7 +53,7 @@ If a macro cannot be translated (e.g., a custom `\newcommand` with no standard e
 For theorem-like environments:
 
 ```markdown
-[Up: Fourier Analysis](../index.md)
+[↑ Fourier Analysis](../index.md)
 
 ---
 
@@ -73,6 +73,27 @@ $\square$
 ```
 
 Label (`[leaf]`) is not shown in the document — it is a skeleton annotation only.
+
+## Claim-graph emission (frontmatter + sidecars)
+
+Every leaf participates in the claim DAG as well as the topography (INVARIANT-S5/S8/S9/S10). On each leaf you emit:
+
+1. **Up-link** using the nav-spec marker — the spine standard is `[↑ Parent](../index.md)` (`↑` = U+2191, the machine-checkable S4 marker).
+2. **The S5 kb-frontmatter block**, immediately after the up-link and before the first `---`:
+   ```markdown
+   [↑ Parent Subtopic Name](../index.md)
+
+   <!-- kb-frontmatter
+   kind: leaf
+   claims: [clm-xxxxxx]
+   -->
+   ```
+   `kind:` ∈ `leaf` / `leaf-as-index` / `index` / `entry-point`. A content leaf carries at least one of `claims: [clm-…, …]`, `no-claim: <reason>`, `exp-id: exp-…`, `sup-id: sup-…` — a container may host any combination, and multiple `exp-id:`/`sup-id:` keys are allowed (S11). Index / entry-point nodes carry a derived `subtree-claims:` (never hand-edit).
+3. **Tier-2 inline markers** on multi-claim leaves: `<!-- claim-quality: clm-… -->` adjacent to the specific equation/principle each id maps to.
+
+Ids are assigned in Phase 2.5 (you receive them) — never invent ids.
+
+**Sidecar authoring (Phase 2.5).** You also author the `claim-quality.md` entries for assigned claims: the `<!-- id: clm-… -->` marker, the _Specific Claims_ / _Specific Non-Claims_ text (faithful to the leaf, no new framing), the **Leaf references** footer, and the hand-authored `depends-on:` membership (which entries/axioms the claim rests on — from the latex-specialist's dependency map). You do NOT author `confidence` (the `applied-mathematician` scorer sets it, on local rigor) and you do NOT author `solidity` / build-status / `(solidity X)` annotations (tool-derived by `make refresh-kb-metadata`; hand-editing them is a verifier failure).
 
 ## Summary Mode
 
@@ -106,7 +127,7 @@ To write the Key Results section you must read all child documents first. Do not
 **Summary document format:**
 
 ```markdown
-[Up: Domain Name](../index.md)
+[↑ Domain Name](../index.md)
 
 # [Subtopic Name]
 

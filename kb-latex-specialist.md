@@ -74,6 +74,17 @@ When a skeleton leaf position maps to a source range that spans multiple logical
 
 **Notation translation notes**: for each custom macro in scope for a given leaf, note how it should be rendered in `$$...$$` Markdown. Example: if `\norm{x}` is defined as `\|x\|`, the Markdown leaf should use `$$\|x\|$$` not `$$\norm{x}$$` (since custom macros won't render in Markdown).
 
+## Claim / experiment / support extraction (the claim graph)
+
+The KB is built as **two graphs** — the topography (hierarchy/leaves) and the claim DAG (`clm`/`exp`/`sup` nodes, per INVARIANT-S8/S9/S10). You feed both. Beyond the structural inventory above, surface the raw material for the claim graph. You still never write KB output and you never assign ids or score — that is Phase 2.5; you provide the mapped raw material.
+
+**In Survey mode**, add a claim/experiment/support inventory per chapter/section:
+- **Claims** — load-bearing propositions/results the material asserts or derives (each will get a `clm-` id later). For each, note its kind (identity/definition · derived result · assertion) and what it *appears to depend on* (upstream results, named inputs, axioms) — the candidate dependency edges.
+- **Experiments** — physical apparatus + measurement that the *source itself designs, originates, and controls* (→ `exp-`). A re-analysis of outside/public data, or a simulation, is NOT an experiment — flag those as support or citation instead. (This design/originate/control gate is the line per INVARIANT-S9.)
+- **Supports** — analytical work that strengthens an existing claim without raising a new proposition (→ `sup-`, INVARIANT-S10).
+
+**In Extraction mode**, for every leaf that hosts a claim, capture for the distiller + scorer: the claim's exact statement, where its derivation lives in the leaf, and its **dependency membership** — which other claims / named inputs / axioms the derivation rests on (this becomes the hand-authored `depends-on` set). Flag experiment-hosting and support-hosting leaves distinctly so frontmatter (`exp-id:` / `sup-id:`) is assigned correctly.
+
 ## Math Notation in Output
 
 When reporting source content in extraction mode, preserve LaTeX math exactly as found. Do not translate — that is the distiller's job. Surround displayed LaTeX with triple backtick fences so it is readable:

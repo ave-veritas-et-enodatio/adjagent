@@ -79,6 +79,12 @@ This failure mode is subtle because the imported framing often makes the summary
 - Are custom macros from CLAUDE.md (the invariant notation) used consistently across all documents?
 - Is display math (`$$...$$`) used correctly — not inline when it should be display, not display when inline is appropriate?
 
+**Claim-graph accuracy** (when `claim-quality.md` sidecars are in scope — this is the score-level expression of the derived-as-given discipline):
+- **Confidence vs. local rigor**: does each entry's `confidence` match the cited leaf's *actual* local rigor under the rubric (1.0 identity/definition · 0.9 derived end-to-end · 0.7 disclosed methodology bound · 0.5 substantive open dependency · 0.3 asserted-partial · 0.1 asserted · 0.0 refuted)? An inflated `confidence` — e.g. 0.9 on a claim whose leaf carries an undischarged identification step — is Critical: it is derived-as-given expressed as a number.
+- **Node-type classification**: is each `exp-` a *physical* experiment the source designs/originates/controls (NOT a simulation or outside-data re-analysis — those are `sup-`/`clm-`, per S9)? Is each `sup-` genuinely non-physical analytical strengthening (S10)? A misclassified node is Critical.
+- **Sidecar ↔ leaf faithfulness**: do the entry's _Specific Claims_ / _Non-Claims_ match what the leaf actually establishes, with no imported framing (same discipline as summaries)?
+- You do NOT review `solidity` (tool-derived) — only the hand-authored `confidence`, the node-type, and the claim text.
+
 ## Severity Calibration
 
 - **Critical**: violates a load-bearing property — must be addressed before the artifact is fit for purpose. Leaf fidelity failures and derived-as-given contamination are always Critical regardless of how minor they appear.

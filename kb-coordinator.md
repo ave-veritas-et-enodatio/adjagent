@@ -15,10 +15,33 @@ Available specialists:
 - `kb-taxonomy-architect` — designs hierarchy, defines invariants, reviews structure. Never writes files.
 - `kb-latex-specialist` — reads LaTeX sources, extracts and maps content. Read-only on sources, never writes KB output.
 - `kb-content-distiller` — writes the markdown KB files. Multiple parallel instances per domain.
-- `kb-structure-reviewer` — adversarial review of navigability, link integrity, invariant placement. Never writes.
-- `kb-accuracy-reviewer` — adversarial review of mathematical and conceptual accuracy. Never writes.
+- `kb-structure-reviewer` — adversarial review of navigability, link integrity, invariant placement, AND claim-DAG structural integrity (id coverage, acyclicity, verifier-green). Never writes.
+- `kb-accuracy-reviewer` — adversarial review of mathematical/conceptual accuracy AND claim-graph accuracy (sidecar scores match leaves; no derived-as-given contamination). Never writes.
+- `applied-mathematician` — scores each `claim-quality.md` entry's `confidence` on **local rigor only** (per the confidence rubric). Read-the-leaf-then-score; does not edit beyond the assigned sidecar entries. Parallel-safe across disjoint claim batches.
 - `tech-writer` — meta-documentation (README, CONVENTIONS.md)
 - `tech-writer-reviewer` — reviews meta-documentation
+
+## The two graphs this pipeline builds
+
+A KB has **two graphs**, and this pipeline builds BOTH (the original protocol covered only the first):
+
+1. **Topography graph** — the hyperlink/navigation hierarchy (entry-point → domain → subtopic → leaf), summaries, and `CLAUDE.md` invariants. Phases 0–5 below.
+2. **Claim graph (the DAG)** — `clm` / `exp` / `sup` node-bodies *hosted by* leaves (a leaf is a container; `kind` is its topography role and does NOT encode node-flavor), with per-volume `claim-quality.md` sidecars carrying `confidence` (hand-authored, local rigor) and `solidity` (tool-derived), materialized as `.index/` JSONL and gated by the verifier. Governed by INVARIANT-**S5** (leaf kb-frontmatter), **S8** (`clm-` id propagation + bidirectional coverage), **S9** (`exp-`: physical experiments *we design/originate/control* — outside-data re-analyses are `sup-`/`clm-`, never `exp-`), **S10** (`sup-`: non-physical analytical support, derivation-branch), **S11** (single identification system — extend the spine, never invent a parallel local id scheme).
+
+The **tex→KB dissection produces both graphs**. Treat claim-graph construction as a first-class overlay on the phases below, not an afterthought.
+
+### Phase 0− — Spine tooling fit-in-place (assume portable; do not re-implement)
+
+Assume the metadata-spine tooling is a reusable, repo-agnostic package: `kb_index_lib.py`, `refresh-kb-metadata.py`, `verify-kb-metadata.py`, `verify-md-links.py`, `.index/SCHEMA.md`, the `make {refresh,verify}-kb-metadata` + `verify-md-links` targets, and the S5–S11 invariant text. Before Phase 0, **fit it in place** for the target repo: configure source/KB paths + `EXCLUDE_NAMES`/`EXCLUDE_DIRS`, copy `.index/SCHEMA.md` and the S5–S11 invariant block into the new KB's `CLAUDE.md`, wire the `make` targets, and confirm `make verify-kb-metadata` runs green on the seed KB. Some fitting (paths, exclude lists, repo-root detection) is expected; do NOT rebuild the tooling by hand.
+
+### Claim-graph overlay on the phases
+
+- **Phase 0 (survey)** — `kb-latex-specialist` ALSO inventories, per volume: load-bearing **claims** (propositions the material asserts/derives), **experiments** (physical apparatus + measurement the *source* designs/controls → `exp-`), candidate **supports** (analytical strengthening that raises no new proposition → `sup-`), and for each claim its **derivation + dependency edges** (what it rests on). Raw material for the DAG.
+- **Phase 1 (taxonomy)** — `kb-taxonomy-architect`'s invariants bake in S5–S11; the skeleton includes a per-volume `claim-quality.md` sidecar + the `.index/` + tooling layout; acceptance criteria include `verify-kb-metadata` + `verify-md-links` green and **bidirectional id coverage** (every sidecar entry cited by ≥1 leaf; every leaf claim has a sidecar entry).
+- **Phase 2.5 (claim extraction + id assignment + scoring)** — NEW, between extraction and distillation: assign `clm-`/`exp-`/`sup-` ids (6-char `[a-z0-9]`, collision-checked) to surveyed claims/experiments/supports; `kb-content-distiller` authors the `claim-quality.md` sidecar entries (claim / non-claim / Leaf-references / hand-authored `depends-on` membership); then a wave of `applied-mathematician` instances scores each entry's `confidence` on **local rigor only** (read the cited leaf; take dependencies as given; solidity is tool-derived, never hand-authored). Disjoint claim batches per scorer; report-then-apply to avoid sidecar write-conflicts.
+- **Phase 3 (distillation)** — every leaf gets the S5 kb-frontmatter block (`kind:` + `claims:` / `exp-id:` / `sup-id:` / `no-claim:`) immediately after its up-link, plus Tier-2 `<!-- claim-quality: clm-… -->` inline markers on multi-claim leaves. The up-link marker is `[↑ Parent](../index.md)` (`↑` = U+2191, per S4) — not `[Up: …]`.
+- **Phase 3a (validation)** — run `make refresh-kb-metadata` (derives solidity + subtree aggregates + `.index/`), then `make verify-kb-metadata` AND `verify-md-links` as the gate (replaces the ad-hoc link checks below). Commit only on green.
+- **Phase 4 (review)** — `kb-structure-reviewer` adds DAG structural integrity (id coverage, acyclicity, verifier-green, `subtree-claims` consistency); `kb-accuracy-reviewer` adds claim-graph accuracy (sidecar `confidence` matches the leaf's actual local rigor; **no derived-as-given contamination**; experiments meet the design/originate/control gate). **Claim-graph fidelity joins leaf-fidelity as non-negotiable** — a claim mis-scored derived-when-asserted, an acyclicity break, or an uncovered id is a Critical finding regardless of apparent severity.
 
 ## KB Construction Protocol
 
