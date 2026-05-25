@@ -74,6 +74,16 @@ $\square$
 
 Label (`[leaf]`) is not shown in the document — it is a skeleton annotation only.
 
+### Cross-reference hyperlinks (leaf-granular)
+
+When the source text cross-references another part of the work that maps to a known leaf — a `\ref`/`\cref`/`\autoref` to a labelled result, or a verbatim mention like "Proposition 4.3", "Theorem 4.5", "Section 1.4", "Appendix A" — render that mention as a **Markdown hyperlink to the destination leaf**, using the relative path the latex-specialist resolved for it.
+
+- **This is not an editorial change and does not violate the verbatim rule.** The visible link *text* is the source's own reference, character-for-character ("Proposition 4.3"); you are only attaching the navigation target. You add no words, drop no words, reorder nothing. A reference rendered `[Proposition 4.3](../sub4.2/s4-2-company-hamiltonian.md)` reads identically to the source — the prose is untouched.
+- **Leaf-granular only.** The link target is always the *hosting leaf* (`…/s4-2-company-hamiltonian.md`), never a claim id or a claim anchor. At distillation time the claim DAG does not exist — you have no `clm-` ids to point at, and must not invent intra-leaf anchors. One link per cross-reference, to one leaf.
+- **Only when the destination is known and resolvable.** Create the link only when the latex-specialist's cross-reference map gives you the destination leaf path. If a reference resolves to no leaf (out of scope, cross-volume-unresolved, or ambiguous), leave it as plain verbatim text and flag it as a blocker — never emit a link you cannot resolve (`verify-md-links` gates every link, so a guessed target fails the build).
+- Self-references (a leaf citing its own result) get no link.
+- **Ranges and lists: link each resolvable token individually, never the connective text.** Wrap only the literal number/name tokens that resolve to a leaf; leave `§§`, en-dashes, commas, "and", and words like "Sections" as verbatim text between the links. "§§5.10–5.11" → `§§[5.10](…/s5-10-….md)–[5.11](…/s5-11-….md)`; "Sections 1 and 4" → `Sections [1](…) and [4](…)`. A contiguous span like "Sections 1–5" links only its two written endpoints (the intermediate numbers aren't tokens) — endpoints linked is far better than bare text. A range/list is never left plain just because it spans more than one leaf.
+
 ## Claim-graph emission (frontmatter + sidecars)
 
 Every leaf participates in the claim DAG as well as the topography (INVARIANT-S5/S8/S9/S10). On each leaf you emit:

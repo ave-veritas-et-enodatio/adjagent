@@ -96,6 +96,17 @@ A single result is frequently *stated once and referenced many times*. Only the 
 
 In **Survey mode**, record each candidate claim's `\label` (its origination key) alongside its kind/dependency notes, and note any sections that reference a result by `\ref`/`\cref`/name without defining it — those are prospective citers, not new claims.
 
+### Cross-reference destination map (for hyperlinking)
+
+The distiller renders in-prose cross-references as **leaf-granular hyperlinks**, but it cannot resolve targets itself — you supply the map. In **Extraction mode**, for every intra-work cross-reference inside a leaf's content — `\ref`/`\cref`/`\autoref` to a label, or a verbatim mention ("Proposition 4.3", "Theorem 4.5", "Section 1.4", "Appendix A", "§5.6") — resolve it to the **destination skeleton leaf path** and report the pair `(reference text as it appears, destination leaf path)`. Rules:
+
+- Resolve to the **hosting leaf**, never to a claim id or intra-leaf anchor (the claim DAG does not exist at distillation; links are leaf-granular).
+- Resolve **section/appendix** references (`\ref{sec:…}`, "Section 1.4", "Appendix A") to the leaf that hosts that section's content, exactly like result references — they are navigable cross-references too, not only claims.
+- If a reference points outside the assigned volume, to no skeleton leaf, or is genuinely ambiguous, report it as **unresolved** (do not guess) — the distiller leaves those as plain text and flags them.
+- A reference to content on the *same* leaf is a self-reference: report it as such so the distiller emits no link.
+
+This map is what lets the distiller attach a resolvable target to each cross-reference without inventing one (`verify-md-links` gates every link).
+
 ## Math Notation in Output
 
 When reporting source content in extraction mode, preserve LaTeX math exactly as found. Do not translate — that is the distiller's job. Surround displayed LaTeX with triple backtick fences so it is readable:
@@ -137,6 +148,7 @@ You will typically run as one of several instances, each assigned one volume.
 - Content type: [leaf / summary]
 - Source content: [verbatim LaTeX for leaves]
 - Notation notes: [macro translations needed]
+- Cross-reference destinations: [list of (reference text, destination leaf path) pairs; mark unresolved/self-reference]
 - Gaps: [positions with no source mapping]
 - Ambiguities: [positions that need skeleton refinement]
 
