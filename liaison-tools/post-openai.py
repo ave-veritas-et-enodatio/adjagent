@@ -22,6 +22,7 @@ env vars:
   MODEL              (required) model id; substring resolution is attempted on
                                 pre-stream model-not-found errors.
   MAX_TOKENS         (optional) integer max response tokens (default: 32768)
+  ENABLE_THINKING    (optional) boolean (exactly true or false) (default: true)
   TEMPERATURE        (optional) float in [0.0, 2.0] (default: 0.0)
   DEBUG_POST         (optional) "true" to dump the request payload to stderr
   DEBUG_RESPONSE     (optional) "true" to tee the raw SSE stream + reassembled output to stderr
@@ -277,11 +278,13 @@ def is_model_error_text(raw: str) -> bool:
 
 
 def do_post_streaming(
+    *,
     model: str,
     base_url: str,
     token: str,
     messages: object,
     max_tokens: int,
+    enable_thinking: bool | None,
     temperature: float,
     debug_post: bool,
     debug_response: bool,
@@ -302,6 +305,8 @@ def do_post_streaming(
         "stream": True,
         "messages": messages,
     }
+    if enable_thinking is not None:
+      payload["chat_template_kwargs"] = {"enable_thinking": enable_thinking}
     payload_str = json.dumps(payload)
 
     if debug_post:
@@ -469,6 +474,7 @@ def main() -> int:
     token = _read_api_key(key_path)
     if token is None:
         _usage(f"API_KEY_FILE has invalid format: {api_key_file}")
+        token = "" # shut the linter up. it's not catching that _usage exits.
 
     if not model:
         _usage("MODEL must be set")
@@ -487,9 +493,10 @@ def main() -> int:
         return 1
 
     temperature = _parse_temperature(os.environ.get("TEMPERATURE", "0.0"))
+    enable_thinking = os.environ.get("ENABLE_THINKING", "true").lower() == "true"
 
-    debug_post = os.environ.get("DEBUG_POST", "false") == "true"
-    debug_response = os.environ.get("DEBUG_RESPONSE", "false") == "true"
+    debug_post = os.environ.get("DEBUG_POST", "false").lower() == "true"
+    debug_response = os.environ.get("DEBUG_RESPONSE", "false").lower() == "true"
 
     try:
         messages = json.loads(messages_file.read_text(encoding="utf-8"))
@@ -503,6 +510,7 @@ def main() -> int:
         token=token,
         messages=messages,
         max_tokens=max_tokens,
+        enable_thinking=enable_thinking,
         temperature=temperature,
         debug_post=debug_post,
         debug_response=debug_response,
@@ -526,6 +534,7 @@ def main() -> int:
             token=token,
             messages=messages,
             max_tokens=max_tokens,
+            enable_thinking=enable_thinking,
             temperature=temperature,
             debug_post=debug_post,
             debug_response=debug_response,
