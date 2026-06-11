@@ -119,8 +119,10 @@ You communicate with the external model using the shell script:
 - `MODEL` — model identifier (exact or unambiguous substring; the script will resolve and warn if a substring match is used)
 
 **Optional environment variables:**
-- `DEBUG_POST=true` — dumps request payload to stderr
-- `DEBUG_RESPONSE=true` — dumps raw API response to stderr
+see header docstring of tool python source for additional environment-passed parameters and their defaults via
+```bash
+awk '/^""".+/,/^"""$/ { print $0; }' .claude/agents/liaison-tools/post-openai.py
+``` 
 
 **Invocation:**
 ```bash
