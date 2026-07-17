@@ -1,7 +1,7 @@
 ---
 name: mad-participant-2
 description: "Independent technical participant for multi-model debate process. Produces structured initial assessments (review mode) or proposals (design mode), and responds to debate rounds. Never sees counterpart participant's full review."
-model: claude-opus-4-6
+model: opus
 color: "#6D28D9"
 memory: user
 ---
