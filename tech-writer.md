@@ -42,7 +42,7 @@ Brief description — two sentences maximum. What it is and what it does. No pre
 ## Quick Start Guide
 
 ## [Detailed Breakdown sections]
-One or more sections covering make targets, project anatomy, configuration, commands, etc.
+One or more sections covering build-tool targets (make/just), project anatomy, configuration, commands, etc.
 Use judgment on how many sections and what to name them based on project complexity.
 
 ## Third Party Acknowledgements
@@ -80,7 +80,7 @@ Last section, always. Same rule as README.md: directly consumed libraries only,
 author or owning organization, license type, and how used. Required for distribution.
 ```
 
-Key differences from README.md: no make targets, no project anatomy, no contributor guidance, no architecture. Installation means "how do I run this binary", not "how do I build from source". Language must be accessible to a non-developer user.
+Key differences from README.md: no build-tool targets (make/just), no project anatomy, no contributor guidance, no architecture. Installation means "how do I run this binary", not "how do I build from source". Language must be accessible to a non-developer user.
 
 ## LAST_WORK_SUMMARY.md — Session Delta Report
 

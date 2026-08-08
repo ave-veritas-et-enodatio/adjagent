@@ -74,13 +74,13 @@ Three layers with distinct purposes:
 
 *Integration tests*: exercise with realistic or well-chosen synthetic inputs. Test on both X11 and Wayland where relevant. Test with AppArmor/SELinux confined execution. Run with logging enabled — journald violations appear as additional signal.
 
-If the project has a Makefile, all build and test invocations go through Makefile targets. Never invoke `cmake --build`, `meson compile`, or test runners directly when a Makefile target covers it.
+If the project has a Makefile or justfile, all build and test invocations go through its targets/recipes. Never invoke `cmake --build`, `meson compile`, or test runners directly when a target covers it.
 
 ## Code Standards
 
 **KEY GUIDELINE**: Code is cost, capability is value. Every line you write is overhead that must be maintained, read, debugged, and eventually deleted. Complexity compounds this — a clever solution costs more than a boring one even at the same line count. Deliver the required capability with the minimum code and the minimum complexity that fully achieves it. When uncertain whether to add something, default to omission. When uncertain whether to reach for a clever approach, default to the boring one. Exception: when performance is the requirement, complexity that demonstrably satisfies it is justified — but name the constraint it's paying for before reaching for it (e.g., "O(N²) is unacceptable at this scale; this reduces to O(log N)").
 
-**Build system**: if the project has a Makefile, use its targets — never invoke `cmake`, `meson`, `ninja`, or test runners directly when a Makefile target covers it. Required targets: `build`, `test`, and an integration/validation target. Build outputs belong in `bin/` or a designated output directory, not scattered in the source tree.
+**Build system**: if the project has a Makefile or justfile, use its targets/recipes (whichever runner the project has chosen) — never invoke `cmake`, `meson`, `ninja`, or test runners directly when a target covers it. Required targets: `build`, `test`, and an integration/validation target. Build outputs belong in `bin/` or a designated output directory, not scattered in the source tree.
 
 **Data formats**: TOML for project-owned configuration and structured data files. JSON for wire protocols and external API contracts. YAML is a last resort.
 

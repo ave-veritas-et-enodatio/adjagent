@@ -94,10 +94,10 @@ Dispatch `security-reviewer` to review the Phase 1 output for fundamental securi
 Present the Phase 1 output (invariants, skeleton, acceptance criteria) to the human verbatim — do not make semantic changes, rephrase, summarize, or compress the architect's output. Formatting normalization is permissible. Add a single framing sentence, then pass it through as-is. Wait for explicit approval before proceeding. The human may: approve as-is, request changes (return to Phase 1), or cancel.
 
 **Phase 2 — Implementation**
-Dispatch coding agents against the invariants and skeleton. Agents receive the invariants list explicitly in their prompt. For new projects where no Makefile exists, the first wave must include creating the Makefile with at minimum `build`, `test`, and integration targets — Phase 2a depends on these targets existing.
+Dispatch coding agents against the invariants and skeleton. Agents receive the invariants list explicitly in their prompt. For new projects where no Makefile or justfile exists, the first wave must include creating one (Makefile or justfile, per the project's chosen runner) with at minimum `build`, `test`, and integration targets — Phase 2a depends on these targets existing.
 
 **Phase 2a — Build verification**
-Run `make build` (or the project's equivalent build target). If the build fails, dispatch the relevant coding agents to fix the errors. Cap at 3 fix attempts; if the build still fails, escalate to human — persistent build failures indicate a design-level incompatibility. Commit after each successful fix cycle. Do not proceed to test writing against broken code.
+Run the project's build target (`make build` / `just build`, per its chosen runner). If the build fails, dispatch the relevant coding agents to fix the errors. Cap at 3 fix attempts; if the build still fails, escalate to human — persistent build failures indicate a design-level incompatibility. Commit after each successful fix cycle. Do not proceed to test writing against broken code.
 
 **Phase 2b — Test writing**
 Dispatch coding agents to write tests against the acceptance criteria. Independence comes from prompt isolation, not agent type — a fresh instance of the same agent type with no implementation history is sufficient. Provide: the acceptance criteria and module skeleton from Phase 1, and the relevant source files. Do not provide the Phase 2 prompts or implementation history.
@@ -105,7 +105,7 @@ Dispatch coding agents to write tests against the acceptance criteria. Independe
 Each agent's test-writing prompt should be scoped to: "given this implementation and these acceptance criteria, write tests that would fail if any criterion is violated."
 
 **Phase 2c — Test execution**
-Run `make test` (unit tests — fast baseline). If tests fail, dispatch coding agents to fix the failures before entering the review loop. Cap at 3 fix attempts; if tests still fail, escalate to human — persistent test failures indicate an implementation or design problem that requires human judgment. Do not proceed to Phase 3 with failing tests.
+Run the project's test target (`make test` / `just test` — unit tests, fast baseline). If tests fail, dispatch coding agents to fix the failures before entering the review loop. Cap at 3 fix attempts; if tests still fail, escalate to human — persistent test failures indicate an implementation or design problem that requires human judgment. Do not proceed to Phase 3 with failing tests.
 
 **Phase 3 — Review loop** (max 3 iterations)
 1. Dispatch `security-reviewer` AND `architect` in parallel. Each reviews the implementation independently — security-reviewer produces a hazard list (hazard, attack vector, avoidance requirement); architect produces its structural findings. Neither sees the other's output at this stage.
@@ -118,9 +118,9 @@ Run `make test` (unit tests — fast baseline). If tests fail, dispatch coding a
    The architect produces a single combined burn-down list reflecting the final correct guidance. On iterations > 1, if any prior structural criticism is now withdrawn — whether due to security context or on purely structural grounds — the burn-down list must include an explicit **retraction**: "Criticism X from iteration N is withdrawn — [reason]. Restore the original approach and discard the prior fix." Coders have already acted on prior guidance; without explicit retraction they will continue treating it as valid.
 
 3. If security impact is scratch rewrite: trigger scope expansion protocol. Do not proceed to step 4.
-4. If all acceptance criteria are satisfied AND no Critical or Warning items remain: run the integration test target (check the Makefile — typically `test-integration`, `validate`, or similar) with maximum logging enabled. Runtime boundary check violations will appear in the log output as additional diagnostic signal. If integration tests fail, treat failures as Critical findings and re-enter the review loop. If integration tests pass, proceed to Phase 3b.
+4. If all acceptance criteria are satisfied AND no Critical or Warning items remain: run the integration test target (check the Makefile/justfile — typically `test-integration`, `validate`, or similar) with maximum logging enabled. Runtime boundary check violations will appear in the log output as additional diagnostic signal. If integration tests fail, treat failures as Critical findings and re-enter the review loop. If integration tests pass, proceed to Phase 3b.
 5. Dispatch coding agents to address the burn-down list. Each agent receives the specific findings assigned to it, including any retractions.
-6. Commit after coders finish (before running `make test`) — this captures the fix state regardless of test outcome. Then run `make test`. If tests fail, treat failures as Critical findings and include them in the next iteration's burn-down list.
+6. Commit after coders finish (before running the test target) — this captures the fix state regardless of test outcome. Then run the test target. If tests fail, treat failures as Critical findings and include them in the next iteration's burn-down list.
 7. Increment iteration count. If iteration count < 3, go to step 1.
 
 **Phase 3b — Confirmation review**
@@ -130,7 +130,7 @@ When the review loop exits cleanly (zero Critical or Warning items, all acceptan
 > "The previous review passes found no issues. Assume something was missed. What is it?"
 
 - If neither returns Critical or Warning findings: proceed to Phase 4. (Reviewers always produce output — "nothing" means no Critical or Warning items, not an empty response.)
-- If either returns Critical or Warning findings: dispatch `architect` to synthesize the findings into a focused burn-down list (same pattern as Phase 3 step 2). Dispatch coding agents to address the list, run `make test`, then dispatch one final confirmation pass with the same adversarial framing. If issues persist after this single follow-up cycle, proceed to Phase 4, then escalate to human — do not loop further.
+- If either returns Critical or Warning findings: dispatch `architect` to synthesize the findings into a focused burn-down list (same pattern as Phase 3 step 2). Dispatch coding agents to address the list, run the test target, then dispatch one final confirmation pass with the same adversarial framing. If issues persist after this single follow-up cycle, proceed to Phase 4, then escalate to human — do not loop further.
 
 The confirmation pass does not consume or reset the main iteration counter.
 
@@ -262,7 +262,7 @@ When an agent returns an error, incomplete result, or clearly unusable output:
 | **Tool failure** | File not found, permission denied, fetch error | Retry once; if persistent, escalate — it likely indicates an environment problem beyond the agent's control |
 | **Contradictory result** | Two parallel agents return conflicting changes | Coordinator synthesizes where possible; escalate to human if irreconcilable |
 | **Timeout / no return** | Agent returns nothing useful or stops responding | Retry once with a smaller, more tightly scoped task; escalate if it recurs |
-| **Fabrication** | Agent invents file contents, APIs, or test results rather than reading actual files | Difficult to detect directly — `make build` and `make test` are the primary catches; persistent unexplained failures suggest this cause |
+| **Fabrication** | Agent invents file contents, APIs, or test results rather than reading actual files | Difficult to detect directly — the build and test targets are the primary catches; persistent unexplained failures suggest this cause |
 
 **General rule**: retry once for transient failures; reassign for capability gaps; escalate to human for anything that repeats, is irreconcilable, or suggests a systemic problem.
 
