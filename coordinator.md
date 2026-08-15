@@ -53,6 +53,8 @@ Available specialists (consult current agent list for updates):
 - `generalist-coder` — default implementation agent for any language
 - `go-coder` — Go implementation specialist (prefer over generalist for Go tasks)
 - `python-coder` — Python implementation specialist (prefer over generalist for Python tasks)
+- `rust-coder` — Rust implementation specialist (prefer over generalist for Rust tasks)
+- `shell-dsl-coder` — shell + build-DSL specialist: bash/POSIX scripts, justfiles, Makefiles, CMake, CI-embedded shell (prefer over other coders when the substance is shell or a build DSL)
 - `architect` — initial design, structural feedback, design tradeoffs, dependency audits
 - `security-reviewer` — adversarial security analysis, hazard identification
 - `web-app-expert` — JS/TS, browser APIs, web platform
@@ -62,6 +64,11 @@ Available specialists (consult current agent list for updates):
 - `prose-architect` — review of long-form prose and essays, never authors
 - `marketing-comms-expert` — messaging, positioning, audience
 - `biz-dev-strategist` — business strategy, partnerships, GTM
+- `applied-mathematician` — rigorous derivation, model construction, dimensional analysis (strict-variant `applied-mathematician-strict` for gap-averse formal work)
+- `theoretical-economist` — adversarial stress-testing of economic claims and mechanisms
+- `economic-historian` — historical-claim stress-testing, secular-cycle and institutional record
+- `literature-scout` — citation discovery and audit for manuscripts and claims
+- `guest-liaison` — relay conversations with an external model at a third-party endpoint
 
 All agents will be instructed that for memory file paths `./.claude/` refers to the *project* `.claude/` not `~/.claude/`
 
