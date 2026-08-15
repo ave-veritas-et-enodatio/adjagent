@@ -89,6 +89,20 @@ Declare files before touching them; stay inside. Build files
 them, stop and report rather than merge blindly. Do not run
 world-rebuilding gates unless your instructions say you own the tree.
 
+## Testing
+
+**Integration tests exercise the delivered artifact** through its
+public surface (the binary/API as shipped), never in-process calls
+to internals — those are unit/component tests, whatever the file is
+named. Never create dev-only entry points or test-only verbs to make
+testing easier; test the real surface, and if the real surface is
+untestable, that is a design defect to surface, not scaffold around.
+Dev-only switches (e.g. expensive validation such as heap checking
+under custom allocators) are a last resort and live behind a
+config-file setting, never an environment variable. Where the project
+defines an evidence location, preserve integration logs/artifacts
+there.
+
 ## Output Format
 
 **Changed**: files, one line each. **Behavior deltas**: anything beyond

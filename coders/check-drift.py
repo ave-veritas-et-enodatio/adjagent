@@ -6,14 +6,20 @@ Verifies that canonical text blocks appear verbatim in all covered agent
 definition files. All canonical strings live here — there is no separate
 template file.
 
+Matching is whitespace-normalized: runs of whitespace (including newlines)
+collapse to a single space on both sides of the comparison. Canonical text
+therefore matches regardless of how a file hard-wraps it — shell-dsl-coder.md
+wraps prose at ~70 columns while the rest use one line per paragraph.
+
 Usage: python3 check-drift.py [--verbose]
 Run from the repository root or any subdirectory.
 
 ─── Scope ────────────────────────────────────────────────────────────────────
-Covered files (9):
-  generalist-coder.md, go-coder.md, python-coder.md,
-  android-app-expert.md, ios-app-expert.md, linux-app-expert.md,
-  macos-app-expert.md, web-app-expert.md, windows-app-expert.md
+Covered files (11):
+  generalist-coder.md, go-coder.md, python-coder.md, rust-coder.md,
+  shell-dsl-coder.md, android-app-expert.md, ios-app-expert.md,
+  linux-app-expert.md, macos-app-expert.md, web-app-expert.md,
+  windows-app-expert.md
 
 Not covered: architect.md, security-reviewer.md — distinct structures,
   not members of the coder/platform expert family.
@@ -51,6 +57,31 @@ These sections intentionally differ per file and are not checked:
                               go-coder and python-coder use the stopping-early
                               format only (no separate "When done:" block)
 
+  Dependencies wording        rust-coder says "crates" where the others say
+                              "packages". Check uses the common substring
+                              (the coordinator/user approval clause).
+
+  Logging exception phrasing  rust-coder embeds the exception mid-sentence
+                              ("that thin abstraction...") rather than opening
+                              with it. Check uses the common substring.
+
+  KEY GUIDELINE continuation  shell-dsl-coder continues the sentence with an
+                              em dash instead of ending it. Check omits the
+                              trailing period.
+
+  Boundary-check boundaries   rust-coder lists Rust-idiomatic boundaries (FFI,
+                              file/socket I/O, channel/thread) instead of the
+                              general list. Exempted — see EXCEPTIONS.
+
+  shell-dsl-coder structure   Terse, ~70-column file with no three-layer
+                              testing block, no shared Core Principles block,
+                              and its own Output Format. It carries the
+                              KEY GUIDELINE core sentence and the integration-
+                              test clause; everything else is exempted
+                              individually in EXCEPTIONS rather than
+                              bulk-skipped, so adopting any one of them later
+                              is a one-line deletion.
+
 ─── Updating canonical strings ───────────────────────────────────────────────
 When a shared section is intentionally changed, update the relevant string in
 CHECKS below, then run this script to confirm all files are in sync.
@@ -67,6 +98,8 @@ COVERED_FILES = [
     "generalist-coder.md",
     "go-coder.md",
     "python-coder.md",
+    "rust-coder.md",
+    "shell-dsl-coder.md",
     "android-app-expert.md",
     "ios-app-expert.md",
     "linux-app-expert.md",
@@ -94,7 +127,8 @@ CHECKS = [
     (
         "KEY GUIDELINE — core sentence",
         COVERED_FILES,
-        "**KEY GUIDELINE**: Code is cost, capability is value.",
+        # no trailing period — shell-dsl-coder continues the sentence
+        "**KEY GUIDELINE**: Code is cost, capability is value",
     ),
     (
         "KEY GUIDELINE — default to omission",
@@ -117,7 +151,8 @@ CHECKS = [
     (
         "Dependencies — commercial packages escape clause",
         COVERED_FILES,
-        "No paid or commercial packages unless explicitly approved by the coordinator/user",
+        # rust-coder says "crates", the rest say "packages" — common substring:
+        "unless explicitly approved by the coordinator/user",
     ),
     (
         "Boundary checks — concrete definition",
@@ -138,7 +173,8 @@ CHECKS = [
         "Logging abstraction exception",
         COVERED_FILES,
         # python-coder exempted in EXCEPTIONS — see module docstring
-        "This thin abstraction is an explicit exception to the no-premature-abstraction principle.",
+        # leading demonstrative omitted: rust-coder embeds this as "that thin..."
+        "thin abstraction is an explicit exception to the no-premature-abstraction principle.",
     ),
     (
         "Memory directive explanation",
@@ -177,6 +213,22 @@ CHECKS = [
         PLATFORM_EXPERTS,
         "Platform-required adjacent files",
     ),
+    (
+        "Integration tests — public surface of the delivered artifact",
+        COVERED_FILES,
+        "**Integration tests exercise the delivered artifact** through its public "
+        "surface (the binary/API as shipped), never in-process calls to internals",
+    ),
+    (
+        "Integration tests — no dev-only entry points",
+        COVERED_FILES,
+        "Never create dev-only entry points or test-only verbs to make testing easier",
+    ),
+    (
+        "Integration tests — dev-only switches behind config, not env",
+        COVERED_FILES,
+        "live behind a config-file setting, never an environment variable",
+    ),
 ]
 
 # Known acceptable divergences — skip these checks for these files.
@@ -192,6 +244,31 @@ EXCEPTIONS: dict[str, list[str]] = {
     # wrapper — the logging abstraction exception note is not applicable
     "python-coder.md": [
         "Logging abstraction exception",
+    ],
+    # rust-coder enumerates Rust-idiomatic boundaries (FFI calls, file/socket
+    # I/O, channel/thread) rather than the general list — same rule, right
+    # nouns for the language
+    "rust-coder.md": [
+        "Boundary checks — concrete definition",
+    ],
+    # shell-dsl-coder is a terse, structurally distinct file: no three-layer
+    # testing block, no shared Core Principles block, its own Output Format.
+    # It carries the KEY GUIDELINE core sentence and the integration-test
+    # clause; the rest have no home in it yet. Listed individually so adopting
+    # any one of them later is a one-line deletion.
+    "shell-dsl-coder.md": [
+        "KEY GUIDELINE — default to omission",
+        "KEY GUIDELINE — performance exception",
+        "Data formats — TOML project-owned",
+        "Dependencies — commercial packages escape clause",
+        "Boundary checks — concrete definition",
+        "Boundary checks — scope rule",
+        "Dissent protocol",
+        "Logging abstraction exception",
+        "Memory directive explanation",
+        "Mocking threshold — rationale present",
+        "Stopping-early format — Discovered bullet",
+        "Stopping-early format — Recommendation bullet (clean form)",
     ],
 }
 
@@ -251,8 +328,13 @@ def check_coordinator_specialists() -> list[str]:
     return errors
 
 
+def normalize(text: str) -> str:
+    """Collapse whitespace runs so hard-wrapped prose matches one-line prose."""
+    return re.sub(r"\s+", " ", text)
+
+
 def check_file(filepath: Path) -> list[str]:
-    content = filepath.read_text(encoding="utf-8")
+    content = normalize(filepath.read_text(encoding="utf-8"))
     filename = filepath.name
     skipped = EXCEPTIONS.get(filename, [])
     failures = []
@@ -262,7 +344,7 @@ def check_file(filepath: Path) -> list[str]:
             continue
         if label in skipped:
             continue
-        if substring not in content:
+        if normalize(substring) not in content:
             failures.append(label)
 
     return failures

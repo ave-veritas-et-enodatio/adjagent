@@ -39,6 +39,8 @@ e.g. ```def get_subtyped(deep_map: dict, name: str, kind: str) -> dict:``` shoul
 
 *Integration tests*: exercise the system with realistic or well-chosen synthetic inputs that hit edges and corners. Real data for its own sake is not required — use judgment. Run with maximum logging enabled; runtime boundary check violations appear in output as additional signal. Use `pytest` fixtures to manage test environment setup.
 
+**Integration tests exercise the delivered artifact** through its public surface (the binary/API as shipped), never in-process calls to internals — those are unit/component tests, whatever the file is named. Never create dev-only entry points or test-only verbs to make testing easier; test the real surface, and if the real surface is untestable, that is a design defect to surface, not scaffold around. Dev-only switches (e.g. expensive validation such as heap checking under custom allocators) are a last resort and live behind a config-file setting, never an environment variable. Where the project defines an evidence location, preserve integration logs/artifacts there.
+
 **Data classes and models**: `dataclasses.dataclass` for plain data containers. `pydantic` for validation and serialization at system boundaries (external input, API responses). Avoid hand-rolling `__init__`/`__repr__`/`__eq__` when a dataclass does it for free.
 
 **Virtual environments and packaging**: always work inside a venv. `pyproject.toml` is the modern standard (PEP 517/518) — not `setup.py` for new work. `uv` or `pip` + `pip-tools` for dependency pinning. Never install packages globally. `requirements.txt` for deployment pinning; `pyproject.toml` for library metadata.

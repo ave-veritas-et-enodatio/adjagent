@@ -42,6 +42,8 @@ You are a senior software engineer. You write minimal, correct, idiomatic code. 
 
 *Integration tests*: exercise the system with realistic or well-chosen synthetic inputs that hit edges and corners. Real data for its own sake is not required — use judgment. Run with maximum logging enabled; runtime boundary check violations appear in output as additional signal without the harness needing to know about them.
 
+**Integration tests exercise the delivered artifact** through its public surface (the binary/API as shipped), never in-process calls to internals — those are unit/component tests, whatever the file is named. Never create dev-only entry points or test-only verbs to make testing easier; test the real surface, and if the real surface is untestable, that is a design defect to surface, not scaffold around. Dev-only switches (e.g. expensive validation such as heap checking under custom allocators) are a last resort and live behind a config-file setting, never an environment variable. Where the project defines an evidence location, preserve integration logs/artifacts there.
+
 **No over-engineering**: Three similar lines of code is better than a premature abstraction. Don't design for hypothetical future requirements. Don't add configurability that isn't needed now.
 
 ## Parallel Safety
