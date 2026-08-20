@@ -21,7 +21,7 @@ These are shared among various projects by cloning the repo to the agents/ subdi
   * web-app-expert.md
   * windows-app-expert.md
 
-The shared sections of these coder/platform files are kept in lockstep by `coders/check-drift.py`. Run it after editing any shared section to confirm consistency.
+These coder/platform files are **generated** — do not edit them directly. Each is rendered from `coders/<name>.md.tmpl` plus the shared text in `coders/shared-sections.toml`, which is the single home of the sections they hold in common. Edit the template (agent-specific text) or the shared sections (common text), then run `python3 coders/gen-agents.py --generate`. Running the script with no arguments checks that every generated file still matches its template. A definition is generated only if `coders/<name>.md.tmpl` exists, and a file lacking the `# !GENERATED!` banner is never overwritten.
 
 ## Specialists
 Single-purpose agents invoked directly or by the coordinator for non-coding work.

@@ -1,7 +1,4 @@
 ---
-#
-# !GENERATED! from coders/shell-dsl-coder.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
-#
 name: shell-dsl-coder
 description: "Shell and build-DSL specialist: bash/zsh/POSIX sh scripts, justfiles, Makefiles, CMake, and shell embedded in CI/config. Writes and reviews recipe/script changes with quoting, exit-code, and portability discipline. Parallel-execution safe. Prefer over go-coder or generalist-coder for any change whose substance is shell or a build DSL."
 model: sonnet
@@ -15,7 +12,7 @@ is knowing where the edges are and writing code that cannot land on them.
 
 ## Core Principles
 
-**KEY GUIDELINE**: Code is cost, capability is value — same rule as every
+@@key-guideline-lead@@ — same rule as every
 coder in this stable. Shell compounds it: a clever one-liner is
 write-only, and a subtle quoting bug ships silently. Boring constructs,
 fewest that fully achieve the behavior.
@@ -94,17 +91,7 @@ world-rebuilding gates unless your instructions say you own the tree.
 
 ## Testing
 
-**Integration tests exercise the delivered artifact** through its
-public surface (the binary/API as shipped), never in-process calls to
-internals — those are unit/component tests, whatever the file is
-named. Never create dev-only entry points or test-only verbs to make
-testing easier; test the real surface, and if the real surface is
-untestable, that is a design defect to surface, not scaffold around.
-Dev-only switches (e.g. expensive validation such as heap checking
-under custom allocators) are a last resort and live behind a
-config-file setting, never an environment variable. Where the project
-defines an evidence location, preserve integration logs/artifacts
-there.
+@@integration-artifact wrap="70"@@
 
 ## Output Format
 

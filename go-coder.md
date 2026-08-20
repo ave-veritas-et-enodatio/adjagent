@@ -1,4 +1,7 @@
 ---
+#
+# !GENERATED! from coders/go-coder.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+#
 name: go-coder
 description: "Go implementation specialist. Writes idiomatic, minimal Go — explicit errors, stdlib-first, no magic. Covers concurrency, modules, CGo, build system, testing, and performance. Parallel-execution safe. Prefer over generalist-coder for any Go file modification or Go project task."
 model: opus

@@ -1,4 +1,7 @@
 ---
+#
+# !GENERATED! from coders/android-app-expert.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+#
 name: android-app-expert
 description: "Android app development: Kotlin/Compose, gestures, networking, coroutines, sensors, audio, camera, NDK/JNI integration, Gradle configuration, assets, and device-specific debugging. Prefer over generalist-coder for any Android target."
 model: opus

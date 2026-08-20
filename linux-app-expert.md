@@ -1,4 +1,7 @@
 ---
+#
+# !GENERATED! from coders/linux-app-expert.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+#
 name: linux-app-expert
 description: "Linux desktop development: GTK/Qt, D-Bus, systemd, X11/Wayland, XDG standards, native APIs (ALSA, V4L2, udev, inotify), packaging (deb/rpm/AppImage/Flatpak/Snap). Prefer over generalist-coder for any Linux desktop target."
 model: opus
