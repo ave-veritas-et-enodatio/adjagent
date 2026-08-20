@@ -26,12 +26,13 @@ and an overwrite is never destructive:
     target missing                  -> created
     banner, render identical        -> no write at all (counted as unchanged)
     banner, render differs          -> extant file moved to
-                                       coders/<name>.md.<NN>.bak, then written
+                                       <name>.md.<NN>.bak, then written
     target exists without a banner  -> REFUSED, never written, reported, nonzero
 
-Backup serials are per-target, zero-padded from 00, allocated as the highest
-existing serial plus one, and never reused. They land in coders/ next to the
-templates, where the repo's *.bak gitignore rule lives.
+A backup sits beside the file it backs up — ../go-coder.md.00.bak next to
+../go-coder.md — and the repo's root *.bak gitignore rule keeps it out of git.
+Serials are per-target, zero-padded from 00, allocated as the highest existing
+serial plus one, and never reused.
 
 The banner is a three-line YAML-comment block at the top of the frontmatter. A
 definition without it is presumed hand-maintained and outside this tool's remit;
@@ -310,23 +311,22 @@ def check_coordinator_specialists() -> list[str]:
 
 REFUSAL = (
     "exists without the generated banner — refusing to overwrite. If it should "
-    "be generated, delete it and re-run; otherwise remove its template."
+    "be generated, delete it and re-run; otherwise rename its template."
 )
 
-# Backups live in coders/ alongside the templates, where the repo's *.bak
-# gitignore rule sits. Serials are per-target and never reused.
-BACKUP_DIR = SCRIPT_DIR
+# A backup sits beside the file it backs up. The repo's root *.bak gitignore
+# rule keeps them out of git. Serials are per-target and never reused.
 SERIAL = re.compile(r"\.(\d+)\.bak$")
 
 
 def next_backup(target: Path) -> Path:
-    """Allocate <target>.<NN>.bak in coders/, NN = highest existing + 1, from 00."""
+    """Allocate <target>.<NN>.bak beside the target, NN = highest existing + 1."""
     used = []
-    for path in BACKUP_DIR.glob(f"{target.name}.*.bak"):
+    for path in target.parent.glob(f"{target.name}.*.bak"):
         match = SERIAL.search(path.name)
         if match:
             used.append(int(match.group(1)))
-    return BACKUP_DIR / f"{target.name}.{max(used) + 1 if used else 0:02d}.bak"
+    return target.with_name(f"{target.name}.{max(used) + 1 if used else 0:02d}.bak")
 
 
 def back_up(target: Path) -> Path:
@@ -371,10 +371,7 @@ def generate(chunks: dict[str, dict], *, verbose: bool) -> bool:
 
         backup = back_up(target)
         target.write_text(rendered, encoding="utf-8")
-        print(
-            f"  {'updated':<10} {target.name} "
-            f"(backed up to {backup.relative_to(AGENTS_DIR)})"
-        )
+        print(f"  {'updated':<10} {target.name} (backed up beside it as {backup.name})")
 
     print()
     print(f"  {'unchanged':<10} {unchanged} definition(s)")
