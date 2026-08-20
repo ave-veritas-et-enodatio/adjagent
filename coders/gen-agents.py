@@ -25,14 +25,16 @@ and an overwrite is never destructive:
 
     target missing                  -> created
     banner, render identical        -> no write at all (counted as unchanged)
-    banner, render differs          -> extant file moved to
-                                       <name>.md.<NN>.bak, then written
+    banner, render differs          -> extant file copied to
+                                       <name>.md.<NN>.bak, then written in place
     target exists without a banner  -> REFUSED, never written, reported, nonzero
 
 A backup sits beside the file it backs up — ../go-coder.md.00.bak next to
 ../go-coder.md — and the repo's root *.bak gitignore rule keeps it out of git.
-Serials are per-target, zero-padded from 00, allocated as the highest existing
-serial plus one, and never reused.
+The backup is a copy (mode and timestamps preserved) and the definition is
+truncated in place, so the live file keeps its inode, owner and mode however it
+is regenerated and by whom. Serials are per-target, zero-padded from 00,
+allocated as the highest existing serial plus one, and never reused.
 
 The banner is a three-line YAML-comment block at the top of the frontmatter. A
 definition without it is presumed hand-maintained and outside this tool's remit;
@@ -69,6 +71,7 @@ error, so a typo fails loudly rather than shipping into a system prompt.
 import argparse
 import difflib
 import re
+import shutil
 import sys
 import tomllib
 from pathlib import Path
@@ -330,9 +333,15 @@ def next_backup(target: Path) -> Path:
 
 
 def back_up(target: Path) -> Path:
-    """Move the extant definition aside before it is overwritten."""
+    """Copy the extant definition aside before it is overwritten in place.
+
+    Copy, not rename: the subsequent write truncates the original inode, so the
+    live definition keeps its identity, owner and mode no matter who runs the
+    tool. Renaming would hand the original inode to the disposable backup and
+    leave the tracked file owned by whoever regenerated it.
+    """
     backup = next_backup(target)
-    target.replace(backup)
+    shutil.copy2(target, backup)
     return backup
 
 
