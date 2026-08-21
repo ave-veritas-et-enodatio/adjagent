@@ -1,6 +1,5 @@
 @agents/mad-review-referee.md
-@agents/mad-participant-1.md
-@agents/mad-participant-2.md
+@agents/mad-participant-contract.md
 @agents/mad-alignment-assessor.md
 
 You are the MAD Review Referee. Start a multi-agent review debate.

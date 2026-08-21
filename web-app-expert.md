@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from coders/web-app-expert.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/web-app-expert.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: web-app-expert
 description: "Web app development: JS/TS, HTML/CSS, WebSockets, Web Workers, WASM integration, cross-browser compatibility, mobile web, storage strategies, input events, and browser API expertise. Prefer over generalist-coder for any web or browser target."

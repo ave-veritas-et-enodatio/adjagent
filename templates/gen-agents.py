@@ -1,24 +1,48 @@
 #!/usr/bin/env python3
 """
-Generator and consistency checker for the coder / platform-expert agent definitions.
+Generator and consistency checker for the agent definitions in this repository.
 
 Each definition is generated from a template:
 
-    coders/<name>.md.tmpl   +   coders/shared-sections.toml   ->   <name>.md
+    templates/<name>.md.tmpl  +  templates/shared-sections.toml  ->  <name>.md
 
 The template holds everything unique to that agent. Every span of text shared
 with other definitions is a marker referencing a chunk in shared-sections.toml,
-so the shared engineering ethos lives in exactly one place.
+so shared text lives in exactly one place.
 
 Enrollment is template existence, and nothing else. There is no enrollment list
-and no exclusion list: the tool generates ../<name>.md for every
-coders/<name>.md.tmpl it finds, and touches no other file.
+and no exclusion list: the tool generates every definition its templates declare
+and touches no other file. Paths printed and matched below are derived from this
+script's own directory, so renaming that directory needs no edit here.
+
+One template may render SEVERAL definitions. A template that opens with a fenced
+TOML block declares them, along with the parameters that differ:
+
+    +++
+    [outputs.mad-participant-opus]
+    model = "opus"
+    color = "#6D28D9"
+
+    [outputs.mad-participant-haiku]
+    model = "haiku"
+    color = "#5B21B6"
+    +++
+    ---
+    name: @@name@@
+    model: @@model@@
+    ---
+    <one body, rendered identically into every output>
+
+Each declared key becomes an @@placeholder@@ in the body, plus @@name@@ bound to
+the output's own name. Bodies are therefore identical by construction rather
+than by maintenance discipline. A template with no such block renders a single
+definition named after the template, exactly as before.
 
 Usage
-    python3 coders/gen-agents.py              # check (default)
-    python3 coders/gen-agents.py --generate   # render templates to ../
-    python3 coders/gen-agents.py --verbose    # list passing files too
-    python3 coders/gen-agents.py --no-diff    # report drift without the diff
+    python3 templates/gen-agents.py              # check (default)
+    python3 templates/gen-agents.py --generate   # render templates to ../
+    python3 templates/gen-agents.py --verbose    # list passing files too
+    python3 templates/gen-agents.py --no-diff    # report drift without the diff
 
 Per-target safety — a target is only ever written when it is provably ours,
 and an overwrite is never destructive:
@@ -82,11 +106,16 @@ SHARED_SECTIONS = SCRIPT_DIR / "shared-sections.toml"
 TEMPLATE_SUFFIX = ".md.tmpl"
 MAX_EXPANSION_DEPTH = 10
 
+# Every path this tool prints or matches is derived from where the script lives,
+# so renaming the template directory needs no edit here.
+HOME = SCRIPT_DIR.name
+OUTPUTS_FENCE = "+++"
+
 MARKER = re.compile(r'@@([a-z0-9-]+)((?:\s+[a-z_]+="[^"]*")*)\s*@@')
 ARG = re.compile(r'([a-z_]+)="([^"]*)"')
 # The banner, read back out of a definition as its claim to being generated.
 BANNER_CLAIM = re.compile(
-    r"^# !GENERATED! from coders/(\S+\.md\.tmpl)\b", re.MULTILINE
+    rf"^# !GENERATED! from {re.escape(HOME)}/(\S+\.md\.tmpl)\b", re.MULTILINE
 )
 
 
@@ -185,7 +214,7 @@ def banner(template_name: str) -> str:
     """The three-line YAML-comment block stamped at the top of frontmatter."""
     return (
         "#\n"
-        f"# !GENERATED! from coders/{template_name} and coders/shared-sections.toml"
+        f"# !GENERATED! from {HOME}/{template_name} and {HOME}/shared-sections.toml"
         " — edit those. DO NOT HAND EDIT THIS FILE.\n"
         "#"
     )
@@ -211,22 +240,68 @@ def banner_claim(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def render_template(path: Path, chunks: dict[str, dict]) -> str:
-    """Render a template and stamp the banner into its frontmatter."""
-    text = render(path.read_text(encoding="utf-8"), chunks, {})
-    if not text.startswith("---\n"):
-        raise TemplateError(f"{path.name}: template must open with YAML frontmatter")
-    # YAML comments: valid frontmatter, dropped by every parser, and outside the
-    # body that becomes the agent's system prompt.
-    return "---\n" + banner(path.name) + "\n" + text[4:]
+def split_outputs(path: Path) -> tuple[dict[str, dict[str, str]], str]:
+    """Split a template into its output declarations and its body.
+
+    A template may open with a fenced TOML block declaring the definitions it
+    renders and the parameters that differ between them:
+
+        +++
+        [outputs.mad-participant-opus]
+        model = "opus"
+        +++
+        ---
+        name: @@name@@
+        model: @@model@@
+        ...
+
+    Each key becomes an @@placeholder@@ in the body, plus @@name@@ bound to the
+    output's own name. A template with no block renders one definition named
+    after the template.
+    """
+    text = path.read_text(encoding="utf-8")
+    stem = path.name[: -len(TEMPLATE_SUFFIX)]
+    if not text.startswith(OUTPUTS_FENCE + "\n"):
+        return {stem: {"name": stem}}, text
+
+    closing = text.find(f"\n{OUTPUTS_FENCE}\n", len(OUTPUTS_FENCE))
+    if closing == -1:
+        raise TemplateError(f"{path.name}: unterminated {OUTPUTS_FENCE} outputs block")
+    declared = tomllib.loads(text[len(OUTPUTS_FENCE) + 1 : closing]).get("outputs", {})
+    if not declared:
+        raise TemplateError(f"{path.name}: outputs block declares no [outputs.*]")
+
+    outputs = {name: {"name": name, **params} for name, params in declared.items()}
+    body = text[closing + len(OUTPUTS_FENCE) + 2 :]
+    return outputs, body
+
+
+def render_template(path: Path, chunks: dict[str, dict]) -> list[tuple[Path, str]]:
+    """Render every definition a template declares, banner stamped into each."""
+    outputs, body = split_outputs(path)
+    rendered = []
+    for name, params in sorted(outputs.items()):
+        text = render(body, chunks, params)
+        if not text.startswith("---\n"):
+            raise TemplateError(
+                f"{path.name}: template must open with YAML frontmatter"
+            )
+        # YAML comments: valid frontmatter, dropped by every parser, and outside
+        # the body that becomes the agent's system prompt.
+        stamped = "---\n" + banner(path.name) + "\n" + text[4:]
+        rendered.append((AGENTS_DIR / f"{name}.md", stamped))
+    return rendered
 
 
 def templates() -> list[Path]:
     return sorted(SCRIPT_DIR.glob(f"*{TEMPLATE_SUFFIX}"))
 
 
-def target_for(template: Path) -> Path:
-    return AGENTS_DIR / (template.name[: -len(TEMPLATE_SUFFIX)] + ".md")
+def declared_outputs() -> dict[str, set[str]]:
+    """Map template filename -> the definition filenames it declares."""
+    return {
+        t.name: {f"{name}.md" for name in split_outputs(t)[0]} for t in templates()
+    }
 
 
 def check_banner_claims() -> list[str]:
@@ -238,20 +313,26 @@ def check_banner_claims() -> list[str]:
     check and drifting silently. This walks the claims the other way.
     """
     errors = []
+    outputs = declared_outputs()
     for path in sorted(AGENTS_DIR.glob("*.md")):
         claimed = banner_claim(path.read_text(encoding="utf-8"))
         if claimed is None:
             continue
-        expected = path.stem + TEMPLATE_SUFFIX
-        if not (SCRIPT_DIR / claimed).exists():
+        if claimed not in outputs:
             errors.append(
                 f"ORPHAN      {path.name} is banner-marked as generated from "
-                f"coders/{claimed}, but that template does not exist"
+                f"{HOME}/{claimed}, but that template does not exist"
             )
-        elif claimed != expected:
+        elif path.name not in outputs[claimed]:
+            # A multi-render template names several definitions, so the claim is
+            # checked against what the template declares, not against its stem.
+            owner = next(
+                (t for t, outs in outputs.items() if path.name in outs), None
+            )
             errors.append(
                 f"MISLABELED  {path.name} is banner-marked as generated from "
-                f"coders/{claimed}, but its template is coders/{expected}"
+                f"{HOME}/{claimed}, which does not declare it"
+                + (f" — its template is {HOME}/{owner}" if owner else "")
             )
     return errors
 
@@ -314,7 +395,7 @@ def check_coordinator_specialists() -> list[str]:
 
 REFUSAL = (
     "exists without the generated banner — refusing to overwrite. If it should "
-    "be generated, delete it and re-run; otherwise rename its template."
+    "be generated, delete it and re-run; otherwise remove its template."
 )
 
 # A backup sits beside the file it backs up. The repo's root *.bak gitignore
@@ -345,20 +426,26 @@ def back_up(target: Path) -> Path:
     return backup
 
 
+def all_renders(chunks: dict[str, dict]) -> list[tuple[Path, str]]:
+    """Every (target, rendered text) pair across every template, sorted."""
+    pairs = []
+    for template in templates():
+        pairs.extend(render_template(template, chunks))
+    return sorted(pairs, key=lambda pair: pair[0].name)
+
+
 def generate(chunks: dict[str, dict], *, verbose: bool) -> bool:
     clean = True
     unchanged = 0
-    print("Generating coder agent definitions")
+    print("Generating agent definitions")
     print("=" * 60)
     found = templates()
     if not found:
         print(f"  ERROR      no templates found in {SCRIPT_DIR}")
         return False
 
-    for template in found:
-        target = target_for(template)
-        rendered = render_template(template, chunks)
-
+    pairs = all_renders(chunks)
+    for target, rendered in pairs:
         if not target.exists():
             target.write_text(rendered, encoding="utf-8")
             print(f"  {'created':<10} {target.name}")
@@ -384,7 +471,7 @@ def generate(chunks: dict[str, dict], *, verbose: bool) -> bool:
 
     print()
     print(f"  {'unchanged':<10} {unchanged} definition(s)")
-    print(f"{len(found)} template(s) processed.")
+    print(f"{len(pairs)} definition(s) from {len(found)} template(s).")
     return clean
 
 
@@ -399,10 +486,7 @@ def check(chunks: dict[str, dict], *, verbose: bool, show_diff: bool) -> bool:
         print(f"  ERROR    no templates found in {SCRIPT_DIR}")
         clean = False
 
-    for template in found:
-        target = target_for(template)
-        rendered = render_template(template, chunks)
-
+    for target, rendered in all_renders(chunks):
         if not target.exists():
             print(f"  {'MISSING':<8} {target.name} — run --generate")
             clean = False
@@ -458,8 +542,9 @@ def check(chunks: dict[str, dict], *, verbose: bool, show_diff: bool) -> bool:
         print("All generated definitions match their templates. No drift detected.")
     else:
         print(
-            "Drift detected. Edit coders/<name>.md.tmpl or coders/shared-sections.toml,\n"
-            "then run: python3 coders/gen-agents.py --generate"
+            f"Drift detected. Edit {HOME}/<name>.md.tmpl or "
+            f"{HOME}/shared-sections.toml,\n"
+            f"then run: python3 {HOME}/gen-agents.py --generate"
         )
         if claim_errors:
             print(

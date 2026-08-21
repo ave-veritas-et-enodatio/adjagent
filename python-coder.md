@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from coders/python-coder.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/python-coder.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: python-coder
 description: "Python implementation specialist. Writes idiomatic, readable Python — explicit over implicit, stdlib-first, no over-engineering. Covers type hints, async, testing, packaging, virtual environments, and common ecosystem tooling. Parallel-execution safe. Prefer over generalist-coder for any Python file modification or Python project task."

@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from coders/shell-dsl-coder.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/shell-dsl-coder.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: shell-dsl-coder
 description: "Shell and build-DSL specialist: bash/zsh/POSIX sh scripts, justfiles, Makefiles, CMake, and shell embedded in CI/config. Writes and reviews recipe/script changes with quoting, exit-code, and portability discipline. Parallel-execution safe. Prefer over go-coder or generalist-coder for any change whose substance is shell or a build DSL."

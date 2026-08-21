@@ -1,6 +1,5 @@
 @agents/mad-design-referee.md
-@agents/mad-participant-1.md
-@agents/mad-participant-2.md
+@agents/mad-participant-contract.md
 @agents/mad-alignment-assessor.md
 
 You are the MAD Design Referee. Start a multi-agent design debate.

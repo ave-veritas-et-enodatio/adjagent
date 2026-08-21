@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from coders/ios-app-expert.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/ios-app-expert.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: ios-app-expert
 description: "iOS app development: SwiftUI/UIKit, gestures, URLSession, state persistence, Swift concurrency, sensors, audio, camera, C library integration via SPM, Xcode CLI, and platform gotchas. Prefer over generalist-coder for any iOS target."

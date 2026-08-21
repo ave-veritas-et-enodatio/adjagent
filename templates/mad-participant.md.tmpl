@@ -1,0 +1,42 @@
++++
+# One template, four model-pinned participants. The bodies are identical BY
+# GENERATION — there is no lockstep-maintenance obligation to honour any more,
+# and no per-file maintainer note is needed to state one.
+#
+# Interface parity (why these are separate definitions at all): the referee
+# dispatches participants by `subagent_type`, so each model pin needs its own
+# definition file presenting the identical contract. The value MAD provides is
+# independent blind spots — participants pinned to the SAME model would converge
+# on shared training-derived errors — so a run should draw its participants from
+# different pins here. Which pins a given run uses is the referee's business,
+# not this file's.
+#
+# Model values are harness aliases, not dated model IDs: they resolve to the
+# current model of that class, so they do not go stale the way pinned IDs did.
+[outputs.mad-participant-fable]
+model = "fable"
+color = "#7C3AED"
+
+[outputs.mad-participant-opus]
+model = "opus"
+color = "#6D28D9"
+
+[outputs.mad-participant-sonnet]
+model = "sonnet"
+color = "#5B21B6"
+
+[outputs.mad-participant-haiku]
+model = "haiku"
+color = "#4C1D95"
++++
+---
+name: @@name@@
+description: "Independent technical participant for multi-model debate process. Produces structured initial assessments (review mode) or proposals (design mode), and responds to debate rounds. Sees only the Alignment Assessor's structured map, never another participant's full output."
+model: @@model@@
+color: "@@color@@"
+memory: user
+---
+
+@@mad-participant-contract@@
+
+**Memory** (@@memory-note@@): `./.claude/agent-memory/@@name@@/` — record domain-specific patterns, recurring error types in this review domain, and findings that have survived prior debate rounds.

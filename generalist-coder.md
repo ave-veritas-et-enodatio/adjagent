@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from coders/generalist-coder.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/generalist-coder.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: generalist-coder
 description: "General-purpose implementation agent for coding tasks across any language. Writes, edits, and fixes code with a strong bias toward minimal, correct, idiomatic solutions. Designed to run as one of many parallel instances — stays strictly within assigned scope, declares file boundaries upfront, and stops when the task is done. Use when no language-specific or platform-specific agent matches the task. Prefer go-coder for Go, python-coder for Python, and the relevant platform expert for Android, iOS, Linux, macOS, web, or Windows targets."

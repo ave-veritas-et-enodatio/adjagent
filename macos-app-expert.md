@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from coders/macos-app-expert.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/macos-app-expert.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: macos-app-expert
 description: "macOS desktop development: AppKit, Swift/Objective-C, Core frameworks, sandboxing, XPC services, system integration, notarization, and native macOS APIs. Prefer over generalist-coder for any macOS desktop target."

@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from coders/rust-coder.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/rust-coder.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: rust-coder
 description: "Rust implementation specialist. Writes idiomatic, minimal Rust — explicit errors, ownership-first, no needless unsafe. Covers traits, concurrency, FFI, the build system, testing, and performance. Parallel-execution safe. Prefer over generalist-coder for any Rust file modification or Rust project task."

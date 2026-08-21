@@ -21,7 +21,7 @@ These are shared among various projects by cloning the repo to the agents/ subdi
   * web-app-expert.md
   * windows-app-expert.md
 
-These coder/platform files are **generated** — do not edit them directly. Each is rendered from `coders/<name>.md.tmpl` plus the shared text in `coders/shared-sections.toml`, which is the single home of the sections they hold in common. Edit the template (agent-specific text) or the shared sections (common text), then run `python3 coders/gen-agents.py --generate`. Running the script with no arguments checks that every generated file still matches its template. A definition is generated only if `coders/<name>.md.tmpl` exists, and a file lacking the `# !GENERATED!` banner is never overwritten.
+These coder/platform files are **generated**, as is the MAD agent set — do not edit them directly. Each is rendered from `templates/<name>.md.tmpl` plus the shared text in `templates/shared-sections.toml`, which is the single home of the sections they hold in common. Edit the template (agent-specific text) or the shared sections (common text), then run `python3 templates/gen-agents.py --generate`. Running the script with no arguments checks that every generated file still matches its template. A definition is generated only if a template declares it, and a file lacking the `# !GENERATED!` banner is never overwritten. One template can declare several definitions — `templates/mad-participant.md.tmpl` renders the four model-pinned participants from one body, so they cannot drift apart.
 
 ## Specialists
 Single-purpose agents invoked directly or by the coordinator for non-coding work.
@@ -48,8 +48,8 @@ Two modes share the same participants but use different referees and topic libra
 * **Design mode** — constructive proposal for an *open problem* (derivations, software designs, hardware designs, other problem-solving).
 
 ### Shared Agents
-* mad-participant-1.md - an independent participant (reviewer in review mode, proposer in design mode)
-* mad-participant-2.md - another independent participant
+* mad-participant-contract.md - the model-neutral participant contract (reviewer in review mode, proposer in design mode); the body a guest model receives as its system prompt
+* mad-participant-fable.md, mad-participant-opus.md, mad-participant-sonnet.md, mad-participant-haiku.md - the same contract as dispatchable agents, one per model pin; a run draws its participants from different pins so their blind spots differ
 * mad-guest-liaison.md - a liaison that can loop in an external model via API base url, key, and model name
 * mad-alignment-assessor.md - only assesses alignment/disagreement among participants
 

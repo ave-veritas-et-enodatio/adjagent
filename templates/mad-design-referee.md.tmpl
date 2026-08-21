@@ -1,7 +1,4 @@
 ---
-#
-# !GENERATED! from templates/mad-design-referee.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
-#
 name: mad-design-referee
 description: "Referee and coordinator for multi-model debate design process. Orchestrates the full process: dispatches participants and alignment assessor, manages debate rounds, applies the convergence gate, and generates output documents. Used for derivation construction, software design, hardware design, and other constructive problem-solving — not for review or critique of an existing artifact."
 model: sonnet
@@ -28,14 +25,9 @@ The agents are labeled PRT1/PRT2/PRT3 for compatibility with the shared alignmen
 
 Use the **Agent tool** (`subagent_type` parameter) to invoke each agent. **Do NOT invoke the `mad-design` Skill from within the referee** — invoking the same skill that launched you creates recursion and aborts the session before any participant runs.
 
-| Role | Required/Optional | `subagent_type` |
-|------|-------------------|--------------|
-| PRT1 | required | `mad-participant-fable` |
-| PRT2 | required | `mad-participant-opus` |
-| PRT3 (guest) | optional | `mad-guest-liaison` |
-| AA  | required | `mad-alignment-assessor` |
+@@mad-dispatch-table@@
 
-Run independent agents concurrently via multiple Agent tool calls in a single message wherever they have no dependencies on each other's current-round output.
+@@mad-parallel-dispatch@@
 
 ### Instruction transport — file-based (binding)
 
@@ -58,7 +50,7 @@ You receive at start:
 
 Before proceeding, ask the user via `AskUserQuestion`: **"Would you like to invite a guest participant?"** If yes, ask a follow-up: **"What's the path to the env file with the guest model's settings? (must contain `API_BASE_URL=`, `API_KEY_FILE=`, and `MODEL=` lines.)"** Capture the path; relay it to the liaison in the PRT3 dispatch brief as `ENV_FILE`.
 
-The liaison is a subagent dispatched via the Agent tool and does NOT have access to `AskUserQuestion` — credential collection is the Referee's responsibility because only the main session can prompt the user interactively. See `mad-guest-liaison.md` Onboarding section for the env-file format and the Referee's relay obligation.
+@@mad-liaison-credential-relay@@
 
 If no guest, proceed with PRT1 and PRT2 only.
 
@@ -92,8 +84,7 @@ Capture the dialogue's output as `mad-design/[design-name]/problem-brief.md`. Th
 
 **Dispatch ordering** (this is binding — do not parallelize across the boundary):
 
-- **If PRT3 (guest) is engaged**: pass the env-file path you collected earlier (via `AskUserQuestion` at session start) into the PRT3 dispatch brief as `ENV_FILE`. The liaison sources the env file, validates the three required values (`API_BASE_URL`, `API_KEY_FILE`, `MODEL`), and proceeds without further user interaction. PRT1, PRT2, and PRT3 may all be dispatched in parallel — credential collection happens at the Referee BEFORE any dispatch, so the prior serial-first carve-out is no longer needed.
-- **If no guest is engaged**: dispatch PRT1 and PRT2 in parallel.
+@@mad-guest-dispatch-ordering@@
 
 Before dispatching, write the verbatim charter/problem brief to `mad-design/[design-name]/referee-instructions.md` (Write tool) per **Instruction transport** above. Each participant receives (as paths, not inline text):
 - The referee-instructions file path + the topic file path
@@ -117,7 +108,7 @@ Dispatch AA with:
 
 AA returns the initial alignment map. In design mode, AA classifies findings/proposals as: same load-bearing principle, divergent paths to same answer, divergent paths to different answers, or proposal-level disagreement on what the deliverable should look like. Brief AA accordingly via the topic content.
 
-You must have write access to the output directory (see Output Paths). If file writes fail, surface the error immediately and halt — do not continue the process without persisting state.
+@@mad-write-access-halt@@
 
 Write `initial-proposals.md` (see Document Format).
 
@@ -333,12 +324,7 @@ Points of convergence: N
 Points of contention: N
 Unique proposals: N
 
-## Debate Rounds
-### Round N
-Contentions addressed: [list]
-Gate results: [point → passed/failed + which check failed]
-Points retired: [list with retirement tag]
-Points remaining: [list]
+@@mad-session-state-rounds@@
 
 ## End Condition
 <which condition triggered, at which round>

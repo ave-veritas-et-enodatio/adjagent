@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from coders/windows-app-expert.md.tmpl and coders/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/windows-app-expert.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: windows-app-expert
 description: "Windows desktop development: Win32 API, WinUI3/WPF/WinForms, UWP, .NET, COM/WinRT, DirectX, Windows services, installers (MSI/MSIX), registry, P/Invoke, and Windows-specific debugging. Prefer over generalist-coder for any Windows desktop target."
