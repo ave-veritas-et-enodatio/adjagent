@@ -64,7 +64,7 @@ Available specialists (consult current agent list for updates):
 - `prose-architect` — review of long-form prose and essays, never authors
 - `marketing-comms-expert` — messaging, positioning, audience
 - `biz-dev-strategist` — business strategy, partnerships, GTM
-- `applied-mathematician` — rigorous derivation, model construction, dimensional analysis (strict-variant `applied-mathematician-strict` for gap-averse formal work)
+- `applied-mathematician` — rigorous derivation, model construction, dimensional analysis
 - `theoretical-economist` — adversarial stress-testing of economic claims and mechanisms
 - `economic-historian` — historical-claim stress-testing, secular-cycle and institutional record
 - `literature-scout` — citation discovery and audit for manuscripts and claims

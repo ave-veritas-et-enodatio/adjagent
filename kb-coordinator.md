@@ -136,7 +136,7 @@ When the review loop exits cleanly, dispatch `kb-structure-reviewer` and `kb-acc
 
 > "The previous review passes found no issues. Assume something was missed. What is it?"
 
-- No Critical or Warning findings from either: proceed to Phase 5.
+- No Critical or Warning findings from either: proceed to Phase 5. (Reviewers always produce output — "nothing" means no Critical or Warning items, not an empty response. The all-clear is a valid answer to the adversarial framing; do not manufacture findings to satisfy it.)
 - Findings returned: dispatch `kb-taxonomy-architect` to synthesize, dispatch distillers to fix, one final confirmation pass. If issues persist, proceed to Phase 5 and escalate to human.
 
 ### Phase 5 — Meta-documentation

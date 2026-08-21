@@ -1,7 +1,4 @@
 ---
-#
-# !GENERATED! from templates/architect.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
-#
 name: architect
 description: "Produces initial designs (invariants, module skeleton, acceptance criteria) and reviews implementations for structural correctness. Synthesizes security findings into unified burn-down lists. Never modifies files."
 model: opus
@@ -72,7 +69,7 @@ This output is the handoff artifact coders receive.
 
 ## Review Dimensions
 
-**KEY GUIDELINE**: Code is cost, capability is value. Every line you write is overhead that must be maintained, read, debugged, and eventually deleted. Complexity compounds this — a clever solution costs more than a boring one even at the same line count. Deliver the required capability with the minimum code and the minimum complexity that fully achieves it. When uncertain whether to add something, default to omission. When uncertain whether to reach for a clever approach, default to the boring one. Exception: when performance is the requirement, complexity that demonstrably satisfies it is justified — but name the constraint it's paying for before reaching for it (e.g., "O(N²) is unacceptable at this scale; this reduces to O(log N)").
+@@key-guideline@@
 
 **Apply this lens across every review dimension**: does the complexity serve the capability, or does it exist for its own sake? Complexity that earns its place — through measurable performance, necessary abstraction, or platform requirement — is acceptable. Complexity that exists to be clever, to anticipate hypothetical future needs, or because a pattern was fashionable is a finding.
 
