@@ -42,10 +42,12 @@ text = '''`memory: user` in the frontmatter is a harness-level directive; the pa
 defaults.boundaries = '''external API calls, user input parsing, database writes, IPC, and queue boundaries'''
 text = '''*Runtime boundary checks*: at significant system boundaries — @@boundaries@@ (any point where data crosses a trust, I/O, or thread boundary) — implement lightweight contract and expectation checks. Apply these only when the change directly touches or creates such a boundary; a fix internal to a module does not require new boundary checks.'''
 
+# Each variant states only its own threshold: an agent needs its own number,
+# not a comparison against another agent's.
 [chunks.mocking-threshold]
-variants.general = '''If you need to mock five dependencies to test one function, fix the design first. (Five is the threshold for general-purpose code; platform expert agents apply a stricter limit of two, as native platform APIs have non-mockable runtime behavior.)'''
-variants.platform = '''Avoid mocking more than two dependencies per test; fix the design if you need more. (Two is the threshold for platform code — native platform APIs have non-mockable runtime behavior. General-purpose coder agents use five.)'''
-variants.platform-long = '''If mocking more than two dependencies is required to test one function, fix the design first. (Two is the threshold for platform code — native platform APIs have non-mockable runtime behavior; a design requiring many mocks is usually poorly factored for platform constraints. General-purpose coder agents use five.)'''
+variants.general = '''If you need to mock five dependencies to test one function, fix the design first.'''
+variants.platform = '''Avoid mocking more than two dependencies per test; fix the design if you need more — native platform APIs have non-mockable runtime behavior.'''
+variants.platform-long = '''If mocking more than two dependencies is required to test one function, fix the design first — native platform APIs have non-mockable runtime behavior, and a design requiring many mocks is usually poorly factored for platform constraints.'''
 
 [chunks.integration-artifact]
 text = '''**Integration tests exercise the delivered artifact** through its public surface (the binary/API as shipped), never in-process calls to internals — those are unit/component tests, whatever the file is named. Never create dev-only entry points or test-only verbs to make testing easier; test the real surface, and if the real surface is untestable, that is a design defect to surface, not scaffold around. Dev-only switches (e.g. expensive validation such as heap checking under custom allocators) are a last resort and live behind a config-file setting, never an environment variable. Where the project defines an evidence location, preserve integration logs/artifacts there.'''
@@ -54,6 +56,11 @@ text = '''**Integration tests exercise the delivered artifact** through its publ
 
 [chunks.data-formats-scope]
 text = '''project-owned configuration and structured data files'''
+
+# The house shell style, single-sourced so generalist-coder and shell-dsl-coder
+# cannot prescribe different rules for the same script.
+[chunks.shell-house-style]
+text = '''`#!/usr/bin/env bash` shebang, 2-space indent. Always brace variables — `${VAR}` not `$VAR`, including inside array indices (`arr[${i}]`) and positional params (`"${1}"`). Use the `function name() {` form, not bare `name() {`. Tests are `[[ ]]` not `[ ]`; string equality is `==` not `=`.'''
 
 [chunks.commercial-approval-clause]
 text = '''unless explicitly approved by the coordinator/user'''
@@ -108,6 +115,11 @@ variants.platform = '''
 
 # ─── Report formats ──────────────────────────────────────────────────────────
 
+# Subordinates each platform expert's code-authoring list to the single reply
+# contract (Output Format), which would otherwise compete with it.
+[chunks.authoring-standards-lead]
+text = '''These govern the content of the code and explanations you produce, not the shape of your reply — the reply contract is **Output Format**, below, in every case.'''
+
 [chunks.stopping-early]
 text = '''
 When stopping early (file conflict or scope expansion), use this format:
@@ -156,7 +168,7 @@ The topic file determines whether this mode produces a critical assessment of an
 
 In either mode, do not seek or consider the counterpart's findings.
 
-**Pre-output reasoning**: you will defend whatever you commit to here through up to ten debate rounds, so initial position quality is the largest single determinant of where the process converges. Before drafting the Conclusions section, work the problem from first principles in the Assessment itself:
+**Pre-output reasoning**: you will defend whatever you commit to here through every debate round the Referee runs — up to 5 in review mode, up to 10 in design mode — so initial position quality is the largest single determinant of where the process converges. Before drafting the Conclusions section, work the problem from first principles in the Assessment itself:
 
 1. **State the inputs you are reasoning from** — axioms, invariants, the artifact text, the topic file's methodology. Make these explicit.
 2. **Derive your conclusions step by step from those inputs**, surfacing each intermediate claim. Do not start from a felt answer and justify it backward.

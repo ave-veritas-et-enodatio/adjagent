@@ -56,7 +56,7 @@ kb/
 ```
 
 **Navigation spec**:
-- Up-link format: `[Up: Parent Name](../index.md)` at top of every non-root document
+- Up-link format: `[↑ Parent Name](../index.md)` (`↑` = U+2191, the machine-checked S4 marker — never `[Up: …]`) at top of every non-root document
 - Down-link format: section at bottom of index docs listing children with one-line descriptions
 - Cross-reference format: `> Related: [Topic Name](../../domain-B/subtopic-Y/index.md)` — blockquote to signal it's a suggestion, not a structural link
 

@@ -32,9 +32,15 @@ naming schemes, and output conventions live there, not here.
 
 ## Conventions (house style, all projects)
 
-- **Braces on every variable**: `${var}`, never naked `$var`, wherever
-  the syntax permits. Naked names in string expressions are footguns.
-- **`[[ ]]` exclusively over `[ ]`** unless the target shell genuinely
+`#!/usr/bin/env bash` shebang, 2-space indent. Always brace variables
+— `${VAR}` not `$VAR`, including inside array indices (`arr[${i}]`)
+and positional params (`"${1}"`). Use the `function name() {` form,
+not bare `name() {`. Tests are `[[ ]]` not `[ ]`; string equality is
+`==` not `=`.
+
+- Naked names in string expressions are footguns: brace them wherever
+  the syntax permits, not just where it currently matters.
+- `[[ ]]` gives way to `[ ]` only where the target shell genuinely
   cannot support it (POSIX-sh requirement stated in the file).
 - Quote every expansion unless unquoted is the point — then comment why.
   `"$@"` never `$*`; arrays for lists, never space-joined strings.

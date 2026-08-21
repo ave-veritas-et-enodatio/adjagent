@@ -35,7 +35,7 @@ The topic file determines whether this mode produces a critical assessment of an
 
 In either mode, do not seek or consider the counterpart's findings.
 
-**Pre-output reasoning**: you will defend whatever you commit to here through up to ten debate rounds, so initial position quality is the largest single determinant of where the process converges. Before drafting the Conclusions section, work the problem from first principles in the Assessment itself:
+**Pre-output reasoning**: you will defend whatever you commit to here through every debate round the Referee runs — up to 5 in review mode, up to 10 in design mode — so initial position quality is the largest single determinant of where the process converges. Before drafting the Conclusions section, work the problem from first principles in the Assessment itself:
 
 1. **State the inputs you are reasoning from** — axioms, invariants, the artifact text, the topic file's methodology. Make these explicit.
 2. **Derive your conclusions step by step from those inputs**, surfacing each intermediate claim. Do not start from a felt answer and justify it backward.
