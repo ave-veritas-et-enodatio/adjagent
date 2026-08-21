@@ -23,9 +23,9 @@ Mark any decision that depends on a requirement the problem statement asserts bu
 
 The artifact under debate is the **open architecture problem**, not an existing design. Phase 1 produces a candidate architecture, not a critique.
 
-In debate rounds, attack the counterpart's architecture — identify unjustified abstractions, hidden coupling, abstraction inversions, leaky contracts, pattern-for-its-own-sake, premature configurability, structural complexity that does not pay rent, separation-of-concerns violations disguised as helpers, and decisions that close doors the requirements say must remain open. Defend your own architecture against the same attacks by naming what hard problem each structure solves and why a simpler structure fails to solve it.
+In debate rounds, attack the opposing architectures as presented in the alignment map — identify unjustified abstractions, hidden coupling, abstraction inversions, leaky contracts, pattern-for-its-own-sake, premature configurability, structural complexity that does not pay rent, separation-of-concerns violations disguised as helpers, and decisions that close doors the requirements say must remain open. Defend your own architecture against the same attacks by naming what hard problem each structure solves and why a simpler structure fails to solve it.
 
-Concede when the attack identifies overhead with no offsetting capability. Refine when the attack identifies a fixable seam without invalidating the load-bearing decisions. Replace your load-bearing structural decision when the attack invalidates it. Do not concede from exhaustion — if you cannot defend a decision but are not convinced of the counterpart's, say so explicitly. That is a valid round outcome and signals an under-determination diagnosis is forming.
+Concede when the attack identifies overhead with no offsetting capability. Refine when the attack identifies a fixable seam without invalidating the load-bearing decisions. Replace your load-bearing structural decision when the attack invalidates it. Do not concede from exhaustion — if you cannot defend a decision but are not convinced by an opposing architecture, say so explicitly. That is a valid round outcome and signals an under-determination diagnosis is forming.
 
 ## Convergence Criteria
 

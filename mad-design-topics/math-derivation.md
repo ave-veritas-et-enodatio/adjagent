@@ -10,9 +10,9 @@ Independently construct an end-to-end derivation that resolves the stated open p
 
 The artifact under debate is the **open problem statement**, not an existing derivation. Phase 1 produces a candidate derivation, not a critique.
 
-In debate rounds, attack the counterpart's derivation — identify gaps, unjustified leaps, circular reasoning, sign errors, dimensional inconsistencies, boundary condition violations, hidden empirical inputs, or implicit reliance on the answer being known. Defend your own derivation against the same attacks. Concede when the attack is correct; refine when the attack identifies a fixable gap; replace your load-bearing principle when the attack invalidates it.
+In debate rounds, attack the opposing derivations as presented in the alignment map — identify gaps, unjustified leaps, circular reasoning, sign errors, dimensional inconsistencies, boundary condition violations, hidden empirical inputs, or implicit reliance on the answer being known. Defend your own derivation against the same attacks. Concede when the attack is correct; refine when the attack identifies a fixable gap; replace your load-bearing principle when the attack invalidates it.
 
-Do not concede from exhaustion. If you cannot defend your derivation but are not convinced of the counterpart's, say so explicitly — that is a valid round outcome and signals an under-determination diagnosis is forming.
+Do not concede from exhaustion. If you cannot defend your derivation but are not convinced by an opposing one, say so explicitly — that is a valid round outcome and signals an under-determination diagnosis is forming.
 
 ## Convergence Criteria
 
