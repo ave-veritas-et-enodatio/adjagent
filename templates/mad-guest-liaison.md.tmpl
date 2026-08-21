@@ -30,10 +30,10 @@ The Referee provides at invocation:
 
 ## Onboarding
 
-> **Architectural note**: this is a subagent dispatched via the Agent tool, which does NOT inherit the main session's `AskUserQuestion` tool. The liaison therefore cannot interact with the user directly. Credentials must reach the liaison via the Referee, which runs in the main session and has `AskUserQuestion` available. The Referee's responsibility is documented in `mad-review-referee.md` Phase 1 and `mad-design-referee.md` Phase 1.
+> **Architectural note**: this is a subagent dispatched via the Agent tool, which does NOT inherit the main session's `AskUserQuestion` tool. The liaison therefore cannot interact with the user directly, and cannot obtain credentials on its own. They reach it by relay: the invoker supplies the env-file path when it seats `guest`, and the Referee passes it through. The Referee's responsibility is documented in `mad-review-referee.md` Seat Roster / Phase 1 and `mad-design-referee.md` Seat Roster / Phase 1.
 
 The Referee provides at invocation a single value:
-- `ENV_FILE` — path to an env file containing `API_BASE_URL=`, `API_KEY_FILE=`, and `MODEL=` lines (in any order). The Referee collected this path from the user via `AskUserQuestion` and relayed it through this brief.
+- `ENV_FILE` — path to an env file containing `API_BASE_URL=`, `API_KEY_FILE=`, and `MODEL=` lines (in any order). The path came in with the invocation that seated `guest`; the Referee validated its presence before any dispatch and relayed it through this brief.
 
 Source the env file via Bash to load the three required values:
 
@@ -192,11 +192,13 @@ Maintain one JSON messages file per session. All creation and mutation of this f
 
 The Referee will also provide the reviewer contract path at invocation.
 
-The Referee will invoke you with the same inputs it gives PRT1 and PRT2, **all caller-authored text supplied as FILE PATHS the Referee wrote** (never inline in your brief):
+You fill the `guest` seat. The Referee will invoke you with the same inputs it gives every local seat, **all caller-authored text supplied as FILE PATHS the Referee wrote** (never inline in your brief):
 - Topic file (path)
 - Constraints/requirements file (path, if any)
 - Artifact path or inline content
 - Mode (Initial Assessment or Debate Round Response)
-- Round-specific inputs as file paths: the referee-instructions file for this round, plus the alignment-map / contention-points / prior-exchange artifact paths (e.g. `initial-findings.md`, `round-N.md`)
+- Round-specific inputs as file paths: the referee-instructions file for this round, and the Alignment Assessor's current map (`aa-initial-map.md` / `aa-round-N-map.md`)
+
+**Round isolation applies to your seat exactly as to a local one.** The guest sees only its own prior turns — already in `liaison-messages.json` — plus the AA map. **Never append another seat's output to the message history**, and never `cat` an aggregate document (`initial-findings.md`, `initial-proposals.md`, `round-[N].md`) into it: each of those contains every seat's output verbatim, and sending one to the guest destroys the independence the debate exists to produce. If the Referee hands you such a path, do not append it — surface the isolation breach to the Referee and proceed with the AA map alone.
 
 Assemble these into the message history *EXACTLY AS SPECIFIED* in the `Onboarding Process` `Once Parameters Collected` section — for every round, the Referee's instruction text and any large round inputs arrive as files; you `cat`/`msg-util.sh append` them by path, never heredoc or retype them. Relay to the external model with `post-openai.sh`. Return the external model's response verbatim as your output.

@@ -29,10 +29,8 @@ Single-purpose agents invoked directly or by the coordinator for non-coding work
 * marketing-comms-expert.md - messaging, positioning, copywriting, competitive framing
 * biz-dev-strategist.md - business strategy, market analysis, GTM, monetization
 * applied-mathematician.md - rigorous derivation, model construction, dimensional analysis, claim classification (identity / manifestation / consistency check / derived prediction). Takes given axioms at face value and derives consequences honestly. Use when working inside a formal system — established, novel, or mid-construction — and the task requires careful step-by-step reasoning rather than retrieval of textbook results.
-* applied-mathematician-strict.md - same role with added foundational-gap discipline: when the stated postulate set is incomplete, halt and surface the gap (or stipulate a closure explicitly) rather than silently filling with textbook defaults. Use for smaller / less-priored models that tend to silently interpolate when axioms are underspecified. **Avoid for frontier models** — the same clauses that protect a small model from gap-filling tend to over-constrain a frontier model that already does the right thing on its own (see "Variants and platform compatibility" below).
-
 ### Variants and platform compatibility
-A few agents in this set ship as a base + a defensive variant: `applied-mathematician.md` and `applied-mathematician-strict.md` are the current example. The variant adds clauses targeted at specific failure modes observed in smaller / less-priored models; the base relies on the model's own discipline.
+An agent in this set may ship as a base + a defensive variant: the variant adds clauses targeted at specific failure modes observed in smaller / less-priored models, while the base relies on the model's own discipline. None currently does — `applied-mathematician-strict.md` (a gap-aversion variant built for running the math agent on Gemma 4) was retired 2026-08-21 and can be recreated at need.
 
 The two-variant pattern is a response to a real phenomenon: agent definitions tend to accumulate defensive language that's keyed to the *specific* model they were tested against. Defensive clauses that *protect* one model can *smother* another — same clause, opposite effect, no error event. (Example: probe data from 2026-04-29 showed Gemma 4 31B-it silently filling axiom gaps with textbook conventions, while Gemini 3.1 Pro spontaneously surfaced the same gaps. A "do not fill gaps" clause helps the first model and slows the second.)
 
@@ -71,6 +69,7 @@ Two modes share the same participants but use different referees and topic libra
       * general-code.md
       * math-derivation.md
       * sim-code.md
+    * a seat roster (`SEATS=`) — comma-separated subset of `fable`, `opus`, `sonnet`, `haiku`, `guest`; at most one of each, at least two. No default: a roster-less invocation is refused. `opus,sonnet` is a reasonable pick for most review jobs. A `guest` seat additionally requires `ENV_FILE=` (path to the guest model's env file)
     * \[optional\] a requirements/constraints doc (e.g. coding invariants, math invariants, etc.)
     * a review target (path to document, file, or hierarchy)
 * process
@@ -82,8 +81,8 @@ Two modes share the same participants but use different referees and topic libra
     * all artifacts, temporary or otherwise, are produced under the review work directory
   * round cap: 5
   * examples 
-    * ```/mad-review TOPIC=.claude/agents/mad-review-topics/sim-code.md CONSTRAINTS=AVE-Core/LIVING-REFERENCE.md TARGET=AVE-Core/src/ave/```
-    * ```/mad-review TOPIC=.claude/agents/mad-review-topics/general-code.md CONSTRAINTS=AGENTS.md TARGET=src/ **IGNORE
+    * ```/mad-review TOPIC=.claude/agents/mad-review-topics/sim-code.md SEATS=opus,sonnet CONSTRAINTS=AVE-Core/LIVING-REFERENCE.md TARGET=AVE-Core/src/ave/```
+    * ```/mad-review TOPIC=.claude/agents/mad-review-topics/general-code.md SEATS=opus,sonnet,guest ENV_FILE=~/.config/guest.env CONSTRAINTS=AGENTS.md TARGET=src/ **IGNORE
     `src/third_party`**```
 
 ### Design Mode
@@ -95,6 +94,7 @@ Two modes share the same participants but use different referees and topic libra
       * ai-engineering.md
       * architecture.md
       * math-derivation.md (more topics can be added: software-design, hardware-design, etc.)
+    * a seat roster (`SEATS=`) — same contract as review mode: subset of `fable`, `opus`, `sonnet`, `haiku`, `guest`, at most one of each, at least two, no default; `guest` requires `ENV_FILE=`
     * \[optional\] a requirements/constraints doc
     * a problem statement: either (a) a path to an existing brief defining the open problem, or (b) an empty/not-yet-created output location — in case (b) the referee elicits the brief from the user via interactive dialogue before dispatching participants
 * process
@@ -111,7 +111,7 @@ Two modes share the same participants but use different referees and topic libra
     * **under-determined**: all participants converge on the same diagnosis of why the problem cannot be closed from the supplied axioms, identifying the specific missing axiom/principle/input
     * **unresolved**: candidates preserved for human arbitration if no convergence within round cap
   * examples
-    * ```/mad-design TOPIC=.claude/agents/mad-design-topics/math-derivation.md CONSTRAINTS=AVE-Core/LIVING-REFERENCE.md TARGET=mad-design/inter-alpha-resonance/```
+    * ```/mad-design TOPIC=.claude/agents/mad-design-topics/math-derivation.md SEATS=fable,opus,sonnet CONSTRAINTS=AVE-Core/LIVING-REFERENCE.md TARGET=mad-design/inter-alpha-resonance/```
 
 ## Guest Liaison
 
