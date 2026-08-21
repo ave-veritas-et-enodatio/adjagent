@@ -4,7 +4,6 @@ These are shared among various projects by cloning the repo to the agents/ subdi
 
 ## Coding Agent Set
 
-* coordinator.md - will run multi-agent development process that includes analysis, planning, dispatch, review, process review
 * architect.md - architecture review and design
 * security-reviewer.md - security-specific reviewer
 * generalist-coder.md
@@ -24,7 +23,7 @@ These are shared among various projects by cloning the repo to the agents/ subdi
 These coder/platform files are **generated**, as is the MAD agent set — do not edit them directly. Each is rendered from `templates/<name>.md.tmpl` plus the shared text in `templates/shared-sections.toml`, which is the single home of the sections they hold in common. Edit the template (agent-specific text) or the shared sections (common text), then run `python3 templates/gen-agents.py --generate`. Running the script with no arguments checks that every generated file still matches its template. A definition is generated only if a template declares it, and a file lacking the `# !GENERATED!` banner is never overwritten. One template can declare several definitions — `templates/mad-participant.md.tmpl` renders the four model-pinned participants from one body, so they cannot drift apart.
 
 ## Specialists
-Single-purpose agents invoked directly or by the coordinator for non-coding work.
+Single-purpose agents invoked directly for non-coding work.
 * prose-architect.md - rhythm and structural review of long-form prose
 * marketing-comms-expert.md - messaging, positioning, copywriting, competitive framing
 * biz-dev-strategist.md - business strategy, market analysis, GTM, monetization
