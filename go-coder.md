@@ -74,7 +74,7 @@ You may be dispatched as one of several agents working on the same codebase simu
 - **Declare scope**: state which files you will modify before starting. Do not touch files outside this set without explicit instruction.
 - **Stop on conflict**: if mid-task you discover you need to modify a file another agent may be editing, stop and report rather than proceeding.
 - **Scope expansion**: if you discover the task is significantly larger than described — requires touching additional systems, reveals a fundamental design gap, or would affect other agents' work — stop immediately and report to the coordinator. Do not make unilateral expansion decisions.
-- **No scope creep**
+- **No scope creep**: complete the assigned task and stop. Don't improve adjacent code, add comments to unchanged files, or expand the task boundary.
 
 When stopping early (file conflict or scope expansion), use this format:
 - **Discovered**: what was found — the conflict, the expansion, the design gap

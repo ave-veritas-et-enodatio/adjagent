@@ -106,7 +106,9 @@ GUEST_INSTRUCTIONS_FILE=$(TMPDIR=mad-review/<review-name>/tmp/ mktemp -t instruc
 .claude/agents/liaison-tools/msg-util.sh append --role=user <messages-file> "${GUEST_INSTRUCTIONS_FILE}"
 ```
 
-  > **⚠ Never construct instruction content with a heredoc (`cat << EOF`) or by passing it as a command-line argument.** Caller-authored text contains markdown, backticks, `$`, and other shell-significant characters that silently corrupt or empty a heredoc — this is a known failure mode that has produced empty instruction files and sent the guest a context-less prompt. Caller-authored text reaches the messages file ONLY by `cat`-ing a file the Referee wrote, or by `msg-util.sh append` of a file path. You never reproduce, retype, or embed the instruction text yourself — the Referee authored it once to a file; you concatenate that file by path. **You are a relay, not a participant** — do not summarize, reword, or alter the Referee's file in any way.
+  > ### ⚠ TEXT TRANSPORT RULE — BINDING
+  >
+  > **Caller-authored text reaches the messages file ONLY by `cat`-ing a file the author wrote, or by `msg-util.sh append` of a file path. Never a heredoc (`cat << EOF`), never a command-line argument.** Caller-authored text contains markdown, backticks, `$`, and other shell-significant characters that silently corrupt or empty a heredoc; argv has size limits that truncate silently. This is a known failure mode that has produced empty instruction files and sent the guest a context-less prompt. You never reproduce, retype, or embed the text yourself — the Referee authored it once to a file; you concatenate that file by path. **You are a relay, not a participant** — do not summarize, reword, or alter the Referee's file in any way.
 
 ## Tool
 
@@ -121,11 +123,7 @@ You communicate with the external model using the shell script:
 - `API_KEY_FILE` — path to the file containing only the API key; the script reads the key directly so it is not exposed through argv or environment values
 - `MODEL` — model identifier (exact or unambiguous substring; the script will resolve and warn if a substring match is used)
 
-**Optional environment variables:**
-see header docstring of tool python source for additional environment-passed parameters and their defaults via
-```bash
-awk '/^""".+/,/^"""$/ { print $0; }' .claude/agents/liaison-tools/post-openai.py
-``` 
+**Optional environment variables:** `MAX_TOKENS`, `ENABLE_THINKING`, `TEMPERATURE`, `DEBUG_POST`, `DEBUG_RESPONSE`. Their accepted values and defaults are documented in the header docstring of `.claude/agents/liaison-tools/post-openai.py`.
 
 **Invocation:**
 ```bash
@@ -181,7 +179,7 @@ Maintain one JSON messages file per session. All creation and mutation of this f
   .claude/agents/liaison-tools/msg-util.sh append --role=<user|agent> <messages-file> <content-file>
   ```
 
-  Each turn's body is written to a temporary file first, then passed by path. **Never pass large message bodies on the command line, and never construct caller-authored content with a heredoc (`cat << EOF`)** — shell argv limits, heredoc variable-expansion, and quoting hazards break silently (markdown, backticks, and `$` in instruction text have produced empty/corrupt files). Caller-authored text (Referee instructions, round inputs, file-content returns) reaches the messages file ONLY by `cat`-ing or `msg-util.sh append`-ing a file the author wrote — the liaison never retypes or embeds it. Use `user` for file-content returns and Referee messages; use `agent` for the external model's replies (the script maps `agent` → the API's `assistant` role).
+  Each turn's body is written to a temporary file first, then passed by path — per the **⚠ Text transport rule** (Onboarding), which governs Referee instructions, round inputs, and file-content returns alike. Use `user` for file-content returns and Referee messages; use `agent` for the external model's replies (the script maps `agent` → the API's `assistant` role).
 
 **No ad-hoc JSON manipulation.** Do not write inline Python, shell, `jq`, or `sed` snippets to mutate the messages file. `msg-util.sh` is the only sanctioned path. If a capability you need is missing from these tools, stop and surface the gap to the Referee rather than improvising — deterministic behavior across runs requires every liaison invocation to use the same tool the same way.
 
@@ -204,4 +202,4 @@ You fill the `guest` seat. The Referee will invoke you with the same inputs it g
 
 **Round isolation applies to your seat exactly as to a local one.** The guest sees only its own prior turns — already in `liaison-messages.json` — plus the AA map. **Never append another seat's output to the message history**, and never `cat` an aggregate document (`initial-findings.md`, `initial-proposals.md`, `round-[N].md`) into it: each of those contains every seat's output verbatim, and sending one to the guest destroys the independence the debate exists to produce. If the Referee hands you such a path, do not append it — surface the isolation breach to the Referee and proceed with the AA map alone.
 
-Assemble these into the message history *EXACTLY AS SPECIFIED* in the `Onboarding Process` `Once Parameters Collected` section — for every round, the Referee's instruction text and any large round inputs arrive as files; you `cat`/`msg-util.sh append` them by path, never heredoc or retype them. Relay to the external model with `post-openai.sh`. Return the external model's response verbatim as your output.
+Assemble these into the message history *EXACTLY AS SPECIFIED* in the `Onboarding Process` `Once Parameters Collected` section, under the **⚠ Text transport rule** stated there. Relay to the external model with `post-openai.sh`. Return the external model's response verbatim as your output.

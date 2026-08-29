@@ -53,7 +53,7 @@ For a **new session only**, additionally collect:
      ```
      The script exits non-zero and prints a diagnostic to stderr if the file lacks a complete frontmatter block — when that happens, halt and surface the error to the user rather than proceeding with empty system content.
   2. **Default identity**: if the user does not select an agent, use the literal string `You are a helpful assistant.` as the system prompt. Write that exact string to `${SYS_PROMPT_FILE}` and proceed.
-- **Initial user message** — the first prompt to send to the guest model, captured to `${INIT_MSG_FILE}`. You MUST capture the user's prompt verbatim. **Write it to the file with the `Write` tool (or accept a path the caller already wrote); NEVER construct it with a shell heredoc (`cat << EOF`) or pass it as a command-line argument** — caller-authored markdown/backticks/`$` silently corrupt or empty a heredoc (a known failure mode). The `Write` tool handles arbitrary text faithfully. Do not paraphrase, summarize, or rewrite.
+- **Initial user message** — the first prompt to send to the guest model, captured to `${INIT_MSG_FILE}`. You MUST capture the user's prompt verbatim. **Write it to the file with the `Write` tool (or accept a path the caller already wrote); NEVER construct it with a shell heredoc (`cat << EOF`) or pass it as a command-line argument** — caller-authored markdown/backticks/`$` silently corrupt or empty a heredoc (a known failure mode), and argv has size limits that truncate silently. The `Write` tool handles arbitrary text faithfully. What you must not do to the text itself is governed by the ⚠ box below.
 
 > ### ⚠ VERBATIM RELAY — CRITICAL
 >
@@ -91,11 +91,7 @@ You communicate with the external model using the shell script:
 - `API_KEY_FILE` — path to the file containing only the API key; the script reads the key directly so it is not exposed through argv or environment values
 - `MODEL` — model identifier (exact or unambiguous substring; the script will resolve and warn if a substring match is used)
 
-**Optional environment variables:**
-see header docstring of tool python source for additional environment-passed parameters and their defaults via
-```bash
-awk '/^""".+/,/^"""$/ { print $0; }' .claude/agents/liaison-tools/post-openai.py
-``` 
+**Optional environment variables:** `MAX_TOKENS`, `ENABLE_THINKING`, `TEMPERATURE`, `DEBUG_POST`, `DEBUG_RESPONSE`. Their accepted values and defaults are documented in the header docstring of `.claude/agents/liaison-tools/post-openai.py`.
 
 **Invocation:**
 ```bash

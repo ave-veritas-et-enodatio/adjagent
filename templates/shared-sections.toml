@@ -91,6 +91,12 @@ text = '''- **Stop on conflict**: if mid-task you discover you need to modify a 
 [chunks.pe-expansion-bullet]
 text = '''- **Scope expansion**: if you discover the task is significantly larger than described — requires touching additional systems, reveals a fundamental design gap, or would affect other agents' work — stop immediately and report to the coordinator. Do not make unilateral expansion decisions.'''
 
+# One depth of specification for this rule across the stable: the bare bold
+# label the general variant used to carry stated nothing the declare-scope
+# bullet did not already cover.
+[chunks.pe-scope-creep-bullet]
+text = '''- **No scope creep**: complete the assigned task and stop. Don't improve adjacent code, add comments to unchanged files, or expand the task boundary.'''
+
 # The platform variant admits platform-required adjacent files into scope
 # without pre-declaration; "adjacent" names them per platform.
 [chunks.parallel-execution]
@@ -101,7 +107,7 @@ variants.general = '''
 @@pe-declare-bullet@@
 @@pe-stop-bullet@@
 @@pe-expansion-bullet@@
-- **No scope creep**
+@@pe-scope-creep-bullet@@
 '''
 variants.platform = '''
 @@pe-preamble@@
@@ -109,7 +115,7 @@ variants.platform = '''
 @@pe-read-bullet@@
 @@pe-declare-bullet@@ Platform-required adjacent files (@@adjacent@@) directly necessitated by the change are in scope without pre-declaration.
 @@pe-stop-bullet@@
-- **No scope creep**: complete the assigned task and stop. Don't improve adjacent code, add comments to unchanged files, or expand the task boundary.
+@@pe-scope-creep-bullet@@
 @@pe-expansion-bullet@@
 '''
 

@@ -14,8 +14,6 @@ The invariant content for this KB is in `CLAUDE.md` — it is already loaded and
 
 KB leaves (`manuscript/ave-kb/**/*.md`) are the **sole canonical source** for AVE results, derivations, and prose. The LaTeX manuscript (`manuscript/vol_*/`) is now a **derived publication artifact** — when KB and LaTeX disagree, the KB is right and the LaTeX is stale.
 
-This inverts the original intake-era framing where LaTeX was canonical and the KB was a projection of it. The inversion was made effective on 2026-05-07.
-
 For the docent role specifically:
 
 - All navigation and citation is against KB leaves. Bibliographies (in topic discussion documents and the covered-topics index) reference `manuscript/ave-kb/` paths exclusively.
@@ -49,7 +47,15 @@ Every AVE result is backed by a **claim-quality entry** recording how trustworth
 
 **Where it lives.** A leaf's frontmatter `claims:` field lists the claim-quality IDs (`clm-xxxxxx`) it carries. Each ID resolves to an entry in a `claim-quality.md` register (the root one and the per-volume ones). An entry records `confidence` (hand-assessed local quality) and `solidity` (the derived, downstream-facing score).
 
-**Three node types, two solidity branches.** A leaf is a container that may host `clm` (claims), `exp` (physical experiments that *strengthen* claims), and `sup` (non-physical analytical supports that lift them). `solidity = max(derivation_solidity, experimental_solidity)`: the **derivation branch** is `min(confidence, dependency solidities)` — the **weakest link** in the claim's dependency cone (not a product down the chain; refactor-invariant), raised by any `sup-` support (dep-gated); the **experimental branch** is the strength of any *run* `exp-` strengthening the claim. The `solidity` you read already includes both — but **provenance matters for derivation work**: a claim solid via its *derivation* can be built on deeper; one solid **only** via an `exp-` (weak derivation, strong experiment) supports a conclusion yet does NOT license building a new derivation on it. When surfacing quality for a derivation/research effort, say *which branch* carries the solidity and point at the supporting `exp-`/`sup-` nodes (the evidence, and the lever for strengthening). `*pending*` refines accordingly: a run `exp-` can float a pending-derivation claim to solid; a `*pending*` `sup-` never poisons an otherwise-sound claim.
+**Three node types, two solidity branches.**
+
+- **Node types.** A leaf is a container. It may host `clm` (claims), `exp` (physical experiments that *strengthen* claims), and `sup` (non-physical analytical supports that lift them).
+- **`solidity = max(derivation_solidity, experimental_solidity)`.** The `solidity` you read already includes both branches.
+  - **Derivation branch** — `min(confidence, dependency solidities)`: the **weakest link** in the claim's dependency cone (not a product down the chain; refactor-invariant), raised by any `sup-` support (dep-gated).
+  - **Experimental branch** — the strength of any *run* `exp-` strengthening the claim.
+- **Provenance matters for derivation work.** A claim solid via its *derivation* can be built on deeper. A claim solid **only** via an `exp-` (weak derivation, strong experiment) supports a conclusion but does **NOT** license building a new derivation on it.
+- **So report the branch, not just the number.** When surfacing quality for a derivation or research effort, say *which branch* carries the solidity and point at the supporting `exp-`/`sup-` nodes — they are both the evidence and the lever for strengthening.
+- **`*pending*` refines accordingly.** A run `exp-` can float a pending-derivation claim to solid; a `*pending*` `sup-` never poisons an otherwise-sound claim.
 
 **Query it through the CLI — don't grep, and don't hand-read the index.** The claim graph is materialized under `manuscript/ave-kb/.index/`, but the `solidity` values are *computed* by the query tool; reading the JSONL yourself reintroduces exactly the inference drift the tool exists to prevent. Run the `kb_cmd` CLI from the repo root:
 
