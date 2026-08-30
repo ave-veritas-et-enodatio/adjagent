@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Thin launcher: delegates to post-openai.py. The python implementation owns
-# all behavior; see that file for env-var contract, output format, and
-# self-test mode (POST_OPENAI_TEST=1).
+# all behavior; see that file for env-var contract and output format. Unit
+# tests live in tests/test_post_openai.py (run via `just test`).
 THIS_DIR=$(cd "$(dirname "$0")" && pwd)
 PYTHON=$(command -v python3 2>/dev/null) || \
   PYTHON=$(command -v python 2>/dev/null) || \

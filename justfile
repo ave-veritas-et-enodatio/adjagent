@@ -53,9 +53,9 @@ venv:
         PYTHONDONTWRITEBYTECODE=1 "{{VENV_PYTHON}}" -m pip install pip pytest isort black --upgrade
     fi
 
-[doc("run the kb_tools unit tests")]
+[doc("run all tooling python tests (kb_tools + liaison_tools)")]
 test: venv
-    PYTHONPATH="{{justfile_directory() / AGENTS_DIR}}" PYTHONDONTWRITEBYTECODE=1 "{{VENV_PYTHON}}" -m pytest {{AGENTS_DIR}}/kb_tools/tests
+    PYTHONPATH="{{justfile_directory() / AGENTS_DIR}}" PYTHONDONTWRITEBYTECODE=1 "{{VENV_PYTHON}}" -m pytest {{AGENTS_DIR}}/kb_tools/tests {{AGENTS_DIR}}/liaison_tools/tests
 
 [doc("black-format and isort agents/kb_tools")]
 format-python: venv

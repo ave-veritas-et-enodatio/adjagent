@@ -26,10 +26,6 @@ env vars:
   TEMPERATURE        (optional) float in [0.0, 2.0] (default: 0.0)
   DEBUG_POST         (optional) "true" to dump the request payload to stderr
   DEBUG_RESPONSE     (optional) "true" to tee the raw SSE stream + reassembled output to stderr
-  POST_OPENAI_TEST   (optional) "1" runs the offline self-test suite (SSE
-                                demux/reassembly + API key validation against
-                                the fixtures in tests/) instead of contacting
-                                the network.
 
 The API key is read from API_KEY_FILE into process memory. It is never placed
 on the command line or into an environment variable, so it is not exposed
@@ -38,8 +34,6 @@ through argv or the process environment.
 
 from __future__ import annotations
 
-import contextlib
-import io
 import json
 import os
 import re
@@ -376,89 +370,7 @@ def _emit(reassembled: str) -> None:
     sys.stdout.write(reassembled + "\n")
 
 
-def _self_test_main() -> int:
-    """POST_OPENAI_TEST=1 path: run the full offline self-test suite — SSE
-    demux/reassembly plus API key validation — against the fixtures in the
-    tests/ directory beside this script. No env validation, no auth, no
-    network. Prints one PASS/FAIL line per case; returns non-zero if any fail.
-    """
-    tests_dir = Path(__file__).resolve().parent / "tests"
-    results: list[tuple[str, bool, str]] = []
-
-    def check(name: str, ok: bool, detail: str = "") -> None:
-        results.append((name, ok, detail))
-
-    def reassemble_fixture(fixture: str) -> tuple[int, str]:
-        with (tests_dir / fixture).open("r", encoding="utf-8") as f:
-            with contextlib.redirect_stderr(io.StringIO()):
-                chunks, status = demux_sse(f)
-        return status, reassemble_stream(chunks)
-
-    status, text = reassemble_fixture("test-fixture-stream.txt")
-    check(
-        "stream: plain content reassembled",
-        status == 0 and text == "Hello, world!",
-        f"status={status} text={text!r}",
-    )
-
-    status, text = reassemble_fixture("test-fixture-tool-calls.txt")
-    ok = False
-    if status == 0 and text.startswith("TOOL_CALLS\n"):
-        calls = json.loads(text[len("TOOL_CALLS\n") :])
-        ok = (
-            len(calls) == 1
-            and calls[0]["id"] == "call_abc"
-            and calls[0]["function"]["name"] == "read_file"
-            and calls[0]["function"]["arguments"] == '{"path":"src/foo.py"}'
-        )
-    check("tool-calls: single call reassembled", ok, f"status={status} text={text!r}")
-
-    status, text = reassemble_fixture("test-fixture-multi-tc.txt")
-    ok = False
-    if status == 0 and text.startswith("TOOL_CALLS\n"):
-        calls = json.loads(text[len("TOOL_CALLS\n") :])
-        ok = (
-            len(calls) == 2
-            and calls[0]["function"]["name"] == "first"
-            and calls[0]["function"]["arguments"] == '{"a":1}'
-            and calls[1]["function"]["name"] == "second"
-            and calls[1]["function"]["arguments"] == '{"b":2}'
-        )
-    check("multi-tc: two calls ordered by index", ok, f"status={status} text={text!r}")
-
-    with (tests_dir / "test-fixture-error.txt").open("r", encoding="utf-8") as f:
-        with contextlib.redirect_stderr(io.StringIO()):
-            _, err_status = demux_sse(f)
-    check(
-        "error: mid-stream error event detected",
-        err_status == 2,
-        f"status={err_status}",
-    )
-
-    good = _read_api_key(tests_dir / "test-fixture-good-key.txt")
-    check(
-        "key: surrounding whitespace trimmed",
-        good == "this-is_an-0-AccePtable-key-1",
-        f"got {good!r}",
-    )
-
-    bad = _read_api_key(tests_dir / "test-fixture-bad-key.txt")
-    check("key: internal whitespace rejected", bad is None, f"got {bad!r}")
-
-    passed = sum(1 for _, case_ok, _ in results if case_ok)
-    for name, case_ok, detail in results:
-        line = f"{'PASS' if case_ok else 'FAIL'}  {name}"
-        if not case_ok and detail:
-            line += f"  ({detail})"
-        sys.stdout.write(line + "\n")
-    sys.stdout.write(f"{passed}/{len(results)} passed\n")
-    return 0 if passed == len(results) else 1
-
-
 def main() -> int:
-    if os.environ.get("POST_OPENAI_TEST") == "1":
-        return _self_test_main()
-
     api_base_url = os.environ.get("API_BASE_URL", "")
     api_key_file = os.environ.get("API_KEY_FILE", "")
     model = os.environ.get("MODEL", "")
