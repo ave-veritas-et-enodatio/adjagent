@@ -1,14 +1,18 @@
-# AVE Agent Set
-Markdown definitions of various useful agents for AVE projects, plus the slash commands and generator tooling that maintain them.
+# Claude Code Agent Set
+A general-purpose Claude Code agent set — coder and platform specialists, multi-agent debate processes, knowledge-base tooling, and guest-model liaisons — plus the slash commands and generator tooling that maintain them.
 
 ## Install
 
-Clone this repo anywhere, then symlink both deployed surfaces into the consuming project:
+Clone this repo anywhere, then link both deployed surfaces into the consuming project:
 
 ```sh
+# from the consuming project's root
+mkdir -p .claude
 ln -s <path-to-this-repo>/agents    .claude/agents
 ln -s <path-to-this-repo>/commands  .claude/commands
 ```
+
+Copying works too (`cp -R` the two directories into `.claude/`) and pins a snapshot — no updates until you re-copy; symlinks track the clone.
 
 Claude Code reads agent and command definitions through these links; nothing outside `agents/` and `commands/` is visible to a session. Optionally, a third link gives sessions a path to the repo's project space (justfile, templates, contract docs):
 
@@ -111,7 +115,7 @@ Two modes share the same participants but use different referees and topic libra
     * all artifacts, temporary or otherwise, are produced under the review work directory
   * round cap: 5
   * examples 
-    * ```/mad-review TOPIC=.claude/agents/mad-review-topics/sim-code.md SEATS=opus,sonnet CONSTRAINTS=AVE-Core/LIVING-REFERENCE.md TARGET=AVE-Core/src/ave/```
+    * ```/mad-review TOPIC=.claude/agents/mad-review-topics/sim-code.md SEATS=opus,sonnet CONSTRAINTS=ARCHITECTURE.md TARGET=src/sim/```
     * ```/mad-review TOPIC=.claude/agents/mad-review-topics/general-code.md SEATS=opus,sonnet,guest ENV_FILE=~/.config/guest.env CONSTRAINTS=AGENTS.md TARGET=src/ **IGNORE
     `src/third_party`**```
 
@@ -141,7 +145,7 @@ Two modes share the same participants but use different referees and topic libra
     * **under-determined**: all participants converge on the same diagnosis of why the problem cannot be closed from the supplied axioms, identifying the specific missing axiom/principle/input
     * **unresolved**: candidates preserved for human arbitration if no convergence within round cap
   * examples
-    * ```/mad-design TOPIC=.claude/agents/mad-design-topics/math-derivation.md SEATS=fable,opus,sonnet CONSTRAINTS=AVE-Core/LIVING-REFERENCE.md TARGET=mad-design/inter-alpha-resonance/```
+    * ```/mad-design TOPIC=.claude/agents/mad-design-topics/math-derivation.md SEATS=fable,opus,sonnet CONSTRAINTS=SPEC.md TARGET=mad-design/my-derivation/```
 
 ## Guest Liaison
 
@@ -205,7 +209,7 @@ Re-running `/guest-start` with an existing topic slug offers to resume — the p
 
 ## Knowledge Base Agent Set
 
-* Using/navigating knowledge base - see manuscript/ave-kb/README.md in any AVE-\* repo
+* Using/navigating a knowledge base - see the KB's own README in the repo that hosts it
   * kb-docent.md
   * commands/ - custom slash commands
     * kb-start.md (/kb-start)
