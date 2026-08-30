@@ -13,9 +13,9 @@ agents/                 deployed surface — symlinked as .claude/agents
 commands/               deployed surface — symlinked as .claude/commands
 templates/              template sources — maintenance-only, not session-visible
   agents/               *.md.tmpl — one per generated agent definition (or family), rendered into agents/
-  commands/             *.md.tmpl — command templates, rendered into commands/ (currently empty)
+  commands/             *.md.tmpl — command templates, rendered into commands/
   shared-sections.toml  the single source of shared text (chunks) for both template types
-gen-agents.py           renders templates/ into the deployed surfaces, and checks them
+gen-defs.py             renders templates/ into the deployed surfaces, and checks them
 user-config/            published operator baseline (~/.claude/CLAUDE.md) + its README
 ```
 
@@ -25,7 +25,7 @@ A consuming project links `.claude/agents` → `agents/` and `.claude/commands` 
 
 ## Template System
 
-`gen-agents.py`'s module docstring is the definitive mechanism description; this section is a map into it, not a restatement.
+`gen-defs.py`'s module docstring is the definitive mechanism description; this section is a map into it, not a restatement.
 
 - **Output routing**: a template's parent directory routes its output — `templates/agents/*.md.tmpl` renders into `agents/`, `templates/commands/*.md.tmpl` into `commands/`. Every other mechanism below applies identically to both template types. `templates/commands/` may be absent or empty (git does not track an empty directory). As a guard against a wrong output-directory constant, generation asserts each resolved output directory exists inside the repository before writing, and its report states where files landed.
 
@@ -51,7 +51,7 @@ Running the checker (no `--generate` flag) performs two independent checks; eith
 
 ## Sanctioned Invocation
 
-`just generate` and `just check` are the sole sanctioned entry points to this mechanism — both wrap `gen-agents.py` at the repo root. No other invocation (direct `python3` calls, ad-hoc scripting against `shared-sections.toml`) is sanctioned (see AGENTS.md).
+`just generate` and `just check` are the sole sanctioned entry points to this mechanism — both wrap `gen-defs.py` at the repo root. No other invocation (direct `python3` calls, ad-hoc scripting against `shared-sections.toml`) is sanctioned (see AGENTS.md).
 
 ## Subsystem Map
 

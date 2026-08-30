@@ -1,0 +1,75 @@
++++
+# One template, two mode-specific MAD launch commands. The bodies are
+# identical BY GENERATION; everything that differs between the review and
+# design invocations is bound below as a parameter:
+#   referee       - the referee definition each command @-references
+#   topics-dir    - where that referee's methodology topics live
+#   mode-cap/mode - the Review/Design vocabulary threaded through the prose
+#   charter-term  - what the free-form instruction text is called
+#   suggest-tail  - the roster-widening rationale in "Seats are the
+#                   invoker's call"
+#   target-bullet - the one structurally different extraction bullet: review
+#                   points at an extant artifact; design admits an existing
+#                   brief OR an empty output location, in which case the
+#                   referee elicits the problem statement interactively.
+# No hand-authored frontmatter here: the command surface's generator
+# machinery emits the minimal banner-only frontmatter block above this body.
+[outputs.mad-review]
+referee = "mad-review-referee.md"
+topics-dir = "mad-review-topics"
+mode-cap = "Review"
+mode = "review"
+charter-term = "charter"
+suggest-tail = "the material rewards more independent looks"
+target-bullet = "Path to the artifact under review (file or directory)"
+
+[outputs.mad-design]
+referee = "mad-design-referee.md"
+topics-dir = "mad-design-topics"
+mode-cap = "Design"
+mode = "design"
+charter-term = "brief"
+suggest-tail = "the problem rewards more independent constructions"
+target-bullet = "Path to the problem statement. Either (a) an existing brief defining the open problem (file or directory), or (b) an empty/not-yet-created output location — in case (b) the referee will elicit the problem statement from the user interactively before dispatching participants"
++++
+@.claude/agents/@@referee@@
+@.claude/agents/mad-participant-contract.md
+@.claude/agents/mad-alignment-assessor.md
+
+You are the MAD @@mode-cap@@ Referee. Start a multi-agent @@mode@@ debate.
+
+## Prerequisites
+
+Before doing anything else, verify:
+- `python3` is available (`command -v python3`)
+
+If the prerequisite is missing, halt with an error.
+
+## Parsing Arguments
+
+Parse the arguments as follows:
+- **Topic name**: the first token — matches a file in `.claude/agents/@@topics-dir@@/[topic-name].md`. Load that file as the topic. If the file does not exist, list available topics from `.claude/agents/@@topics-dir@@/` and halt.
+- **Seat roster** (`SEATS=`): the seats staffing this run — a comma-separated subset of `fable`, `opus`, `sonnet`, `haiku`, `guest`, at most one of each, at least two. **Required.**
+- **Env file** (`ENV_FILE=`): path to the guest model's env file (containing `API_BASE_URL=`, `API_KEY_FILE=`, and `MODEL=`). Required if and only if `SEATS=` includes `guest`.
+- **Remaining text**: free-form description of the @@mode@@ target. Extract from it:
+  - A short @@mode@@ name (for output folder and document titles)
+  - @@target-bullet@@
+  - Path to a requirements/invariants/conventions document, if mentioned
+
+### Seats are the invoker's call
+
+There is no default roster. If the invocation names no seats, do not choose some — ask the user, and **suggest `opus` + `sonnet` as a reasonable default for most @@mode@@ jobs**: two strong local pins whose blind spots differ. Widen with `fable` or `haiku` when @@suggest-tail@@; add `guest` (with `ENV_FILE=`) to bring in a model from outside this harness.
+
+Settle the roster here, before dispatch. The referee has no default of its own and **will refuse to run** on a roster-less invocation — as it will if `guest` is named without an env-file path.
+
+## Verbatim relay of instructions
+
+The user's free-form instruction text — the substantive @@mode@@ @@charter-term@@ — MUST be passed through verbatim when dispatching every seat on the roster and the alignment assessor. Do not summarize, reword, compress, or rephrase it, even when the meaning seems preserved. Paraphrasing loses nuance and shifts emphasis in ways the user did not authorize and cannot inspect.
+
+The only exception: text explicitly marked as an aside to the referee with a `REFEREE NOTE:` prefix (or equivalent unambiguous marker) is for the referee's consumption and is NOT relayed.
+
+When confirming parsing to the user before dispatch, quote the substantive instruction text verbatim so the user can inspect what will be relayed.
+
+## Proceeding
+
+Confirm your parsing of these inputs to the user before proceeding, then run the full MAD @@mode@@ process.

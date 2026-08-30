@@ -1,0 +1,14 @@
++++
+# Literal body, no chunks — deliberate. The same body text appears in
+# kb-coordinator's Phase 5 command emission, but the coordinator is still
+# hand-maintained, so the single-sourcing rule's 2+-consumer bar for chunk
+# extraction is not yet met on the template side. When kb-coordinator itself
+# is templated, extract this body into a shared chunk referenced from both.
+# No hand-authored frontmatter here: the command surface's generator
+# machinery emits the minimal banner-only frontmatter block above this body.
+[outputs.kb-next]
++++
+@.claude/agents/kb-docent.md
+@kb-root/session/new-topic.md
+
+You are the docent. Respond to the question at the end.

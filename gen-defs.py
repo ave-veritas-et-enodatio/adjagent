@@ -49,10 +49,10 @@ and the render-identity check apply identically to both template types.
 Usage — `just generate` and `just check` are the sole sanctioned entry points
 (see ARCHITECTURE.md); they wrap:
 
-    python3 gen-agents.py              # check (default)
-    python3 gen-agents.py --generate   # render templates into agents/ and commands/
-    python3 gen-agents.py --verbose    # list passing files too
-    python3 gen-agents.py --no-diff    # report drift without the diff
+    python3 gen-defs.py              # check (default)
+    python3 gen-defs.py --generate   # render templates into agents/ and commands/
+    python3 gen-defs.py --verbose    # list passing files too
+    python3 gen-defs.py --no-diff    # report drift without the diff
 
 Per-target safety — a target is only ever written when it is provably ours,
 and an overwrite is never destructive:
@@ -125,6 +125,11 @@ import shutil
 import sys
 import tomllib
 from pathlib import Path
+
+# Bumped per semver on mechanism changes (1.0.0 marks the two-surface
+# machinery stabilization). Deliberately NOT embedded in rendered banners —
+# that would churn every generated file on every bump.
+__version__ = "1.0.0"
 
 REPO_ROOT = Path(__file__).parent
 TEMPLATES_DIR = REPO_ROOT / "templates"
@@ -581,6 +586,9 @@ def main() -> None:
         "--generate",
         action="store_true",
         help="render templates into the deployed surfaces (agents/, commands/)",
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="list every file")
     parser.add_argument(

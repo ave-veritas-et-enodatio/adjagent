@@ -27,7 +27,7 @@ Note: some editors dislike the overlapping symlinks this creates in one workspac
 ```
 agents/       deployed — every catalog entry below lives here unless noted otherwise
 commands/     deployed — slash commands, referenced below as "commands"
-templates/    template sources (not session-visible), rendered by gen-agents.py at the repo root — see ARCHITECTURE.md
+templates/    template sources (not session-visible), rendered by gen-defs.py at the repo root — see ARCHITECTURE.md
 user-config/  published operator baseline — see user-config/README.md
 ```
 
@@ -97,7 +97,7 @@ Two modes share the same participants but use different referees and topic libra
 * mad-review-referee.md - runs multi-agent debate review process
 * commands
   * mad-review.md - initiates a review process. you must provide:
-    * a topic from agents/mad-review-topics/
+    * a topic from .claude/agents/mad-review-topics/
       * agent-definition.md 
       * architecture.md
       * general-code.md
@@ -124,7 +124,7 @@ Two modes share the same participants but use different referees and topic libra
 * mad-design-referee.md - runs multi-agent debate design process
 * commands
   * mad-design.md - initiates a design process. you must provide:
-    * a topic from agents/mad-design-topics/
+    * a topic from .claude/agents/mad-design-topics/
       * ai-engineering.md
       * architecture.md
       * math-derivation.md (more topics can be added: software-design, hardware-design, etc.)

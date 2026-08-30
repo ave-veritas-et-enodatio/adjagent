@@ -46,7 +46,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 # Route KB path construction through the kb_util module.
-from kb_tools import kb_links, kb_schema, kb_util
+from kb_tools import __version__, kb_links, kb_schema, kb_util
 
 # Markdown scanning primitives are single-sourced in kb_links (shared with the
 # kb_cmd reverse-find). Re-exported here so existing references and tests that
@@ -227,6 +227,7 @@ def report(findings: list[Finding], repo_root: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--version", action="version", version=f"%(prog)s (kb_tools {__version__})")
     parser.add_argument(
         "--inter-repo",
         choices=("dont-check", "warn", "error"),

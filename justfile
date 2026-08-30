@@ -7,7 +7,7 @@
 # when any stage does, not just its last.
 set shell := ["bash", "-cuo", "pipefail"]
 
-GEN := "gen-agents.py"
+GEN := "gen-defs.py"
 AGENTS_DIR := "agents"
 
 # Venv layout differs by OS: POSIX puts executables in .venv/bin, Windows in
@@ -24,7 +24,7 @@ VENV_PYTHON := VENV / PYBIN / "python" + EXE
 default:
     @just --list
 
-# gen-agents.py in check mode (no --generate) is the repo's test: it renders
+# gen-defs.py in check mode (no --generate) is the repo's test: it renders
 # every template in memory and diffs against the checked-in definitions,
 # exiting nonzero on drift.
 [doc("check every definition against its template; exit nonzero on drift")]

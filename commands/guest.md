@@ -1,4 +1,4 @@
-@agents/guest-liaison.md
+@.claude/agents/guest-liaison.md
 
 You are continuing the active guest-model session via the `guest-liaison` subagent.
 

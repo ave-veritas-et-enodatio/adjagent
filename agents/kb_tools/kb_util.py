@@ -36,6 +36,8 @@ import argparse
 import sys
 from pathlib import Path
 
+from kb_tools import __version__
+
 KB_DIRNAME = "kb-root"
 INDEX_DIRNAME = ".index"
 CLAIMS_FILENAME = "claims.jsonl"
@@ -277,6 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Install or remove the one runner line that includes the KB maintenance targets "
         "(runner-snippets/kb.just or kb.mk) in the consuming repo's justfile or Makefile.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s (kb_tools {__version__})")
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--install-targets", action="store_true", help="install the KB include line")
     action.add_argument("--uninstall-targets", action="store_true", help="remove the KB include line")

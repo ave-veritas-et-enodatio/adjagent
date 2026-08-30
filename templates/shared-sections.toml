@@ -2,7 +2,7 @@
 #
 # This file is the ONE place the shared engineering-ethos text lives. The
 # templates (templates/agents/<name>.md.tmpl, templates/commands/<name>.md.tmpl)
-# reference these chunks by marker; gen-agents.py at the repo root renders each
+# reference these chunks by marker; gen-defs.py at the repo root renders each
 # template into its surface (agents/<name>.md or commands/<name>.md).
 #
 # Marker syntax, usable in templates AND inside chunk bodies:

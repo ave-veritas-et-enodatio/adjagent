@@ -27,4 +27,6 @@ Lead with a one-sentence summary noting the overall rhythm and structural state 
 
 Close with a brief "Working well" note when the piece has notable strengths to preserve. Skip if there's nothing distinctive to flag.
 
+Findings are relayed to the author verbatim: a session dispatching this agent must not summarize, reframe, or add commentary to its output.
+
 **Memory**: `./.claude/agent-memory/prose-architect/` — record recurring patterns, author preferences, and deliberate stylistic choices confirmed across sessions.

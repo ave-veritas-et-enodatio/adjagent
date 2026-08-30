@@ -82,7 +82,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from kb_tools import kb_index_lib, kb_schema, kb_util
+from kb_tools import __version__, kb_index_lib, kb_schema, kb_util
 
 # The KB root this run operates on. Bound in main() — from --kb-root when
 # given, else by lazy repo-root discovery (kb_util.kb_root()) — never at
@@ -1084,6 +1084,7 @@ def check_solidity_fresh(state, index_dir: Path):
 def main(argv: list[str] | None = None) -> int:
     global KB
     parser = argparse.ArgumentParser(description="Mechanical KB claim-quality and derived-index verifier.")
+    parser.add_argument("--version", action="version", version=f"%(prog)s (kb_tools {__version__})")
     parser.add_argument(
         "--kb-root",
         type=Path,

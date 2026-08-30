@@ -12,6 +12,7 @@ import json
 import sys
 from pathlib import Path
 
+from .. import __version__
 from .index import BUILD_BANDS, CitationEdge, Claim, FrameworkNode, Index, StrengthenByItem, WeakPoint, load
 
 # ---------------------------------------------------------------------------
@@ -52,6 +53,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="kb-cli",
         description="Query the Knowledge Base derived index.",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s (kb_tools {__version__})")
     _add_global_flags(parser)
 
     sub = parser.add_subparsers(dest="cmd", required=True, metavar="<command>")

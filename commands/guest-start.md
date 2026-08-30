@@ -1,11 +1,11 @@
-@agents/guest-liaison.md
+@.claude/agents/guest-liaison.md
 
 You are starting a new guest-model session via the `guest-liaison` subagent.
 
 ## Prerequisites
 
 Before doing anything else, verify:
-- `python3` is available (command -v python3`)
+- `python3` is available (`command -v python3`)
 - The `guest-liaison` subagent contract was loaded above
 
 If a prerequisite is missing, halt with an error listing what is missing.

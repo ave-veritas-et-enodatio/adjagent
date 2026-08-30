@@ -29,7 +29,7 @@ import re
 import sys
 from pathlib import Path
 
-from kb_tools import kb_index_lib, kb_util
+from kb_tools import __version__, kb_index_lib, kb_util
 
 # The KB root and derived-index directory this run operates on. Bound in
 # main() — from --kb-root when given, else by lazy repo-root discovery
@@ -569,6 +569,7 @@ def _emit_jsonl_indexes() -> tuple[int, int]:
 def main(argv: list[str] | None = None) -> int:
     global KB, INDEX_DIR
     parser = argparse.ArgumentParser(description="Regenerate derived KB metadata fields from leaf claims.")
+    parser.add_argument("--version", action="version", version=f"%(prog)s (kb_tools {__version__})")
     parser.add_argument(
         "--kb-root",
         type=Path,

@@ -207,9 +207,10 @@ installed into consumers):
   timestamps, random ids, or environment-dependent paths in records). Mint-time
   randomness never enters the rebuild.
 - **Single-source / anti-drift.** Paths, the KB directory name, command names, the
-  build-band ladder, the id grammar, and every shared computation have exactly one
-  definition; consumers import it. A change flows through one constant, not
-  scattered literals.
+  build-band ladder, the id grammar, the package version (`__version__` in
+  `__init__.py`, reported by every CLI's `--version`), and every shared computation
+  have exactly one definition; consumers import it. A change flows through one
+  constant, not scattered literals.
 - **Derived-vs-authored split.** Only `confidence` / `quality` and the graph
   structure are hand-authored; every solidity/band/aggregate/footer is recomputed
   and drift-gated. Hand-editing a derived field is a `refresh-fixable` verify
