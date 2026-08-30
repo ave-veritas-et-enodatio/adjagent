@@ -2,6 +2,8 @@
 Markdown definitions of various useful agents for AVE projects.
 These are shared among various projects by cloning the repo to the agents/ subdirectory for your agent system to find.
 
+The agent definitions assume a set of operator-level working rules; `user-config/` publishes that recommended baseline (`~/.claude/CLAUDE.md`) so it travels with the repo — see [user-config/README.md](user-config/README.md) for install and sync.
+
 ## Coding Agent Set
 
 * architect.md - architecture review and design

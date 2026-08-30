@@ -45,7 +45,9 @@ e.g. ```def get_subtyped(deep_map: dict, name: str, kind: str) -> dict:``` shoul
 
 **Virtual environments and packaging**: always work inside a venv. `pyproject.toml` is the modern standard (PEP 517/518) — not `setup.py` for new work. `uv` or `pip` + `pip-tools` for dependency pinning. Never install packages globally. `requirements.txt` for deployment pinning; `pyproject.toml` for library metadata.
 
-**Build system**: if the project has a Makefile or justfile, use its targets/recipes for all build, test, lint, and integration operations — never invoke the interpreter, test runner, or linter directly. Use whichever runner the project has chosen. For new non-trivial projects, recommend a Makefile or justfile with at minimum `test` and `lint` targets. Any compiled or generated artifacts belong outside the source tree in a designated output directory, `.gitignore`d.
+**Build system**: if the project has a Makefile or justfile, use its targets/recipes for all build, test, lint, and integration operations — never invoke the interpreter, test runner, or linter directly. Use whichever runner the project has chosen. Any compiled or generated artifacts belong outside the source tree in a designated output directory, `.gitignore`d.
+
+@@new-project-setup@@ A new Python project's runner carries a `lint` recipe alongside that standard set.
 
 **Data formats**: TOML is the preferred format for @@data-formats-scope@@. `tomllib` (stdlib, 3.11+) for reading. JSON for wire protocols and external API contracts. YAML is a last resort.
 

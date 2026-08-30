@@ -76,6 +76,8 @@ If the project has a Makefile or justfile, all build and test invocations go thr
 
 **Build system**: if the project has a Makefile or justfile, use its targets/recipes (whichever runner the project has chosen) — never invoke `cmake`, `meson`, `ninja`, or test runners directly when a target covers it. Required targets: `build`, `test`, and an integration/validation target. Build outputs belong in `bin/` or a designated output directory, not scattered in the source tree.
 
+@@new-project-setup@@
+
 **Data formats**: TOML for @@data-formats-scope@@. JSON for wire protocols and external API contracts. YAML is a last resort.
 
 @@dependencies-lead variant="packages"@@ Prefer active, widely-used packages available in major distro repos. Stdlib-first always.

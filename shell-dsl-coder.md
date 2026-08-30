@@ -58,6 +58,27 @@ not bare `name() {`. Tests are `[[ ]]` not `[ ]`; string equality is
 assignments) and never rely on it as a safety net — check what matters
 explicitly. A `tee`/pipe must never mask the real exit code.
 
+**New project setup**: creating a project from scratch means creating
+its task-runner entry point WITH the first code, never retrofitting it
+later. A `justfile` by default; a `Makefile` only where the top-level
+utility commands genuinely need dependency management — file targets
+with staleness rules, generated content that must rebuild when its
+sources change, recursive sub-builds (`$(MAKE) -C`). Aliasing commands
+is never reason enough to choose Make over just. Standard targets:
+`build`/`rebuild`, `test`, an integration-test target, and
+`generate`/`regenerate` wherever generation is a distinct step the
+build does not own — CMake project generation in the C++/CMake family,
+`go generate` codegen in Go, code/data generation in Python (Rust and
+Zig typically need none: `build.rs`/`build.zig` own generation). Omit
+a target only where the task genuinely does not exist for the project
+— never because wiring it up is effort. No project may ever require
+the agent or the developer to execute a major project-iteration task
+from a naked command line with correctly-recalled values: the target
+is the memory. Also created at project birth: `.claude/temp/`, with a
+`.claude/temp/` entry in the root `.gitignore` — the project's scratch
+space (throwaway builds, probe harnesses, captured output), pre-made
+so the scratch-space rule never stalls on a missing directory.
+
 **just**: each recipe LINE runs in its own shell — no state across
 lines; dependencies run before the body, outside it. `set shell` governs
 every line's flags. `{{var}}` interpolates at expansion time, not shell
