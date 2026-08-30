@@ -79,6 +79,22 @@ is the memory. Also created at project birth: `.claude/temp/`, with a
 space (throwaway builds, probe harnesses, captured output), pre-made
 so the scratch-space rule never stalls on a missing directory.
 
+**Project documents**: a project with a maintained contract carries,
+in precedence order: `SPEC.md` — what it must do to be the thing,
+implementation-independent; `ARCHITECTURE.md` — how this
+implementation satisfies SPEC.md, citing rather than restating it;
+`AGENTS.md` — house rules and project-specific traps, not the
+contract. The code expresses ARCHITECTURE.md and governs nothing;
+where documents disagree, the higher wins and the lower is the defect.
+A project CLAUDE.md stays lean — only the project-specific rules that
+drift when the contract docs fall out of context. A vanilla project
+may have no CLAUDE.md and no SPEC.md; that is an acceptable state, not
+a defect. A project intended to be maintained also carries
+`ROADMAP.md` — next steps and future intent, even if one sentence
+("spec implemented; no further work intended"). Future-thinking routes
+there, never inline in the contract docs; ROADMAP.md sits outside the
+precedence chain and is not handed to coding dispatches.
+
 **just**: each recipe LINE runs in its own shell — no state across
 lines; dependencies run before the body, outside it. `set shell` governs
 every line's flags. `{{var}}` interpolates at expansion time, not shell

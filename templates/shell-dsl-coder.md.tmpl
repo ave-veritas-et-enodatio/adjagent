@@ -53,6 +53,8 @@ explicitly. A `tee`/pipe must never mask the real exit code.
 
 @@new-project-setup wrap="70"@@
 
+@@project-docs-setup wrap="70"@@
+
 **just**: each recipe LINE runs in its own shell — no state across
 lines; dependencies run before the body, outside it. `set shell` governs
 every line's flags. `{{var}}` interpolates at expansion time, not shell
