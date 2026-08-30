@@ -100,7 +100,7 @@ import tomllib
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).parent
-AGENTS_DIR = SCRIPT_DIR.parent
+AGENTS_DIR = SCRIPT_DIR.parent / "agents"
 SHARED_SECTIONS = SCRIPT_DIR / "shared-sections.toml"
 TEMPLATE_SUFFIX = ".md.tmpl"
 MAX_EXPANSION_DEPTH = 10

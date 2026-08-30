@@ -1,8 +1,35 @@
 # AVE Agent Set
-Markdown definitions of various useful agents for AVE projects.
-These are shared among various projects by cloning the repo to the agents/ subdirectory for your agent system to find.
+Markdown definitions of various useful agents for AVE projects, plus the slash commands and generator tooling that maintain them.
+
+## Install
+
+Clone this repo anywhere, then symlink both deployed surfaces into the consuming project:
+
+```sh
+ln -s <path-to-this-repo>/agents    .claude/agents
+ln -s <path-to-this-repo>/commands  .claude/commands
+```
+
+Claude Code reads agent and command definitions through these links; nothing outside `agents/` and `commands/` is visible to a session. Optionally, a third link gives sessions a path to the repo's project space (justfile, templates, contract docs):
+
+```sh
+ln -s <path-to-this-repo>  .claude/agents-repo
+```
+
+Note: some editors dislike the overlapping symlinks this creates in one workspace — for work on this repo itself, open it directly instead.
+
+## Layout
+
+```
+agents/       deployed — every catalog entry below lives here unless noted otherwise
+commands/     deployed — slash commands, referenced below as "commands"
+templates/    generator tooling (not session-visible) — see ARCHITECTURE.md
+user-config/  published operator baseline — see user-config/README.md
+```
 
 The agent definitions assume a set of operator-level working rules; `user-config/` publishes that recommended baseline (`~/.claude/CLAUDE.md`) so it travels with the repo — see [user-config/README.md](user-config/README.md) for install and sync.
+
+Contract docs, precedence in this order (code is the defect when it disagrees with a higher one): [SPEC.md](SPEC.md) — observable contract, [ARCHITECTURE.md](ARCHITECTURE.md) — how the mechanism works, [AGENTS.md](AGENTS.md) — house rules. [ROADMAP.md](ROADMAP.md) tracks open follow-on work, outside the precedence chain.
 
 ## Coding Agent Set
 
@@ -14,6 +41,8 @@ The agent definitions assume a set of operator-level working rules; `user-config
 * language-specific coders
   * go-coder.md
   * python-coder.md
+  * rust-coder.md
+  * shell-dsl-coder.md
 * platform-specific coders
   * android-app-expert.md
   * ios-app-expert.md
@@ -22,7 +51,7 @@ The agent definitions assume a set of operator-level working rules; `user-config
   * web-app-expert.md
   * windows-app-expert.md
 
-These coder/platform files are **generated**, as is the MAD agent set — do not edit them directly. Each is rendered from `templates/<name>.md.tmpl` plus the shared text in `templates/shared-sections.toml`, which is the single home of the sections they hold in common. Edit the template (agent-specific text) or the shared sections (common text), then run `python3 templates/gen-agents.py --generate`. Running the script with no arguments checks that every generated file still matches its template. A definition is generated only if a template declares it, and a file lacking the `# !GENERATED!` banner is never overwritten. One template can declare several definitions — `templates/mad-participant.md.tmpl` renders the four model-pinned participants from one body, so they cannot drift apart.
+Most of these coder/platform files are **generated**, as is the MAD agent set — do not edit them directly. (security-reviewer.md, tech-writer.md, and tech-writer-reviewer.md are hand-maintained, not generated, despite sharing this list.) Each is rendered from `templates/<name>.md.tmpl` plus the shared text in `templates/shared-sections.toml`, which is the single home of the sections they hold in common. Edit the template (agent-specific text) or the shared sections (common text), then run `just generate`. `just check` verifies every generated file still matches its template — run it before any handoff. A definition is generated only if a template declares it, and a file lacking the `# !GENERATED!` banner is never overwritten. One template can declare several definitions — `templates/mad-participant.md.tmpl` renders the four model-pinned participants from one body, so they cannot drift apart. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full mechanism.
 
 ## Specialists
 Single-purpose agents invoked directly for non-coding work.
@@ -53,7 +82,7 @@ Two modes share the same participants but use different referees and topic libra
 * mad-alignment-assessor.md - only assesses alignment/disagreement among participants
 
 ### Liaison Tooling
-`liaison-tools/` contains shell helpers used by both `mad-guest-liaison.md` (MAD process) and `guest-liaison.md` (general guest-model sessions). The liaison agents are the primary callers; MAD referees set `TMPDIR` for liaison invocations to keep `mktemp` output contained in the review/design directory.
+`agents/liaison-tools/` contains shell helpers used by both `mad-guest-liaison.md` (MAD process) and `guest-liaison.md` (general guest-model sessions). The liaison agents are the primary callers; MAD referees set `TMPDIR` for liaison invocations to keep `mktemp` output contained in the review/design directory.
 * `post-openai.sh` - posts a message history to an OpenAI-compatible API and prints the assistant reply. Reads the API key from a file so it never enters argv or env.
 * `msg-util.sh` - the only sanctioned path for creating or mutating the messages JSON (init / append). Use this rather than ad-hoc jq or sed.
 * `extract-agent-body.sh` - extracts the body of an agent definition file (drops the frontmatter) for use as a system prompt.
