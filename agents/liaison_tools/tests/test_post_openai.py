@@ -130,6 +130,72 @@ class TestApiKeyValidation(unittest.TestCase):
         self.assertIsNone(key)
 
 
+class TestUsageExtraction(unittest.TestCase):
+    """extract_usage / write_usage_stats — the USAGE_STATS_FILE side channel.
+
+    The usage-bearing SSE chunk rides with empty ``choices`` (the
+    ``stream_options`` shape), which ``reassemble_stream`` skips; capture must
+    see it anyway, and must equally handle a non-streaming full completion
+    object where ``usage`` sits at the top level beside ``choices``.
+    """
+
+    _EXPECTED = {
+        "prompt_tokens": 42,
+        "completion_tokens": 7,
+        "total_tokens": 49,
+        "model": "test-model-v1",
+    }
+
+    def test_usage_fixture_demux_extract_and_unchanged_reassembly(self):
+        chunks, status, _ = _demux_fixture("test-fixture-usage.txt")
+        self.assertEqual(status, 0)
+        # The empty-choices usage chunk must not alter the reassembled text.
+        self.assertEqual(post_openai.reassemble_stream(chunks), "Hi there")
+        self.assertEqual(post_openai.extract_usage(chunks), self._EXPECTED)
+
+    def test_extract_from_non_streaming_completion_object(self):
+        obj = {
+            "id": "chatcmpl-ns",
+            "model": "test-model-v1",
+            "choices": [{"message": {"role": "assistant", "content": "hi"}, "index": 0}],
+            "usage": {"prompt_tokens": 42, "completion_tokens": 7, "total_tokens": 49},
+        }
+        self.assertEqual(post_openai.extract_usage([obj]), self._EXPECTED)
+
+    def test_extract_nulls_when_api_provides_no_usage(self):
+        chunks, status, _ = _demux_fixture("test-fixture-stream.txt")
+        self.assertEqual(status, 0)
+        self.assertEqual(
+            post_openai.extract_usage(chunks),
+            {"prompt_tokens": None, "completion_tokens": None, "total_tokens": None, "model": None},
+        )
+
+    def test_extract_nulls_individual_missing_usage_fields(self):
+        chunks = [{"model": "m1", "choices": [], "usage": {"total_tokens": 5}}]
+        self.assertEqual(
+            post_openai.extract_usage(chunks),
+            {"prompt_tokens": None, "completion_tokens": None, "total_tokens": 5, "model": "m1"},
+        )
+
+    def test_write_usage_stats_appends_one_json_line_per_call(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "stats.jsonl")
+            post_openai.write_usage_stats(path, self._EXPECTED)
+            post_openai.write_usage_stats(path, self._EXPECTED)
+            lines = Path(path).read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertEqual([json.loads(ln) for ln in lines], [self._EXPECTED] * 2)
+
+    def test_write_usage_stats_bad_path_warns_and_does_not_raise(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = str(Path(tmp) / "no-such-dir" / "stats.jsonl")
+            captured = io.StringIO()
+            with contextlib.redirect_stderr(captured):
+                post_openai.write_usage_stats(bad, self._EXPECTED)
+        self.assertIn("warning: could not write USAGE_STATS_FILE", captured.getvalue())
+        self.assertIn(bad, captured.getvalue())
+
+
 class TestModelErrorSniffing(unittest.TestCase):
     """is_model_error_text — the pivot for the substring-resolution fallback."""
 
@@ -188,16 +254,42 @@ class TestEndToEndStubbedEndpoint(unittest.TestCase):
         "TEMPERATURE",
         "DEBUG_POST",
         "DEBUG_RESPONSE",
+        "USAGE_STATS_FILE",
         "POST_OPENAI_TEST",
     )
+
+    # An SSE usage event in the ``stream_options`` shape (empty ``choices``),
+    # spliced into a fixture stream just before its [DONE] terminator.
+    _USAGE_EVENT = (
+        b'data: {"model":"test-model-v1","choices":[],'
+        b'"usage":{"prompt_tokens":42,"completion_tokens":7,"total_tokens":49}}'
+    )
+    _EXPECTED_STATS = {
+        "prompt_tokens": 42,
+        "completion_tokens": 7,
+        "total_tokens": 49,
+        "model": "test-model-v1",
+    }
+
+    @classmethod
+    def _fixture_with_usage(cls, fixture_name):
+        body = (_THIS_DIR / fixture_name).read_bytes()
+        return body.replace(b"data: [DONE]", cls._USAGE_EVENT + b"\n\ndata: [DONE]")
 
     def _base_env(self):
         env = {k: v for k, v in os.environ.items() if k not in self._SCRIPT_ENV_VARS}
         env["PYTHONDONTWRITEBYTECODE"] = "1"
         return env
 
-    def _run_against_fixture(self, fixture_name):
-        server = _start_sse_server((_THIS_DIR / fixture_name).read_bytes())
+    def _run_stub(self, body_bytes, stats_rel=None, set_stats_env=True):
+        """Run the script against a stub serving `body_bytes`.
+
+        `stats_rel` (if set) names a stats-file path relative to the run's
+        temp dir; it is exported as USAGE_STATS_FILE unless `set_stats_env`
+        is False (which still computes the path so the caller can assert the
+        file was NOT created). Returns (result, stats_exists, stats_text).
+        """
+        server = _start_sse_server(body_bytes)
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         port = server.server_address[1]
@@ -214,7 +306,10 @@ class TestEndToEndStubbedEndpoint(unittest.TestCase):
                     "MODEL": "test-model",
                 }
             )
-            return subprocess.run(
+            stats_path = Path(tmp) / stats_rel if stats_rel is not None else None
+            if stats_path is not None and set_stats_env:
+                env["USAGE_STATS_FILE"] = str(stats_path)
+            result = subprocess.run(
                 [sys.executable, str(_SCRIPT), str(messages_file)],
                 env=env,
                 capture_output=True,
@@ -222,6 +317,15 @@ class TestEndToEndStubbedEndpoint(unittest.TestCase):
                 timeout=60,
                 check=False,
             )
+            stats_exists = stats_path.exists() if stats_path is not None else None
+            stats_text = (
+                stats_path.read_text(encoding="utf-8") if stats_exists else None
+            )
+        return result, stats_exists, stats_text
+
+    def _run_against_fixture(self, fixture_name):
+        result, _, _ = self._run_stub((_THIS_DIR / fixture_name).read_bytes())
+        return result
 
     def test_text_stream_stdout_contract(self):
         result = self._run_against_fixture("test-fixture-stream.txt")
@@ -257,6 +361,64 @@ class TestEndToEndStubbedEndpoint(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertIn("usage:", result.stderr)
         self.assertIn("API_BASE_URL must be set", result.stderr)
+
+    def _assert_stats_line(self, stats_text):
+        lines = stats_text.splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(json.loads(lines[0]), self._EXPECTED_STATS)
+
+    def test_usage_stats_written_on_text_shape(self):
+        body = self._fixture_with_usage("test-fixture-stream.txt")
+        result, stats_exists, stats_text = self._run_stub(body, stats_rel="stats.jsonl")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        # Usage never reaches stdout; the text contract is unchanged.
+        self.assertEqual(result.stdout, "Hello, world!\n")
+        self.assertTrue(stats_exists)
+        self._assert_stats_line(stats_text)
+
+    def test_usage_stats_written_on_tool_calls_shape(self):
+        body = self._fixture_with_usage("test-fixture-tool-calls.txt")
+        result, stats_exists, stats_text = self._run_stub(body, stats_rel="stats.jsonl")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        expected_calls = [
+            {
+                "id": "call_abc",
+                "type": "function",
+                "function": {"name": "read_file", "arguments": '{"path":"src/foo.py"}'},
+            }
+        ]
+        self.assertEqual(result.stdout, "TOOL_CALLS\n" + json.dumps(expected_calls) + "\n")
+        self.assertTrue(stats_exists)
+        self._assert_stats_line(stats_text)
+
+    def test_usage_stats_written_from_usage_fixture(self):
+        body = (_THIS_DIR / "test-fixture-usage.txt").read_bytes()
+        result, stats_exists, stats_text = self._run_stub(body, stats_rel="stats.jsonl")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "Hi there\n")
+        self.assertTrue(stats_exists)
+        self._assert_stats_line(stats_text)
+
+    def test_usage_stats_env_unset_no_file_and_stdout_identical(self):
+        # Usage events present in the stream, env var unset: stdout stays
+        # byte-identical to the plain run and no stats file is created.
+        body = self._fixture_with_usage("test-fixture-stream.txt")
+        result, stats_exists, _ = self._run_stub(
+            body, stats_rel="stats.jsonl", set_stats_env=False
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "Hello, world!\n")
+        self.assertFalse(stats_exists)
+
+    def test_usage_stats_unwritable_path_warns_but_call_succeeds(self):
+        body = self._fixture_with_usage("test-fixture-stream.txt")
+        result, stats_exists, _ = self._run_stub(
+            body, stats_rel="no-such-dir/stats.jsonl"
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "Hello, world!\n")
+        self.assertFalse(stats_exists)
+        self.assertIn("warning: could not write USAGE_STATS_FILE", result.stderr)
 
 
 if __name__ == "__main__":

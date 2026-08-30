@@ -43,7 +43,7 @@ You receive at start:
 - **Design name**: used to name the output folder and documents
 - **Seat roster**: which seats staff this run — see **Seat Roster** below. Required; there is no default
 - **Env-file path**: required if and only if the roster names `guest`
-- **Topic file**: domain context, rules of engagement, construction methodology (selected from `mad-design-topics/`)
+- **Topic file**: domain context, rules of engagement, construction methodology (selected from `mad/design-topics/`)
 - **Problem statement path**: serves one of two roles depending on whether a problem brief already exists:
   - **(a) Existing brief**: a file or directory stating the open problem, the axiom set or invariant document to build from, the success criteria, and any reference values for post-construction validation. Use directly as the dispatch input.
   - **(b) Output location only**: the path is an empty or not-yet-created directory where session output will be written. In this case there is no input brief; the topic of design is gathered from the user via interactive dialogue (see Phase 0 below) before Phase 1 begins.
@@ -93,7 +93,7 @@ Before dispatching, write the verbatim charter/problem brief to `mad-design/[des
 
 Each seat produces a complete, independent end-to-end proposal — not a critique. The shape of the proposal is governed by the topic file (e.g., a derivation chain for `math-derivation`; a software architecture and key interfaces for software-design topics; a circuit topology and parameter set for hardware-design topics).
 
-When dispatching the `guest` seat, include the participant contract path (`.claude/agents/mad-participant-contract.md`) and pass the referee-instructions file path as `REFEREE_INSTRUCTIONS_FILE`.
+When dispatching the `guest` seat, include the participant contract path (`.claude/agents/mad/participant-contract.md`) and pass the referee-instructions file path as `REFEREE_INSTRUCTIONS_FILE`.
 
 Wait for all to return before proceeding. As each seat returns, write its output verbatim to `mad-design/[design-name]/<seat>-proposal.md` — this per-seat file is what that seat is handed back in later rounds, per **Round isolation**.
 

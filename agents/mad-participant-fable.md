@@ -1,6 +1,7 @@
 ---
 #
 # !GENERATED! from templates/agents/mad-participant.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !BODY-SHA256! 5fdd1585af74db114a30f726a5989cf6002fe39ef095c69ffc4ccc088d701e64
 #
 name: mad-participant-fable
 description: "Independent technical participant for multi-model debate process. Produces structured initial assessments (review mode) or proposals (design mode), and responds to debate rounds. Sees only the Alignment Assessor's structured map, never another participant's full output."

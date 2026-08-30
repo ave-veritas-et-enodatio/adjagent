@@ -3,24 +3,23 @@ A general-purpose Claude Code agent set — coder and platform specialists, mult
 
 ## Install
 
-Clone this repo anywhere, then link both deployed surfaces into the consuming project:
+Clone this repo anywhere, then install both deployed surfaces into the consuming project — from **this** repo's root:
 
 ```sh
-# from the consuming project's root
-mkdir -p .claude
-ln -s <path-to-this-repo>/agents    .claude/agents
-ln -s <path-to-this-repo>/commands  .claude/commands
+just install-defs ~/projects/foo
 ```
 
-Copying works too (`cp -R` the two directories into `.claude/`) and pins a snapshot — no updates until you re-copy; symlinks track the clone.
+That copies `agents/` and `commands/` into `~/projects/foo/.claude/` in full: every definition, the MAD topic sets, `kb_tools/`, `liaison_tools/`, and the slash commands. Test suites and caches stay behind. An optional flavor argument tunes the generated definitions for a model family or a specific model — `just install-defs ~/projects/foo gemma-4` (see "Variants and platform compatibility" below).
 
-Claude Code reads agent and command definitions through these links; nothing outside `agents/` and `commands/` is visible to a session. Optionally, a third link gives sessions a path to the repo's project space (justfile, templates, contract docs):
+The installed tree is an **artifact**: this repo is the source of truth, and re-running the install overwrites it unconditionally. Don't edit files under a consuming project's `.claude/agents/` — change them here (template or definition), then re-install. Each install drops a provenance stamp at `.claude/agents-install-manifest.json` recording the generator version, this repo's commit, the flavor, and the time, so you can always tell what a given tree is.
+
+Claude Code reads agent and command definitions from `.claude/`; nothing outside `agents/` and `commands/` is installed, so nothing else is visible to a session. Optionally, a symlink gives sessions in a consuming project a path to this repo's project space (justfile, templates, contract docs):
 
 ```sh
 ln -s <path-to-this-repo>  .claude/agents-repo
 ```
 
-Note: some editors dislike the overlapping symlinks this creates in one workspace — for work on this repo itself, open it directly instead.
+Upgrading from the old symlink setup: remove the `.claude/agents` and `.claude/commands` symlinks and run `just install-defs` against the project instead — that is now the only supported shape.
 
 ## Layout
 
@@ -55,7 +54,7 @@ Contract docs, precedence in this order (code is the defect when it disagrees wi
   * web-app-expert.md
   * windows-app-expert.md
 
-Most of these coder/platform files are **generated**, as are the MAD agent set and the two kb reviewers — do not edit them directly. (security-reviewer.md, tech-writer.md, and tech-writer-reviewer.md are hand-maintained, not generated, despite sharing this list.) Each is rendered from `templates/agents/<name>.md.tmpl` plus the shared text in `templates/shared-sections.toml`, which is the single home of the sections they hold in common (command templates, when present, live in `templates/commands/` and render into `commands/`). Edit the template (agent-specific text) or the shared sections (common text), then run `just generate`. `just check` verifies every generated file still matches its template — run it before any handoff. A definition is generated only if a template declares it, and a file lacking the `# !GENERATED!` banner is never overwritten. One template can declare several definitions — `templates/agents/mad-participant.md.tmpl` renders the four model-pinned participants from one body, so they cannot drift apart. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full mechanism.
+Most of these coder/platform files are **generated**, as are the MAD agent set and the two kb reviewers — do not edit them directly. (security-reviewer.md, tech-writer.md, and tech-writer-reviewer.md are hand-maintained, not generated, despite sharing this list.) Each is rendered from `templates/agents/<name>.md.tmpl` plus the shared text in `templates/shared-sections.toml`, which is the single home of the sections they hold in common (command templates, when present, live in `templates/commands/` and render into `commands/`). A template in a subdirectory renders to the mirrored path — `templates/agents/mad/participant-contract.md.tmpl` → `agents/mad/participant-contract.md`. Edit the template (agent-specific text) or the shared sections (common text), then run `just generate`. `just check` verifies every generated file still matches its template — run it before any handoff. A definition is generated only if a template declares it, and a file lacking the `# !GENERATED!` banner is never overwritten. One template can declare several definitions — `templates/agents/mad-participant.md.tmpl` renders the four model-pinned participants from one body, so they cannot drift apart. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full mechanism.
 
 ## Specialists
 Single-purpose agents invoked directly for non-coding work.
@@ -64,14 +63,14 @@ Single-purpose agents invoked directly for non-coding work.
 * biz-dev-strategist.md - business strategy, market analysis, GTM, monetization
 * applied-mathematician.md - rigorous derivation, model construction, dimensional analysis, claim classification (identity / manifestation / consistency check / derived prediction). Takes given axioms at face value and derives consequences honestly. Use when working inside a formal system — established, novel, or mid-construction — and the task requires careful step-by-step reasoning rather than retrieval of textbook results.
 ### Variants and platform compatibility
-An agent in this set may ship as a base + a defensive variant: the variant adds clauses targeted at specific failure modes observed in smaller / less-priored models, while the base relies on the model's own discipline. None currently does — `applied-mathematician-strict.md` (a gap-aversion variant built for running the math agent on Gemma 4) was retired 2026-08-21 and can be recreated at need.
+Model-specific defensive text is delivered through **NB anchors and model-family files**. A template or shared chunk may expose an `@@nb name="<anchor>"@@` anchor at a spot where an observed failure mode needs a targeted note; with no family file loaded the anchor renders as nothing, so the base definitions are byte-identical to an anchor-free render. A family file — `templates/models/<family>.toml`, one per model family, schema in [templates/models/README.md](templates/models/README.md) — fills anchors: family-wide `text`, with per-model overrides inside the same file. Model scope wins over family scope and at most one `**NB**:` renders per anchor. A family file can never replace, suppress, or modify base text — it only fills anchors. Tuned sets are rendered to order, typically out of repo: `gen-defs.py --generate --output-dir <root> --model-family <file> [--model <name>]`. (The earlier delivery vehicle — a parallel per-model definition file, e.g. `applied-mathematician-strict.md`, a gap-aversion variant built for running the math agent on Gemma 4 — was retired 2026-08-21; the anchor mechanism replaces whole-definition forks.)
 
-The two-variant pattern is a response to a real phenomenon: agent definitions tend to accumulate defensive language that's keyed to the *specific* model they were tested against. Defensive clauses that *protect* one model can *smother* another — same clause, opposite effect, no error event. (Example: probe data from 2026-04-29 showed Gemma 4 31B-it silently filling axiom gaps with textbook conventions, while Gemini 3.1 Pro spontaneously surfaced the same gaps. A "do not fill gaps" clause helps the first model and slows the second.)
+The mechanism is a response to a real phenomenon: agent definitions tend to accumulate defensive language that's keyed to the *specific* model they were tested against. Defensive clauses that *protect* one model can *smother* another — same clause, opposite effect, no error event. (Example: probe data from 2026-04-29 showed Gemma 4 31B-it silently filling axiom gaps with textbook conventions, while Gemini 3.1 Pro spontaneously surfaced the same gaps. A "do not fill gaps" clause helps the first model and slows the second.)
 
 The operating rule when porting an agent definition to a new model:
-**strip first, observe, patch.** Run with the base variant and the new model on a known-shape probe set. Watch for failure modes; only then add defensive language targeted at the failure modes you actually observed. Heavy scaffolding hides the model's true tendencies; you can't engineer for failure modes you never see.
+**strip first, observe, patch.** Run the base definitions with the new model on a known-shape probe set. Watch for failure modes; only then author an anchor and a family-file entry targeted at the failure modes you actually observed. Anchors are never pre-sprinkled speculatively. Heavy scaffolding hides the model's true tendencies; you can't engineer for failure modes you never see.
 
-When adding defensive clauses, record *what tendency the clause was added to correct, against which model*. Without that record, future maintainers can't distinguish "still load-bearing" from "residue from a model we don't use anymore." Comment agent defs like code: not what the clause says, but why and against which observed behavior it was added.
+When adding defensive clauses, record *what tendency the clause was added to correct, against which model*. Without that record, future maintainers can't distinguish "still load-bearing" from "residue from a model we don't use anymore." Comment family-file entries like code: not what the NB says, but why and against which observed behavior it was added.
 
 ## Multi-Agent Debate Agent Set
 Uses Multi-Agent Debate Process.
@@ -80,7 +79,7 @@ Two modes share the same participants but use different referees and topic libra
 * **Design mode** — constructive proposal for an *open problem* (derivations, software designs, hardware designs, other problem-solving).
 
 ### Shared Agents
-* mad-participant-contract.md - the model-neutral participant contract (reviewer in review mode, proposer in design mode); the body a guest model receives as its system prompt
+* mad/participant-contract.md - the model-neutral participant contract (reviewer in review mode, proposer in design mode); the body a guest model receives as its system prompt
 * mad-participant-fable.md, mad-participant-opus.md, mad-participant-sonnet.md, mad-participant-haiku.md - the same contract as dispatchable agents, one per model pin; a run draws its participants from different pins so their blind spots differ
 * mad-guest-liaison.md - a liaison that can loop in an external model via API base url, key, and model name
 * mad-alignment-assessor.md - only assesses alignment/disagreement among participants
@@ -90,6 +89,7 @@ Two modes share the same participants but use different referees and topic libra
 * `post-openai.sh` - posts a message history to an OpenAI-compatible API and prints the assistant reply. Reads the API key from a file so it never enters argv or env.
 * `msg-util.sh` - the only sanctioned path for creating or mutating the messages JSON (init / append). Use this rather than ad-hoc jq or sed.
 * `extract-agent-body.sh` - extracts the body of an agent definition file (drops the frontmatter) for use as a system prompt.
+* `relay_driver.py` - the corpus-relay eval instrument: runs budgeted, fresh-history Q&A sessions against a guest model over a read-only corpus, appending its own READ/LIST/GREP relay protocol block to the caller's system prompt (callers supply navigation doctrine only) and servicing exactly what it appended. Per-question sessions, answers, and a `stats.csv` with real token totals (via `post-openai.py`'s `USAGE_STATS_FILE` side channel) land under `--output-dir`. Sketch: `relay_driver.py --corpus-root kb-root --system-prompt scout.md --questions-file questions.md --output-dir eval-out --env-file guest.env` (single questions via `--question` or `--question-number N`).
 * `tests/` - fixtures for the above scripts.
 
 ### Review Mode
@@ -97,7 +97,7 @@ Two modes share the same participants but use different referees and topic libra
 * mad-review-referee.md - runs multi-agent debate review process
 * commands
   * mad-review.md - initiates a review process. you must provide:
-    * a topic from .claude/agents/mad-review-topics/
+    * a topic from .claude/agents/mad/review-topics/
       * agent-definition.md 
       * architecture.md
       * general-code.md
@@ -115,8 +115,8 @@ Two modes share the same participants but use different referees and topic libra
     * all artifacts, temporary or otherwise, are produced under the review work directory
   * round cap: 5
   * examples 
-    * ```/mad-review TOPIC=.claude/agents/mad-review-topics/sim-code.md SEATS=opus,sonnet CONSTRAINTS=ARCHITECTURE.md TARGET=src/sim/```
-    * ```/mad-review TOPIC=.claude/agents/mad-review-topics/general-code.md SEATS=opus,sonnet,guest ENV_FILE=~/.config/guest.env CONSTRAINTS=AGENTS.md TARGET=src/ **IGNORE
+    * ```/mad-review TOPIC=.claude/agents/mad/review-topics/sim-code.md SEATS=opus,sonnet CONSTRAINTS=ARCHITECTURE.md TARGET=src/sim/```
+    * ```/mad-review TOPIC=.claude/agents/mad/review-topics/general-code.md SEATS=opus,sonnet,guest ENV_FILE=~/.config/guest.env CONSTRAINTS=AGENTS.md TARGET=src/ **IGNORE
     `src/third_party`**```
 
 ### Design Mode
@@ -124,7 +124,7 @@ Two modes share the same participants but use different referees and topic libra
 * mad-design-referee.md - runs multi-agent debate design process
 * commands
   * mad-design.md - initiates a design process. you must provide:
-    * a topic from .claude/agents/mad-design-topics/
+    * a topic from .claude/agents/mad/design-topics/
       * ai-engineering.md
       * architecture.md
       * math-derivation.md (more topics can be added: software-design, hardware-design, etc.)
@@ -145,7 +145,7 @@ Two modes share the same participants but use different referees and topic libra
     * **under-determined**: all participants converge on the same diagnosis of why the problem cannot be closed from the supplied axioms, identifying the specific missing axiom/principle/input
     * **unresolved**: candidates preserved for human arbitration if no convergence within round cap
   * examples
-    * ```/mad-design TOPIC=.claude/agents/mad-design-topics/math-derivation.md SEATS=fable,opus,sonnet CONSTRAINTS=SPEC.md TARGET=mad-design/my-derivation/```
+    * ```/mad-design TOPIC=.claude/agents/mad/design-topics/math-derivation.md SEATS=fable,opus,sonnet CONSTRAINTS=SPEC.md TARGET=mad-design/my-derivation/```
 
 ## Guest Liaison
 
@@ -230,6 +230,6 @@ Agents and portable tooling for building, navigating, and maintaining a knowledg
 
 `agents/kb_tools/` is the stdlib-only, zero-config Python toolchain the kb agents drive — see [agents/kb_tools/AGENTS.md](agents/kb_tools/AGENTS.md) for the full picture. A consuming project:
 
-1. Links `.claude/agents` as in [Install](#install) and keeps its KB in `kb-root/` at the repo root — the tools self-anchor by walking up from the cwd to `.git` and requiring `kb-root/` beside it.
+1. Installs `.claude/agents` as in [Install](#install) and keeps its KB in `kb-root/` at the repo root — the tools self-anchor by walking up from the cwd to `.git` and requiring `kb-root/` beside it.
 2. Installs the runner targets once, from the project root: `PYTHONPATH=.claude/agents python3 -m kb_tools.kb_util --install-targets` — this adds a single non-fatal include line to the project's justfile or Makefile.
 3. Uses `just`/`make` `verify`, `refresh`, and `stats` from then on.

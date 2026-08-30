@@ -26,6 +26,17 @@ env vars:
   TEMPERATURE        (optional) float in [0.0, 2.0] (default: 0.0)
   DEBUG_POST         (optional) "true" to dump the request payload to stderr
   DEBUG_RESPONSE     (optional) "true" to tee the raw SSE stream + reassembled output to stderr
+  USAGE_STATS_FILE   (optional) path to a token-usage side-channel file. When
+                                set, one JSON line is appended per successful
+                                call (exit 0): {"prompt_tokens": ...,
+                                "completion_tokens": ..., "total_tokens": ...,
+                                "model": ...} — token fields from the
+                                response's `usage` object, model from the
+                                response object; null where the API omits a
+                                field. Usage never goes to stdout. A failed
+                                write is a stderr warning only, never a
+                                transport failure. Unset: no file is touched
+                                and behavior is unchanged.
 
 The API key is read from API_KEY_FILE into process memory. It is never placed
 on the command line or into an environment variable, so it is not exposed
@@ -212,6 +223,47 @@ def reassemble_stream(chunks: list[dict]) -> str:
         ordered = [tc_map[k] for k in sorted(tc_map.keys())]
         return "TOOL_CALLS\n" + json.dumps(ordered)
     return "".join(content_parts)
+
+
+def extract_usage(chunks: list[dict]) -> dict:
+    """Extract token usage and model id from parsed response objects.
+
+    Covers both response shapes with one scan: a non-streaming full completion
+    object (usage at the top level beside `choices`), and SSE streams — where
+    usage typically rides a late chunk with empty `choices` (the shape
+    `reassemble_stream` skips) or on the final delta chunk. The last object
+    carrying each field wins; fields the API never provided are None.
+    """
+    usage: dict = {}
+    model = None
+    for obj in chunks:
+        u = obj.get("usage")
+        if isinstance(u, dict):
+            usage = u
+        m = obj.get("model")
+        if isinstance(m, str) and m:
+            model = m
+    return {
+        "prompt_tokens": usage.get("prompt_tokens"),
+        "completion_tokens": usage.get("completion_tokens"),
+        "total_tokens": usage.get("total_tokens"),
+        "model": model,
+    }
+
+
+def write_usage_stats(stats_path: str, stats: dict) -> None:
+    """Append one JSON line to the USAGE_STATS_FILE side channel.
+
+    Advisory only: any write failure is a stderr warning, never a transport
+    failure, and nothing about the side channel ever reaches stdout.
+    """
+    try:
+        with open(stats_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(stats) + "\n")
+    except OSError as e:
+        sys.stderr.write(
+            f"warning: could not write USAGE_STATS_FILE '{stats_path}': {e}\n"
+        )
 
 
 def list_models(base_url: str, token: str) -> list[str]:
@@ -409,6 +461,7 @@ def main() -> int:
 
     debug_post = os.environ.get("DEBUG_POST", "false").lower() == "true"
     debug_response = os.environ.get("DEBUG_RESPONSE", "false").lower() == "true"
+    usage_stats_file = os.environ.get("USAGE_STATS_FILE", "")
 
     try:
         messages = json.loads(messages_file.read_text(encoding="utf-8"))
@@ -474,6 +527,9 @@ def main() -> int:
         sys.stderr.write("error: no content in stream — raw response follows\n")
         sys.stderr.write(raw_text if raw_text.endswith("\n") else raw_text + "\n")
         return 1
+
+    if usage_stats_file:
+        write_usage_stats(usage_stats_file, extract_usage(chunks))
 
     _emit(reassembled)
     return 0

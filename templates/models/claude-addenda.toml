@@ -1,0 +1,20 @@
+# templates/models/claude-addenda.toml — reserved for Claude-family NBs.
+#
+# Zero active entries by design. Per the strip-first-observe-patch doctrine
+# (README.md "Variants and platform compatibility"): run the base definitions,
+# watch for failure modes, and only then author an entry targeted at behavior
+# actually observed. No Claude-family failure has been observed against the
+# anchored definitions yet, so this file carries no tuning — it reserves the
+# family name and records the shape a future entry takes.
+#
+# The sketches below are UNMOTIVATED — illustration of the schema only, not
+# active tuning. Do not uncomment one without probe data: an entry needs a
+# provenance comment naming the observed behavior, the model, and the date.
+#
+#   # <anchor>: <observed behavior>; model — fable, probe data <YYYY-MM-DD>.
+#   [nb.some-anchor.models.fable]
+#   text = "Measure twice, cut once: re-derive the step before building on it."
+#
+#   # <anchor>: <observed behavior>; model — haiku, probe data <YYYY-MM-DD>.
+#   [nb.some-anchor.models.haiku]
+#   text = "It is a tech doc, not a soliloquy: state the result and move on."

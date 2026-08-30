@@ -6,7 +6,7 @@ claude-code and agent processes run in an auth sandbox as unprivileged user `age
 **INVARIANT**: on any sandbox obstruction, do NOT circumvent. Surface the error and stop pursuing the goal it gates and everything downstream of it. An inaccessible path (read, write, or modify) is a halting event.
 
 ## Scratch space
-**INVARIANT**: `/tmp` and other system-wide scratch locations are off limits. All scratch — throwaway builds, probe harnesses, captured output — goes in `.claude/temp/` under the active project root. If it doesn't exist, stop and say so; don't improvise a location.
+**INVARIANT**: `/tmp` and other system-wide scratch locations are off limits. All scratch — throwaway builds, probe harnesses, captured output — goes in `.claude-temp/` under the active project root (a sibling of `.claude/`, not inside it — writes under `.claude/` trip the permission system's own-settings protections). If it doesn't exist, stop and say so; don't improvise a location.
 
 ## Task management
 Dispatch tasks to sub-agents whenever possible; stay free for discussion, planning, and other interactive work.

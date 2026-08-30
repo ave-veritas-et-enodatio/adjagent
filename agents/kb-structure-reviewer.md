@@ -1,6 +1,7 @@
 ---
 #
 # !GENERATED! from templates/agents/kb-structure-reviewer.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !BODY-SHA256! 473d7f6ff7e52826ae8ffa592203fd817cf1630777a24f936e796c29f19feb89
 #
 name: kb-structure-reviewer
 description: "Adversarial review of KB structure: navigability, link integrity, level coherence, invariant placement, and entry-point density. Think like an agent that got lost. Never modifies files."

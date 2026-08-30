@@ -1,10 +1,13 @@
 .DS_Store
-.claude/temp/
+.claude-temp/
 .claude/settings.local.json
+.claude/agents/
+.claude/commands/
 __pycache__/
 .pytest_*/
 .venv/
 .venv
+
 
 # auto-made backups of regenerated files.
 *.bak

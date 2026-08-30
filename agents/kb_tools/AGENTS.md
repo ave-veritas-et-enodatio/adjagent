@@ -110,7 +110,7 @@ Single-source modules (the anti-drift discipline — one definition, many consum
 
 | Module | Role |
 |---|---|
-| `kb_util.py` | Repo/KB path construction (the consuming repo's root is discovered by walking up from the cwd to `.git` with `kb-root/` beside it — never from `__file__`, which resolves through the consumption symlink into the wrong repo; the KB directory name is single-sourced here, not hardwired across tools) **and** maintenance-command hints (`just`/`make` `refresh`/`verify`, detected from the root's runner file) for remediation output + tests. Also the runner-target installer CLI (`--install-targets` / `--uninstall-targets`; see [Runner targets](#runner-targets-the-only-sanctioned-entry-points)). |
+| `kb_util.py` | Repo/KB path construction (the consuming repo's root is discovered by walking up from the cwd to `.git` with `kb-root/` beside it — never from `__file__`, which points wherever this toolchain happens to have been installed rather than at the repo being worked on; the KB directory name is single-sourced here, not hardwired across tools) **and** maintenance-command hints (`just`/`make` `refresh`/`verify`, detected from the root's runner file) for remediation output + tests. Also the runner-target installer CLI (`--install-targets` / `--uninstall-targets`; see [Runner targets](#runner-targets-the-only-sanctioned-entry-points)). |
 | `kb_schema.py` | The build-band ladder, the `clm`/`exp`/`sup` id grammar (`[a-z0-9]{6}` body), and the collision-checked id minter. Mirrors the vocabulary in `METADATA_SCHEMA.md`. |
 | `kb_links.py` | Low-level Markdown link-scanning primitives (code-span neutralization, inline-link regex, file crawl, skip-dir rules) shared by the link checker and the query CLI's reverse-find. Primitives only; classification/gating stays in the checker. |
 
@@ -163,14 +163,15 @@ Per project policy, **do not** run these tools ad-hoc — use the consuming
 project's runner target (the tools detect the runner and name it in
 remediation hints).
 
-A consuming project's runner gains the KB targets by **include, not copy**:
-exactly one installed line pulls a fragment shipped in this repo live through
-the `.claude/agents` symlink — `-include
-.claude/agents/kb_tools/runner-snippets/kb.mk` in a Makefile, or `import?
-'.claude/agents/kb_tools/runner-snippets/kb.just'` in a justfile (`import?`
-requires just ≥ 1.33). The non-fatal include forms are deliberate: a broken
-symlink degrades to missing KB targets, never a broken runner. The line is
-managed mechanically by the installer, run from the consumer root:
+A consuming project's runner gains the KB targets by **include, not copy into
+the runner file**: exactly one installed line pulls in a fragment that ships
+with this toolchain, at its installed location under `.claude/agents/` —
+`-include .claude/agents/kb_tools/runner-snippets/kb.mk` in a Makefile, or
+`import? '.claude/agents/kb_tools/runner-snippets/kb.just'` in a justfile
+(`import?` requires just ≥ 1.33). The non-fatal include forms are deliberate:
+a project whose `.claude/agents/` has not been installed (or has been removed)
+degrades to missing KB targets, never a broken runner. The line is managed
+mechanically by the installer, run from the consumer root:
 
 ```sh
 PYTHONPATH=.claude/agents python3 -m kb_tools.kb_util --install-targets

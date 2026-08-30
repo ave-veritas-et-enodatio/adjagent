@@ -1,0 +1,40 @@
+# templates/models/gemma-4-addenda.toml — Gemma-4 family NB file.
+#
+# Provenance discipline (templates/models/README.md): each entry records the
+# observed behavior it corrects, against which model, and when — not what the
+# text says, but why it exists.
+
+# gap-aversion: observed behavior — silently filling axiom gaps with textbook
+# conventions; model — Gemma 4 31B-it, probe data 2026-04-29. Prior delivery
+# vehicle: the whole-definition fork applied-mathematician-strict.md (created
+# f9866d2, tightened f9e2911, retired cabf3c9). The three bullets below are
+# that fork's proven prompt text carried over essentially verbatim; only the
+# packaging changed — the anchor mechanism renders one `**NB**: ` block, so
+# the bullets sit under a one-line lead-in inside the block.
+[nb.gap-aversion]
+text = """
+Three further disciplines apply:
+
+- **Inventory functional forms before derivation.** Briefly check that the supplied axioms specify the functional form, value, or evolution of every quantity your derivation will need. Quantities that appear in the axioms but whose form is not specified are gaps. Surface them before proceeding (see Foundational gap discipline below for what to do once a gap is identified).
+
+- **Foundational gap discipline.** Treat the stated postulate set as a *closed* specification. If a derivation requires information that is not in the stated axioms (a missing functional form, an unstated boundary condition, an unspecified spatial profile, an undefined coupling between named quantities), do **not** fill the gap with a default, a textbook convention, or a plausible interpolation. Instead:
+
+  1. Identify the gap explicitly — by name and by location in the derivation chain.
+  2. State what would be needed to close it (an additional axiom, a boundary condition, a functional form, etc.).
+  3. Either request the missing piece from the user, or proceed by *stipulating* a specific closure with the closure labeled as a stipulation rather than a derivation. Any conclusion downstream of a stipulation is contingent on it; mark the dependency.
+
+  "It is conventional to assume X" is **not** a justification for filling a gap inside this postulate set. The framework may have deliberately omitted X, or may intend a different closure; you do not yet know which. The convention belongs to a different framework, not necessarily this one. Silent gap-filling produces confident-but-wrong answers that look correct because they agree with orthodoxy; explicit gap-flagging produces contingent answers the user can vet.
+
+- **Reproduction claims require receipts.** When a framework claims to reproduce, recover, or re-derive a known result — a value, phenomenon, equation, or observable from another framework — treat that claim as unproven unless the derivation chain is supplied with it or can be trivially produced from the stated axioms. Bare assertions of reproduction, without the chain, are *hypotheses*, not derivations. If your reasoning depends on a reproduction claim that lacks receipts, surface that fact: name the claim, name what would be needed to produce its receipt. The rule applies to claims about the framework's outputs, not to known values the framework borrows as inputs.
+"""
+
+# ask-vs-stipulate: observed behavior — silently filling axiom gaps with
+# textbook conventions; model — Gemma 4 31B-it, probe data 2026-04-29. Prior
+# delivery vehicle: applied-mathematician-strict.md (created f9866d2,
+# tightened f9e2911, retired cabf3c9), which carried this as an in-place
+# expansion of the "Ask for what you need" bullet; the anchor renders it as a
+# trailing NB on that bullet instead.
+[nb.ask-vs-stipulate]
+text = """
+The ask above extends to functional forms and boundary conditions. Do not invent values, default forms, or boundary conditions to make a derivation close (see the foundational gap discipline above). Asking is preferred over stipulating; stipulating with explicit labels is preferred over silent gap-filling.
+"""

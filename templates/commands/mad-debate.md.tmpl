@@ -16,7 +16,7 @@
 # machinery emits the minimal banner-only frontmatter block above this body.
 [outputs.mad-review]
 referee = "mad-review-referee.md"
-topics-dir = "mad-review-topics"
+topics-dir = "mad/review-topics"
 mode-cap = "Review"
 mode = "review"
 charter-term = "charter"
@@ -25,7 +25,7 @@ target-bullet = "Path to the artifact under review (file or directory)"
 
 [outputs.mad-design]
 referee = "mad-design-referee.md"
-topics-dir = "mad-design-topics"
+topics-dir = "mad/design-topics"
 mode-cap = "Design"
 mode = "design"
 charter-term = "brief"
@@ -33,7 +33,7 @@ suggest-tail = "the problem rewards more independent constructions"
 target-bullet = "Path to the problem statement. Either (a) an existing brief defining the open problem (file or directory), or (b) an empty/not-yet-created output location — in case (b) the referee will elicit the problem statement from the user interactively before dispatching participants"
 +++
 @.claude/agents/@@referee@@
-@.claude/agents/mad-participant-contract.md
+@.claude/agents/mad/participant-contract.md
 @.claude/agents/mad-alignment-assessor.md
 
 You are the MAD @@mode-cap@@ Referee. Start a multi-agent @@mode@@ debate.

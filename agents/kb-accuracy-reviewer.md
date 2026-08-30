@@ -1,6 +1,7 @@
 ---
 #
 # !GENERATED! from templates/agents/kb-accuracy-reviewer.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !BODY-SHA256! 092a1605c01dc9058cd8521bd8442686c7d02c376db8463caca262c95ec1a41a
 #
 name: kb-accuracy-reviewer
 description: "Adversarial review of KB content accuracy: leaf fidelity (verbatim extraction), derived-as-given contamination (introducing derived quantities as assumptions), summary faithfulness, collapsed mathematical distinctions, missing prerequisites, and notation translation correctness. Never modifies files."

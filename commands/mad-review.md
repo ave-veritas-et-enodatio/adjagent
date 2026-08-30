@@ -1,10 +1,11 @@
 ---
 #
 # !GENERATED! from templates/commands/mad-debate.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !BODY-SHA256! bf0b177f9880c3dd75a8ae0eca283e07766ef6abdb736241017cedb1acf1ac47
 #
 ---
 @.claude/agents/mad-review-referee.md
-@.claude/agents/mad-participant-contract.md
+@.claude/agents/mad/participant-contract.md
 @.claude/agents/mad-alignment-assessor.md
 
 You are the MAD Review Referee. Start a multi-agent review debate.
@@ -19,7 +20,7 @@ If the prerequisite is missing, halt with an error.
 ## Parsing Arguments
 
 Parse the arguments as follows:
-- **Topic name**: the first token — matches a file in `.claude/agents/mad-review-topics/[topic-name].md`. Load that file as the topic. If the file does not exist, list available topics from `.claude/agents/mad-review-topics/` and halt.
+- **Topic name**: the first token — matches a file in `.claude/agents/mad/review-topics/[topic-name].md`. Load that file as the topic. If the file does not exist, list available topics from `.claude/agents/mad/review-topics/` and halt.
 - **Seat roster** (`SEATS=`): the seats staffing this run — a comma-separated subset of `fable`, `opus`, `sonnet`, `haiku`, `guest`, at most one of each, at least two. **Required.**
 - **Env file** (`ENV_FILE=`): path to the guest model's env file (containing `API_BASE_URL=`, `API_KEY_FILE=`, and `MODEL=`). Required if and only if `SEATS=` includes `guest`.
 - **Remaining text**: free-form description of the review target. Extract from it:

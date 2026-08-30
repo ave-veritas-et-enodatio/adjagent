@@ -1,0 +1,9 @@
+data: {"id":"chatcmpl-usage1","model":"test-model-v1","choices":[{"delta":{"role":"assistant","content":"Hi"},"index":0}]}
+
+data: {"id":"chatcmpl-usage1","model":"test-model-v1","choices":[{"delta":{"content":" there"},"index":0}]}
+
+data: {"id":"chatcmpl-usage1","model":"test-model-v1","choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}
+
+data: {"id":"chatcmpl-usage1","model":"test-model-v1","choices":[],"usage":{"prompt_tokens":42,"completion_tokens":7,"total_tokens":49}}
+
+data: [DONE]

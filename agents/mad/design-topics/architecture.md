@@ -43,7 +43,7 @@ States (a), (b), (c), and (d) all retire the debate as productive. State (e) esc
 
 ## What This Topic Is Not
 
-- This is not architecture *review* of an existing system. If the artifact already exists and the goal is to find flaws, use `mad-review-topics/architecture.md` with the review referee.
+- This is not architecture *review* of an existing system. If the artifact already exists and the goal is to find flaws, use `mad/review-topics/architecture.md` with the review referee.
 - This is not implementation-level design. Findings about magic strings, error-handling style, or local DRY belong in code review, not here.
 - This is not a search for an elegant pattern. A pattern is justified only if it removes a harder complexity than it introduces.
 - This is not greenfield boilerplate. Reserve this process for problems where the structural decisions are genuinely non-obvious and the cost of getting them wrong is high.

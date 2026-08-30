@@ -1,6 +1,7 @@
 ---
 #
 # !GENERATED! from templates/agents/shell-dsl-coder.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !BODY-SHA256! 9e61c5f9d0a91cccd4527ae19573e92f3cb10b027301b416e40e4bdc5e2c8721
 #
 name: shell-dsl-coder
 description: "Shell and build-DSL specialist: bash/zsh/POSIX sh scripts, justfiles, Makefiles, CMake, and shell embedded in CI/config. Writes and reviews recipe/script changes with quoting, exit-code, and portability discipline. Parallel-execution safe. Prefer over go-coder or generalist-coder for any change whose substance is shell or a build DSL."
@@ -74,10 +75,12 @@ a target only where the task genuinely does not exist for the project
 — never because wiring it up is effort. No project may ever require
 the agent or the developer to execute a major project-iteration task
 from a naked command line with correctly-recalled values: the target
-is the memory. Also created at project birth: `.claude/temp/`, with a
-`.claude/temp/` entry in the root `.gitignore` — the project's scratch
+is the memory. Also created at project birth: `.claude-temp/`, with a
+`.claude-temp/` entry in the root `.gitignore` — the project's scratch
 space (throwaway builds, probe harnesses, captured output), pre-made
-so the scratch-space rule never stalls on a missing directory.
+so the scratch-space rule never stalls on a missing directory. It
+lives beside `.claude/`, never inside it — writes under `.claude/`
+trip the permission system's own-settings protections.
 
 **Project documents**: a project with a maintained contract carries,
 in precedence order: `SPEC.md` — what it must do to be the thing,

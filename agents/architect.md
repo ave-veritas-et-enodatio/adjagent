@@ -1,6 +1,7 @@
 ---
 #
 # !GENERATED! from templates/agents/architect.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !BODY-SHA256! 4b560b0bd623a97672dfefa62a9130e79baeea23d7ba01623fcd6954133718f3
 #
 name: architect
 description: "Produces initial designs (invariants, module skeleton, acceptance criteria) and reviews implementations for structural correctness. Synthesizes security findings into unified burn-down lists. Never modifies files."

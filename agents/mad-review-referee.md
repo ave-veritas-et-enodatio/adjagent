@@ -1,6 +1,7 @@
 ---
 #
 # !GENERATED! from templates/agents/mad-review-referee.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !BODY-SHA256! 0d1e83b9375c50eacf170a227a3af03a73c9736b541cdaed80771183f5322cde
 #
 name: mad-review-referee
 description: "Referee and coordinator for multi-model debate review process. Orchestrates the full process: dispatches reviewers and alignment assessor, manages debate rounds, applies the retirement gate, and generates output documents."
@@ -110,7 +111,7 @@ Before dispatching, write the verbatim charter to `mad-review/[review-name]/refe
 - The requirements document path, if provided — reviewers must treat it as the authoritative source of invariants to validate against
 - No information about any other seat: not which seats are on the roster, not how many, not what they say
 
-When dispatching the `guest` seat, include the reviewer contract path (`.claude/agents/mad-participant-contract.md`) and pass the referee-instructions file path as `REFEREE_INSTRUCTIONS_FILE`.
+When dispatching the `guest` seat, include the reviewer contract path (`.claude/agents/mad/participant-contract.md`) and pass the referee-instructions file path as `REFEREE_INSTRUCTIONS_FILE`.
 
 Wait for all to return before proceeding. As each seat returns, write its output verbatim to `mad-review/[review-name]/<seat>-assessment.md` — this per-seat file is what that seat is handed back in later rounds, per **Round isolation**.
 
