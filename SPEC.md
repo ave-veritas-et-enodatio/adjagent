@@ -13,11 +13,11 @@ ln -s <repo>/commands  .claude/commands
 
 A consuming project sees the linked contents as if they lived at `.claude/agents/` and `.claude/commands/`. Every path written inside a definition body — a file the agent is told to `Read`, a script it invokes — is written against `.claude/agents/...`, not against the repository's own path, since that is the path the definition resolves from inside a consuming session.
 
-Every file directly under `agents/` matching `*.md` and carrying frontmatter with dispatch keys (`name`, `description`, `model`) is a dispatchable agent definition. One file is a deliberate exception: `agents/mad-participant-contract.md` carries a frontmatter block empty of those keys — structurally present, but undispatchable (see Guest-Extraction Contract). Non-`.md` entries under `agents/` (`mad-review-topics/`, `mad-design-topics/`, `liaison-tools/`) are supporting material read by definitions, not definitions themselves.
+Every file directly under `agents/` matching `*.md` and carrying frontmatter with dispatch keys (`name`, `description`, `model`) is a dispatchable agent definition. One file is a deliberate exception: `agents/mad-participant-contract.md` carries a frontmatter block empty of those keys — structurally present, but undispatchable (see Guest-Extraction Contract). Non-`.md` entries under `agents/` (`mad-review-topics/`, `mad-design-topics/`, `liaison_tools/`, `kb_tools/`) are supporting material read by definitions, not definitions themselves.
 
 ## Generated-Definition Integrity
 
-A subset of definitions in `agents/` are generated rather than hand-authored. For every such definition:
+A subset of definitions in the deployed surfaces (`agents/`, `commands/`) are generated rather than hand-authored. For every such definition:
 
 - Its content is byte-identical to what its declared template currently renders.
 - Every banner claiming a definition is generated names a template that exists and declares that definition. A banner naming a missing template, or naming a template that does not declare it, is a contract violation.
@@ -39,7 +39,7 @@ A target is written only when it is provably the tool's own output. A hand-maint
 
 ## Guest-Extraction Contract
 
-Any definition's body — the content after its frontmatter — must be extractable frontmatter-free for use as an external (non-Claude) model's system prompt. The observable property every `agents/*.md` must hold is mechanical: extraction succeeds and yields the complete body (`agents/liaison-tools/extract-agent-body.sh` exits zero, drops exactly the frontmatter block, loses no body content).
+Any definition's body — the content after its frontmatter — must be extractable frontmatter-free for use as an external (non-Claude) model's system prompt. The observable property every `agents/*.md` must hold is mechanical: extraction succeeds and yields the complete body (`agents/liaison_tools/extract-agent-body.sh` exits zero, drops exactly the frontmatter block, loses no body content).
 
 `agents/mad-participant-contract.md` is written specifically for this extraction: its frontmatter is deliberately empty of dispatch keys so it cannot itself be dispatched as an agent — it exists only to be extracted and relayed as a guest model's system prompt.
 

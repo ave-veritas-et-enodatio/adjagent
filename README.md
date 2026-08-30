@@ -27,7 +27,7 @@ Note: some editors dislike the overlapping symlinks this creates in one workspac
 ```
 agents/       deployed — every catalog entry below lives here unless noted otherwise
 commands/     deployed — slash commands, referenced below as "commands"
-templates/    generator tooling (not session-visible) — see ARCHITECTURE.md
+templates/    template sources (not session-visible), rendered by gen-agents.py at the repo root — see ARCHITECTURE.md
 user-config/  published operator baseline — see user-config/README.md
 ```
 
@@ -55,7 +55,7 @@ Contract docs, precedence in this order (code is the defect when it disagrees wi
   * web-app-expert.md
   * windows-app-expert.md
 
-Most of these coder/platform files are **generated**, as is the MAD agent set — do not edit them directly. (security-reviewer.md, tech-writer.md, and tech-writer-reviewer.md are hand-maintained, not generated, despite sharing this list.) Each is rendered from `templates/<name>.md.tmpl` plus the shared text in `templates/shared-sections.toml`, which is the single home of the sections they hold in common. Edit the template (agent-specific text) or the shared sections (common text), then run `just generate`. `just check` verifies every generated file still matches its template — run it before any handoff. A definition is generated only if a template declares it, and a file lacking the `# !GENERATED!` banner is never overwritten. One template can declare several definitions — `templates/mad-participant.md.tmpl` renders the four model-pinned participants from one body, so they cannot drift apart. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full mechanism.
+Most of these coder/platform files are **generated**, as are the MAD agent set and the two kb reviewers — do not edit them directly. (security-reviewer.md, tech-writer.md, and tech-writer-reviewer.md are hand-maintained, not generated, despite sharing this list.) Each is rendered from `templates/agents/<name>.md.tmpl` plus the shared text in `templates/shared-sections.toml`, which is the single home of the sections they hold in common (command templates, when present, live in `templates/commands/` and render into `commands/`). Edit the template (agent-specific text) or the shared sections (common text), then run `just generate`. `just check` verifies every generated file still matches its template — run it before any handoff. A definition is generated only if a template declares it, and a file lacking the `# !GENERATED!` banner is never overwritten. One template can declare several definitions — `templates/agents/mad-participant.md.tmpl` renders the four model-pinned participants from one body, so they cannot drift apart. See [ARCHITECTURE.md](ARCHITECTURE.md) for the full mechanism.
 
 ## Specialists
 Single-purpose agents invoked directly for non-coding work.
@@ -86,7 +86,7 @@ Two modes share the same participants but use different referees and topic libra
 * mad-alignment-assessor.md - only assesses alignment/disagreement among participants
 
 ### Liaison Tooling
-`agents/liaison-tools/` contains shell helpers used by both `mad-guest-liaison.md` (MAD process) and `guest-liaison.md` (general guest-model sessions). The liaison agents are the primary callers; MAD referees set `TMPDIR` for liaison invocations to keep `mktemp` output contained in the review/design directory.
+`agents/liaison_tools/` contains shell helpers used by both `mad-guest-liaison.md` (MAD process) and `guest-liaison.md` (general guest-model sessions). The liaison agents are the primary callers; MAD referees set `TMPDIR` for liaison invocations to keep `mktemp` output contained in the review/design directory.
 * `post-openai.sh` - posts a message history to an OpenAI-compatible API and prints the assistant reply. Reads the API key from a file so it never enters argv or env.
 * `msg-util.sh` - the only sanctioned path for creating or mutating the messages JSON (init / append). Use this rather than ad-hoc jq or sed.
 * `extract-agent-body.sh` - extracts the body of an agent definition file (drops the frontmatter) for use as a system prompt.
@@ -149,7 +149,7 @@ Two modes share the same participants but use different referees and topic libra
 
 ## Guest Liaison
 
-`guest-liaison.md` relays a multi-turn conversation between you and an external "guest" model accessed via an OpenAI-compatible API. Distinct from `mad-guest-liaison.md`, which is the MAD-process-only variant invoked by referees inside review/design debates. Both share `liaison-tools/`.
+`guest-liaison.md` relays a multi-turn conversation between you and an external "guest" model accessed via an OpenAI-compatible API. Distinct from `mad-guest-liaison.md`, which is the MAD-process-only variant invoked by referees inside review/design debates. Both share `liaison_tools/`.
 
 Properties of the relay:
 * **Verbatim relay** of the system prompt and each user message — no summarizing, paraphrasing, or topic-tailoring. Verified post-write by `diff` against the source; the liaison aborts before sending if the diff is non-empty.
@@ -209,16 +209,27 @@ Re-running `/guest-start` with an existing topic slug offers to resume — the p
 
 ## Knowledge Base Agent Set
 
-* Using/navigating a knowledge base - see the KB's own README in the repo that hosts it
+Agents and portable tooling for building, navigating, and maintaining a knowledge base — a navigable, verbatim Markdown distillation of a canonical corpus with a queryable claim-graph metadata spine. All eight kb-* definitions are project-portable: per-project facts live in the consuming project's `kb-root/CLAUDE.md`, not in the definitions. kb-accuracy-reviewer.md and kb-structure-reviewer.md are **generated** from their templates; the other six are hand-maintained.
+
+* Using/navigating a knowledge base
   * kb-docent.md
   * commands/ - custom slash commands
     * kb-start.md (/kb-start)
     * kb-next.md  (/kb-next)
 
 * Building/Modifying Knowledge Base
-  * kb-coordinator - runs knowledge base creation/update multi-agent process
+  * kb-coordinator.md - runs knowledge base creation/update multi-agent process
   * kb-content-distiller.md
   * kb-accuracy-reviewer.md
   * kb-taxonomy-architect.md
   * kb-structure-reviewer.md
   * kb-latex-specialist.md
+  * kb-maintainer.md - the write side: leaf edits, claim-graph wiring, refresh→verify loop
+
+### KB toolchain
+
+`agents/kb_tools/` is the stdlib-only, zero-config Python toolchain the kb agents drive — see [agents/kb_tools/AGENTS.md](agents/kb_tools/AGENTS.md) for the full picture. A consuming project:
+
+1. Links `.claude/agents` as in [Install](#install) and keeps its KB in `kb-root/` at the repo root — the tools self-anchor by walking up from the cwd to `.git` and requiring `kb-root/` beside it.
+2. Installs the runner targets once, from the project root: `PYTHONPATH=.claude/agents python3 -m kb_tools.kb_util --install-targets` — this adds a single non-fatal include line to the project's justfile or Makefile.
+3. Uses `just`/`make` `verify`, `refresh`, and `stats` from then on.

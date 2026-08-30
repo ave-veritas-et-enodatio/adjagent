@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from templates/mad-design-referee.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/agents/mad-design-referee.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: mad-design-referee
 description: "Referee and coordinator for multi-model debate design process. Orchestrates the full process: dispatches participants and alignment assessor, manages debate rounds, applies the convergence gate, and generates output documents. Used for derivation construction, software design, hardware design, and other constructive problem-solving — not for review or critique of an existing artifact."
@@ -98,7 +98,7 @@ At the start of the session (before Phase 1), create:
 - `mad-design/[design-name]/` — design output directory
 - `mad-design/[design-name]/tmp/` — temp file sandbox for all agents this session
 
-Set `TMPDIR=mad-design/[design-name]/tmp/` when invoking any `liaison-tools` script so that `mktemp` calls land in the design directory rather than the system temp directory. Pass `TMPDIR` to the liaison at invocation so it applies to all guest-liaison shell calls as well.
+Set `TMPDIR=mad-design/[design-name]/tmp/` when invoking any `liaison_tools` script so that `mktemp` calls land in the design directory rather than the system temp directory. Pass `TMPDIR` to the liaison at invocation so it applies to all guest-liaison shell calls as well.
 
 `mad-design/[design-name]/tmp/` may be deleted after the session is complete. All other files in the design directory are permanent audit artifacts — including `liaison-messages.json` if a `guest` seat was engaged.
 

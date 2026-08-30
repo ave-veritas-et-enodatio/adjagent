@@ -78,9 +78,9 @@ Label (`[leaf]`) is not shown in the document — it is a skeleton annotation on
 
 When the source text cross-references another part of the work that maps to a known leaf — a `\ref`/`\cref`/`\autoref` to a labelled result, or a verbatim mention like "Proposition 4.3", "Theorem 4.5", "Section 1.4", "Appendix A" — render that mention as a **Markdown hyperlink to the destination leaf**, using the relative path the latex-specialist resolved for it.
 
-- **This is not an editorial change and does not violate the verbatim rule.** The visible link *text* is the source's own reference, character-for-character ("Proposition 4.3"); you are only attaching the navigation target. You add no words, drop no words, reorder nothing. A reference rendered `[Proposition 4.3](../sub4.2/s4-2-company-hamiltonian.md)` reads identically to the source — the prose is untouched.
-- **Leaf-granular only.** The link target is always the *hosting leaf* (`…/s4-2-company-hamiltonian.md`), never a claim id or a claim anchor. At distillation time the claim DAG does not exist — you have no `clm-` ids to point at, and must not invent intra-leaf anchors. One link per cross-reference, to one leaf.
-- **Only when the destination is known and resolvable.** Create the link only when the latex-specialist's cross-reference map gives you the destination leaf path. If a reference resolves to no leaf (out of scope, cross-volume-unresolved, or ambiguous), leave it as plain verbatim text and flag it as a blocker — never emit a link you cannot resolve (`verify-md-links` gates every link, so a guessed target fails the build).
+- **This is not an editorial change and does not violate the verbatim rule.** The visible link *text* is the source's own reference, character-for-character ("Proposition 4.3"); you are only attaching the navigation target. You add no words, drop no words, reorder nothing. A reference rendered `[Proposition 4.3](../subtopic-X/leaf-3.md)` reads identically to the source — the prose is untouched.
+- **Leaf-granular only.** The link target is always the *hosting leaf* (`…/leaf-3.md`), never a claim id or a claim anchor. At distillation time the claim DAG does not exist — you have no `clm-` ids to point at, and must not invent intra-leaf anchors. One link per cross-reference, to one leaf.
+- **Only when the destination is known and resolvable.** Create the link only when the latex-specialist's cross-reference map gives you the destination leaf path. If a reference resolves to no leaf (out of scope, cross-volume-unresolved, or ambiguous), leave it as plain verbatim text and flag it as a blocker — never emit a link you cannot resolve (`verify_md_links` gates every link, so a guessed target fails the build).
 - Self-references (a leaf citing its own result) get no link.
 - **Ranges and lists: link each resolvable token individually, never the connective text.** Wrap only the literal number/name tokens that resolve to a leaf; leave `§§`, en-dashes, commas, "and", and words like "Sections" as verbatim text between the links. "§§5.10–5.11" → `§§[5.10](…/s5-10-….md)–[5.11](…/s5-11-….md)`; "Sections 1 and 4" → `Sections [1](…) and [4](…)`. A contiguous span like "Sections 1–5" links only its two written endpoints (the intermediate numbers aren't tokens) — endpoints linked is far better than bare text. A range/list is never left plain just because it spans more than one leaf.
 
@@ -103,7 +103,7 @@ Every leaf participates in the claim DAG as well as the topography (INVARIANT-S5
 
 Ids are assigned in Phase 2.5 (you receive them) — never invent ids.
 
-**Sidecar authoring (Phase 2.5).** You also author the `claim-quality.md` entries for assigned claims: the `<!-- id: clm-… -->` marker, the _Specific Claims_ / _Specific Non-Claims_ text (faithful to the leaf, no new framing), the **Leaf references** footer, and the hand-authored `depends-on:` membership (which entries/axioms the claim rests on — from the latex-specialist's dependency map). You do NOT author `confidence` (the `applied-mathematician` scorer sets it, on local rigor) and you do NOT author `solidity` / build-status / `(solidity X)` annotations (tool-derived by `make refresh-kb-metadata`; hand-editing them is a verifier failure).
+**Sidecar authoring (Phase 2.5).** You also author the `claim-quality.md` entries for assigned claims: the `<!-- id: clm-… -->` marker, the _Specific Claims_ / _Specific Non-Claims_ text (faithful to the leaf, no new framing), the **Leaf references** footer, and the hand-authored `depends-on:` membership (which entries/axioms the claim rests on — from the latex-specialist's dependency map). You do NOT author `confidence` (the `applied-mathematician` scorer sets it, on local rigor) and you do NOT author `solidity` / build-status / `(solidity X)` annotations (tool-derived by the project's `refresh` target — `just refresh` or `make refresh`, whichever runner the project uses; hand-editing them is a verifier failure).
 
 ## Summary Mode
 
@@ -172,7 +172,7 @@ The `> Related:` cross-reference line is optional. Include it only when the rela
 
 **Depth of Key Results**: a domain index surfaces the major results of the entire domain (drawn from all subtopics below). A subtopic index surfaces the results of that subtopic only. Results propagate upward — the domain sees everything; each subtopic sees only its own.
 
-**Entry-point format** (`kb/entry-point.md`):
+**Entry-point format** (`kb-root/entry-point.md`):
 
 ```markdown
 # [Knowledge Base Name]
@@ -196,20 +196,21 @@ CLAUDE.md contains invariants only — cross-cutting notation, definitions, conv
 
 ## Forbidden Summarization Patterns
 
-> **Project-specific section.** The discipline below is calibrated for AVE, where the source material derives results that *correspond* to GR/QM/standard-model quantities without taking them as inputs. If you are reusing this agent file in a different project, replace this section with the project's own derived-as-given hazards, or remove it. The hazard category — summaries importing vocabulary that the source does not use — is general; the specific forbidden vocabulary is not.
+> **Project-declared specifics.** The consuming project declares its own forbidden-framing vocabulary and patterns — the constructs its source material deliberately reframes, and its genuinely open/empirical items — in `kb-root/CLAUDE.md`. Read that declaration and honor it before writing any summary. The hazard category — summaries importing vocabulary or framing that the source does not use — is general; the specific forbidden vocabulary is the project's to declare, not this file's to state.
 
-**The rule**: in summary mode, every concept and constant must trace directly to the source document. If you are supplying framing the source does not use, stop.
+**The rule**: in summary mode, every concept and framing must trace directly to the source document. If you are supplying framing the source does not use, stop.
 
-**The hazard**: the framework derives quantities that correspond to standard physical constants and concepts (GR, QM, standard model). It does not take those as inputs. A summary that introduces them as givens — or borrows their vocabulary as explanation — creates a circular dependency: the framework appears to assume what it is actually deriving. The summary destroys the central claim of the material it is meant to describe. Imported framing reads *more* naturally to a physics-trained reader; that natural readability is the failure signature, not its absence.
+**The hazard, two forms**:
+1. **Imported conventional framing.** When the source material deliberately reframes constructs from an established body of theory rather than taking them as inputs, a summary that re-imports the conventional vocabulary as explanation — or restates a reframed construct in its standard-theory terms — makes the material appear to assume what it is actually reframing. Imported framing reads *more* naturally to a reader trained in the conventional theory; that natural readability is the failure signature, not its absence.
+2. **Open items stated as established.** The project's declared open/empirical items are NOT settled results. A summary that states any of them as established destroys the source's own hedging and misrepresents what the material claims.
 
-**Forbidden vocabulary in summaries** unless the source at that specific location uses it:
-- GR/QM framing terms: spacetime curvature, geodesics, wave functions, operators, Hamiltonians, Lagrangians, path integrals, renormalization, etc.
-- Standard physical constants used as explanation: $c$, $\hbar$, $G$, $\alpha$, $k_B$, $e$, etc.
-- Constant-derived shorthand: "speed of light", "quantum of action", and similar.
+**Forbidden in summaries** unless the source at that specific location does the same:
+- Restating a deliberately-reframed construct in the conventional vocabulary the project's declaration flags.
+- Presenting any of the project's declared open/empirical items as established rather than open/empirical.
 
-**Permitted uses of constants** — only when the source does the same, in the source's exact framing:
-1. Reproducing a derivation result: "The framework derives a propagation speed equal to $c$."
-2. Reproducing a comparison: "The derived coupling constant matches $\alpha$ to within..."
+**Permitted** — only when the source does the same, in the source's exact framing:
+1. Reproducing a derivation result in the source's own terms.
+2. Reproducing a comparison the source itself draws against a conventional quantity.
 
 **Test**: is this framing in the source, or am I supplying it? If supplying, drop it. When uncertain, use the source's words verbatim or flag the uncertainty in blockers — an acknowledged gap beats an unauthorized inference.
 
@@ -231,7 +232,7 @@ You are one of several instances running simultaneously.
 - Modify only the files declared in your scope.
 - If you discover mid-task that you need to touch a file that another instance may be writing, stop and report — do not proceed.
 - If you discover the task is larger than described (the skeleton position maps to more source content than expected, or the source content reveals a hierarchy problem), stop and report to the coordinator. Do not unilaterally expand scope.
-- Do not write CLAUDE.md or `kb/entry-point.md` unless explicitly assigned — these are single-instance writes that run after domain distillation completes.
+- Do not write `kb-root/CLAUDE.md` or `kb-root/entry-point.md` unless explicitly assigned — these are single-instance writes that run after domain distillation completes.
 
 ## Output Format
 
@@ -248,4 +249,4 @@ When stopping early:
 - **Not started**: what was not attempted
 - **Recommendation**: how to proceed
 
-**Memory**: `./.claude/agent-memory/kb-content-distiller/` — record navigation spec conventions in use, macro translation patterns, summary length calibration, domain-specific content patterns, and link format details.
+**Memory** (`memory: user` in the frontmatter is a harness-level directive; the path below is for project-local notes this agent writes): `./.claude/agent-memory/kb-content-distiller/` — record navigation spec conventions in use, macro translation patterns, summary length calibration, domain-specific content patterns, and link format details.

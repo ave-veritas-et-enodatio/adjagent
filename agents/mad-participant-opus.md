@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from templates/mad-participant.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/agents/mad-participant.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: mad-participant-opus
 description: "Independent technical participant for multi-model debate process. Produces structured initial assessments (review mode) or proposals (design mode), and responds to debate rounds. Sees only the Alignment Assessor's structured map, never another participant's full output."

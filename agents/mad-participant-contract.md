@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from templates/mad-participant-contract.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/agents/mad-participant-contract.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 ---
 

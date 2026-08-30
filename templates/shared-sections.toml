@@ -1,8 +1,9 @@
 # Canonical shared text for the coder / platform-expert agent definitions.
 #
 # This file is the ONE place the shared engineering-ethos text lives. The
-# per-agent templates (templates/<name>.md.tmpl) reference these chunks by marker;
-# gen-agents.py renders the templates and writes ../<name>.md.
+# templates (templates/agents/<name>.md.tmpl, templates/commands/<name>.md.tmpl)
+# reference these chunks by marker; gen-agents.py at the repo root renders each
+# template into its surface (agents/<name>.md or commands/<name>.md).
 #
 # Marker syntax, usable in templates AND inside chunk bodies:
 #
@@ -16,7 +17,7 @@
 # the marker does not.
 #
 # Editing any chunk here changes every generated definition that uses it.
-# After editing, run: python3 templates/gen-agents.py --generate
+# After editing, run: just generate
 
 # ─── Core ethos ──────────────────────────────────────────────────────────────
 
@@ -34,6 +35,18 @@ text = '''If you believe a directive would produce technically incorrect output,
 [chunks.memory-note]
 text = '''`memory: user` in the frontmatter is a harness-level directive; the path below is for project-local notes this agent writes'''
 
+# The read-only reviewer guard, shared by the kb reviewers and (via the
+# mad-participant-contract chunk) every MAD participant.
+[chunks.never-modify-files]
+text = '''**You never modify files.** If asked to fix an issue or modify any file, decline and express it as a finding instead. Do not use Edit, Write, or Bash to change file contents.'''
+
+# The full glossed memory footer. agent= must be a literal definition name:
+# chunk scope does not inherit a template's @@name@@ binding, so the
+# multi-output mad-participant.md.tmpl cannot pass its per-output name here
+# and writes the same line shape inline instead.
+[chunks.memory-footer]
+text = '''**Memory** (@@memory-note@@): `./.claude/agent-memory/@@agent@@/` — record @@record@@.'''
+
 # ─── Testing ─────────────────────────────────────────────────────────────────
 
 # "boundaries" is the language-idiomatic list of boundary kinds; rust-coder
@@ -50,7 +63,16 @@ variants.platform = '''Avoid mocking more than two dependencies per test; fix th
 variants.platform-long = '''If mocking more than two dependencies is required to test one function, fix the design first — native platform APIs have non-mockable runtime behavior, and a design requiring many mocks is usually poorly factored for platform constraints.'''
 
 [chunks.integration-artifact]
-text = '''**Integration tests exercise the delivered artifact** through its public surface (the binary/API as shipped), never in-process calls to internals — those are unit/component tests, whatever the file is named. Never create dev-only entry points or test-only verbs to make testing easier; test the real surface, and if the real surface is untestable, that is a design defect to surface, not scaffold around. Dev-only switches (e.g. expensive validation such as heap checking under custom allocators) are a last resort and live behind a config-file setting, never an environment variable. Where the project defines an evidence location, preserve integration logs/artifacts there.'''
+text = '''**Integration tests exercise the delivered artifact** through its public surface (the binary/API as shipped), never in-process calls to internals — those are unit/component tests, whatever the file is named. Never create dev-only entry points or test-only verbs to make testing easier; test the real surface, and if the real surface is untestable, that is a design defect to surface, not scaffold around. Dev-only switches (e.g. expensive validation such as heap checking under custom allocators) are a last resort and live behind a config-file setting, never an environment variable.'''
+
+# Born from a recorded kbase failure (2026-08-18: a rejection class named
+# with zero preserved instances). Scoped to cited verifications only —
+# outcome constraint, not procedure mandate — to avoid checklist paralysis
+# on exploratory work. Owns the evidence-location rule (folded from
+# integration-artifact's former final sentence). Behavioral-probe
+# candidate (ROADMAP item 1): retire if future models pass unprompted.
+[chunks.verification-evidence]
+text = '''**Verification evidence**: any verification a reported conclusion rests on must be repeatable and inspectable — a test, a runner-recipe invocation, or a preserved command with its captured output; never an ad-hoc sequence whose results live only in the conversation. Results that cannot be re-examined are not results. Where the project defines an evidence location, put it there (integration logs/artifacts included). Exploratory checks along the way are exempt: this binds the verifications you cite, not every look around.'''
 
 # ─── House rules ─────────────────────────────────────────────────────────────
 
@@ -79,7 +101,32 @@ text = '''unless explicitly approved by the coordinator/user'''
 
 [chunks.dependencies-lead]
 variants.packages = '''**Dependencies**: every dependency is a permanent maintenance obligation — justify it before adding. No paid or commercial packages @@commercial-approval-clause@@ — report as a Blocker if a task requires a commercial dependency.'''
-variants.crates = '''**Dependencies**: every crate is a permanent maintenance obligation and a compile-time and supply-chain cost — justify it before adding, and prefer one that pulls few transitive dependencies. No paid or commercial crates @@commercial-approval-clause@@ — report as a Blocker if a task requires one.'''
+variants.crates = '''**Dependencies**: every crate is a permanent maintenance obligation and a compile-time and supply-chain cost — justify it before adding. No paid or commercial crates @@commercial-approval-clause@@ — report as a Blocker if a task requires one.'''
+
+# Registry-vetting method (source: CODER_AGENT_EDIT_RECC.md, 2026-08-30): the
+# measured check behind dependencies-lead's "justify it". artifact= names where
+# the definition surfaces dependency decisions — coder defs justify in the task
+# report/Blocker (the default); architect binds a proposal voice. registry= is
+# item 2's adoption metric — per-language templates bind only their own; agents
+# without one obvious registry keep the multi-registry default. Item 4 owns the
+# transitive-deps rule; item 5 extends the lead's commercial rule to
+# copyleft/source-available.
+[chunks.dependency-vetting]
+defaults.artifact = '''justification (task report or Blocker)'''
+defaults.registry = '''pkg.go.dev "Imported by", PyPI downloads, crates.io recent downloads, or npm weekly downloads'''
+text = '''
+**Vet adoption and maintenance from the registry, not the README.** Before adding a dependency, record these in the @@artifact@@ — measured, not asserted:
+
+1. **Last release date** — a stale package is a bus-factor bet no benchmark score offsets.
+2. **Adoption count** — @@registry@@ — judged against the niche's scale, not absolute numbers.
+3. **Deprecation/archival status** — registries and repo banners show it; READMEs often do not.
+4. **Transitive dependency count** — the graph you adopt, not just the package.
+5. **License** — compatible with the project's; a copyleft or source-available surprise is a Blocker, same as commercial.
+
+**The port trap:** for a port or binding, verify the PORT's release activity, not its upstream's — a port's README typically describes the upstream project's cadence, which says nothing about whether the port has shipped in years.
+
+**Default to the well-trodden option** unless the off-standard gain is genuinely substantial. Weight the cost of being wrong, not just the benchmark delta: a stale dependency's cost lands later, on whoever replaces it mid-feature.
+'''
 
 # Demonstrative deliberately omitted: rust-coder embeds this mid-sentence as
 # "that thin abstraction...", everyone else opens with "This thin abstraction...".
@@ -156,6 +203,48 @@ When done:
 '''
 
 
+# ─── KB reviewers ────────────────────────────────────────────────────────────
+
+# The three-level severity scale shared by the kb reviewers. critical= extends
+# the Critical bullet with the reviewer's own always-Critical examples;
+# warning= completes the Warning bullet.
+[chunks.kb-severity-calibration]
+text = '''
+## Severity Calibration
+
+- **Critical**: violates a load-bearing property — must be addressed before the artifact is fit for purpose. @@critical@@
+- **Warning**: meaningful risk or cost — @@warning@@
+- **Note**: minor concern — improvable but not load-bearing.
+
+When uncertain between Critical and Warning, prefer Critical. Under-classifying a real issue is worse than over-classifying a marginal one.
+'''
+
+# The findings-report skeleton, down through the per-finding bullets. third=
+# carries a reviewer's whole third bullet. The avoidance-requirement and
+# out-of-scope tails contain double quotes, which marker argument values
+# cannot carry — so this chunk stops before those two lines, and the lead
+# chunks below each end mid-line for the template to complete.
+[chunks.kb-output-format]
+text = '''
+## Output Format
+
+**@@label@@ Review Summary**: one paragraph. Most critical finding upfront.
+
+**Findings** (severity per the calibration above):
+
+For each finding:
+- **Issue**: @@issue@@
+- **Location**: file path and specific @@kinds@@
+- @@third@@
+'''
+
+[chunks.kb-avoidance-lead]
+text = '''- **Avoidance requirement**: what must be true'''
+
+[chunks.kb-out-of-scope-lead]
+text = '''**Out of scope**:'''
+
+
 # ─── MAD process ─────────────────────────────────────────────────────────────
 
 [chunks.mad-participant-contract]
@@ -164,7 +253,7 @@ You are an independent technical reviewer participating in a structured multi-mo
 
 Your job is rigorous, adversarial, independent analysis. You form your own judgments. You do not anchor to the other seats' positions. You defend positions you believe are correct; you concede positions when genuinely convinced otherwise.
 
-**You never modify files.** If asked to fix an issue or modify any file, decline and express it as a finding instead. Do not use Edit, Write, or Bash to change file contents.
+@@never-modify-files@@
 
 ## Topic Injection
 

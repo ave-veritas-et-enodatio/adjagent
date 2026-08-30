@@ -29,7 +29,7 @@ guest-session/<topic>/
 
 `<topic>` is collected during Onboarding. If `guest-session/<topic>/messages.json` already exists and is non-empty, the invocation is a **continuation** — skip session init and append-only. If absent, **new session** — run full Onboarding init.
 
-When invoking any `liaison-tools` script, prefix with `TMPDIR=guest-session/<topic>/tmp/` so `mktemp` lands in the session directory rather than the system tmp directory.
+When invoking any `liaison_tools` script, prefix with `TMPDIR=guest-session/<topic>/tmp/` so `mktemp` lands in the session directory rather than the system tmp directory.
 
 ## Onboarding
 
@@ -49,7 +49,7 @@ For a **new session only**, additionally collect:
   1. **Agent identity**: a path to an agent definition under `.claude/agents/` whose body (frontmatter stripped) becomes the guest model's system prompt. Capture the body to a temporary file via:
      ```bash
      SYS_PROMPT_FILE=$(TMPDIR=guest-session/<topic>/tmp/ mktemp -t sys-prompt)
-     .claude/agents/liaison-tools/extract-agent-body.sh <agent-path> > "${SYS_PROMPT_FILE}"
+     .claude/agents/liaison_tools/extract-agent-body.sh <agent-path> > "${SYS_PROMPT_FILE}"
      ```
      The script exits non-zero and prints a diagnostic to stderr if the file lacks a complete frontmatter block — when that happens, halt and surface the error to the user rather than proceeding with empty system content.
   2. **Default identity**: if the user does not select an agent, use the literal string `You are a helpful assistant.` as the system prompt. Write that exact string to `${SYS_PROMPT_FILE}` and proceed.
@@ -68,7 +68,7 @@ For a **new session only**, additionally collect:
 
 ```bash
 TMPDIR=guest-session/<topic>/tmp/ \
-  .claude/agents/liaison-tools/msg-util.sh init \
+  .claude/agents/liaison_tools/msg-util.sh init \
     --system-prompt="${SYS_PROMPT_FILE}" \
     --instructions="${INIT_MSG_FILE}" \
     guest-session/<topic>/messages.json
@@ -83,7 +83,7 @@ For a **continuation invocation**, skip init; append the new user message via `m
 You communicate with the external model using the shell script:
 
 ```
-.claude/agents/liaison-tools/post-openai.sh
+.claude/agents/liaison_tools/post-openai.sh
 ```
 
 **Required environment variables** (collected during Onboarding, then set by the liaison when invoking the script):
@@ -91,13 +91,13 @@ You communicate with the external model using the shell script:
 - `API_KEY_FILE` — path to the file containing only the API key; the script reads the key directly so it is not exposed through argv or environment values
 - `MODEL` — model identifier (exact or unambiguous substring; the script will resolve and warn if a substring match is used)
 
-**Optional environment variables:** `MAX_TOKENS`, `ENABLE_THINKING`, `TEMPERATURE`, `DEBUG_POST`, `DEBUG_RESPONSE`. Their accepted values and defaults are documented in the header docstring of `.claude/agents/liaison-tools/post-openai.py`.
+**Optional environment variables:** `MAX_TOKENS`, `ENABLE_THINKING`, `TEMPERATURE`, `DEBUG_POST`, `DEBUG_RESPONSE`. Their accepted values and defaults are documented in the header docstring of `.claude/agents/liaison_tools/post-openai.py`.
 
 **Invocation:**
 ```bash
 API_BASE_URL=<url> API_KEY_FILE=<path-to-api-key-file> MODEL=<model> \
 TMPDIR=guest-session/<topic>/tmp/ \
-  .claude/agents/liaison-tools/post-openai.sh guest-session/<topic>/messages.json
+  .claude/agents/liaison_tools/post-openai.sh guest-session/<topic>/messages.json
 ```
 
 The script reads a JSON array of `{"role": "<role>", "content": "<text>"}` objects from the messages file and writes the assistant's reply to stdout. All warnings and errors go to stderr.
@@ -140,14 +140,14 @@ Re-invoke `post-openai.sh` after providing the tool results.
 
 ## Message File Management
 
-Maintain one JSON messages file per session. All creation and mutation of this file goes through `.claude/agents/liaison-tools/msg-util.sh`:
+Maintain one JSON messages file per session. All creation and mutation of this file goes through `.claude/agents/liaison_tools/msg-util.sh`:
 
 - **Initialize** at session start via `msg-util.sh init` (see Onboarding). Run `init` exactly once per session.
 - **Append turns** — both the user side (file content returned in response to a file request, or a new prompt from the user) and the agent side (the external model's verbatim reply from `post-openai.sh`) — via:
 
   ```bash
   TMPDIR=guest-session/<topic>/tmp/ \
-    .claude/agents/liaison-tools/msg-util.sh append --role=<user|agent> \
+    .claude/agents/liaison_tools/msg-util.sh append --role=<user|agent> \
       guest-session/<topic>/messages.json <content-file>
   ```
 

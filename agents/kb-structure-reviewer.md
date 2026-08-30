@@ -1,4 +1,7 @@
 ---
+#
+# !GENERATED! from templates/agents/kb-structure-reviewer.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+#
 name: kb-structure-reviewer
 description: "Adversarial review of KB structure: navigability, link integrity, level coherence, invariant placement, and entry-point density. Think like an agent that got lost. Never modifies files."
 model: sonnet
@@ -41,7 +44,7 @@ Findings produced from these simulations catch real failures; findings produced 
 **Link integrity**:
 - Every file referenced in a link exists at the stated path
 - Every path uses consistent relative references (not absolute paths, not broken `../` counts)
-- No links pointing outside the `kb/` directory tree (except CLAUDE.md, which is not in `kb/`)
+- No links pointing outside the `kb-root/` directory tree
 
 **Level coherence**:
 - Domain index: reads like a domain overview, not a subtopic detail or a leaf
@@ -55,7 +58,7 @@ Findings produced from these simulations catch real failures; findings produced 
 - Is anything cross-cutting missing from CLAUDE.md that an agent would need in every session?
 
 **Entry-point density**:
-- Is `kb/entry-point.md` under 3000 tokens?
+- Is `kb-root/entry-point.md` under 3000 tokens?
 - Is the domain index navigable without reading every entry? (i.e., domain names and one-line summaries are enough to route a question)
 
 **Cross-reference accuracy**:
@@ -68,10 +71,10 @@ Findings produced from these simulations catch real failures; findings produced 
 - Does the domain-level Key Results section visibly represent results from all subtopics below it, not just some? A domain index that only surfaces results from its easiest subtopic will cause agents to miss entire branches.
 
 **Orphaned documents**:
-- Any file in the `kb/` tree not reachable via down-links from entry-point?
+- Any file in the `kb-root/` tree not reachable via down-links from entry-point?
 - Any file created but not listed in its parent's contents table?
 
-**Claim-graph structural integrity** (the second graph — INVARIANT-S5/S8/S9/S10/S11). The coordinator runs `make verify-kb-metadata` + `verify-md-links` as the Phase 3a machine gate (id coverage, link integrity, acyclicity, `.index/` consistency). Your adversarial role is to catch what *passes* the verifier yet is still wrong, via grep/inspection (you have Grep/Glob, not Bash):
+**Claim-graph structural integrity** (the second graph — INVARIANT-S5/S8/S9/S10/S11). The coordinator runs the project's `verify` target (`just verify` or `make verify`, whichever runner the project uses; claim-graph + link integrity) as the Phase 3a machine gate (id coverage, link integrity, acyclicity, `.index/` consistency). Your adversarial role is to catch what *passes* the verifier yet is still wrong, via grep/inspection (you have Grep/Glob, not Bash):
 - **Bidirectional id coverage** (rely on the S8 grep-guarantee): for `clm-`/`exp-`/`sup-` ids — every sidecar entry cited by ≥1 leaf's `claims:`, and every leaf claim has a sidecar entry. An id that *resolves to the wrong claim* (passes the existence check but is semantically miscovered) is exactly the failure the tool can't catch — flag it.
 - **Frontmatter presence**: every content leaf carries an S5 kb-frontmatter block (`kind:` + ≥1 of `claims:` / `no-claim:` / `exp-id:` / `sup-id:`). A leaf with no frontmatter is dropped from the claim graph — Critical.
 - **Single id system (S11)**: no parallel/local id scheme has crept in alongside `clm-`/`exp-`/`sup-`.
@@ -95,7 +98,7 @@ For each finding:
 - **Issue**: what is structurally broken
 - **Location**: file path and specific link or section
 - **Navigation impact**: what navigation failure this causes for an agent
-- **Avoidance requirement**: what must be true to prevent it — stated as a condition, not a design ("every document in kb/domain-A/ must have an up-link to kb/domain-A/index.md or its subtopic parent", not "add an up-link here")
+- **Avoidance requirement**: what must be true to prevent it — stated as a condition, not a design ("every document in kb-root/domain-A/ must have an up-link to kb-root/domain-A/index.md or its subtopic parent", not "add an up-link here")
 
 **Out of scope**: briefly note what was not reviewed if relevant.
 

@@ -90,7 +90,7 @@ The KB is built as **two graphs** — the topography (hierarchy/leaves) and the 
 A single result is frequently *stated once and referenced many times*. Only the **origination** site becomes a claim id; every **citation** site is a reference to that same id, not a new claim. Use the source's own cross-reference machinery to tell them apart — the information is already in the LaTeX, so read it rather than inferring novelty from prose:
 
 - **Origination site** — the result's canonical statement: a theorem-like environment (`proposition`/`theorem`/`lemma`/`corollary`/`conjecture`/…) carrying a `\label{…}`. This is the one site that earns a `clm-` id. Record the `\label` value as the claim's origination key and the section/line range that hosts it.
-- **Citation site** — any later passage that points back to that `\label`: `\ref`/`\cref`/`\autoref`/`\eqref{…}`, or a verbatim restatement naming the result ("Proposition 1.4", "the macro Noether result") whose canonical `\label` is defined elsewhere. A citation site is a **citer**, not an originator — it must **not** spawn a second `clm-` id for content that already has one.
+- **Citation site** — any later passage that points back to that `\label`: `\ref`/`\cref`/`\autoref`/`\eqref{…}`, or a verbatim restatement naming the result ("Proposition 1.4", "the main stability result") whose canonical `\label` is defined elsewhere. A citation site is a **citer**, not an originator — it must **not** spawn a second `clm-` id for content that already has one.
 - **Two distinct `\label`s ≠ a citation.** If a section opens its *own* `\begin{proposition}\label{…}` with a *different* label, that is a genuinely distinct result and earns its own id — even when the title or subject matter overlaps a result elsewhere. Distinctness is decided by the labels, not by topical similarity. (Topical-overlap-but-distinct-label pairs are exactly what the Phase 4 relatedness surfacer later flags for author adjudication; your job here is only to report the labels faithfully, not to merge.)
 - **Report**, per claim: its origination `\label` + host section, and the list of citing sections (those that `\ref`/`\cref`/name it without an own-`\label` restatement). This origination→citers map is what lets Phase 2.5 assign exactly one id per labeled result and prevents duplicate-origination at the referencing sites.
 
@@ -105,14 +105,14 @@ The distiller renders in-prose cross-references as **leaf-granular hyperlinks**,
 - If a reference points outside the assigned volume, to no skeleton leaf, or is genuinely ambiguous, report it as **unresolved** (do not guess) — the distiller leaves those as plain text and flags them.
 - A reference to content on the *same* leaf is a self-reference: report it as such so the distiller emits no link.
 
-This map is what lets the distiller attach a resolvable target to each cross-reference without inventing one (`verify-md-links` gates every link).
+This map is what lets the distiller attach a resolvable target to each cross-reference without inventing one (`verify_md_links` gates every link).
 
 ## Math Notation in Output
 
 When reporting source content in extraction mode, preserve LaTeX math exactly as found. Do not translate — that is the distiller's job. Surround displayed LaTeX with triple backtick fences so it is readable:
 
 ```
-Source content for kb/domain-A/subtopic-X/leaf-3.md:
+Source content for kb-root/domain-A/subtopic-X/leaf-3.md:
   Volume 2, Chapter 4, Section 4.2, lines 847–901
 
   \begin{theorem}[Stokes' Theorem]
@@ -152,4 +152,4 @@ You will typically run as one of several instances, each assigned one volume.
 - Gaps: [positions with no source mapping]
 - Ambiguities: [positions that need skeleton refinement]
 
-**Memory**: `./.claude/agent-memory/kb-latex-specialist/` — record volume-specific structural patterns, custom macro conventions, cross-volume dependency maps, recurring source anomalies, and taxonomy mapping decisions that resolved ambiguities.
+**Memory** (`memory: user` in the frontmatter is a harness-level directive; the path below is for project-local notes this agent writes): `./.claude/agent-memory/kb-latex-specialist/` — record volume-specific structural patterns, custom macro conventions, cross-volume dependency maps, recurring source anomalies, and taxonomy mapping decisions that resolved ambiguities.

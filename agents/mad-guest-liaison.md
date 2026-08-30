@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from templates/mad-guest-liaison.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/agents/mad-guest-liaison.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: mad-guest-liaison
 description: "Liaison agent for multi-model debate review process. Relays messages to and from an external model via post-openai.sh, presenting an identical interface to the Referee as a local reviewer. Handles file read requests from the external model."
@@ -29,7 +29,7 @@ TOOL_CALLS responses (detected when `post-openai.sh` outputs a line beginning wi
 
 The Referee provides at invocation:
 - **Messages file path**: `mad-review/<review-name>/liaison-messages.json` — initialize here; do not delete at the end (permanent audit artifact)
-- **TMPDIR**: set to `mad-review/<review-name>/tmp/`; prefix all `liaison-tools` script invocations with this env var so `mktemp` calls land in the review directory
+- **TMPDIR**: set to `mad-review/<review-name>/tmp/`; prefix all `liaison_tools` script invocations with this env var so `mktemp` calls land in the review directory
 
 ## Onboarding
 
@@ -61,7 +61,7 @@ Per **Secrets handling** below, the liaison MUST treat `API_KEY_FILE` as opaque 
 
   ```bash
   GUEST_SYS_PROMPT_FILE=$(TMPDIR=mad-review/<review-name>/tmp/ mktemp -t sys-prompt)
-  .claude/agents/liaison-tools/extract-agent-body.sh <role-description-path> > "${GUEST_SYS_PROMPT_FILE}"
+  .claude/agents/liaison_tools/extract-agent-body.sh <role-description-path> > "${GUEST_SYS_PROMPT_FILE}"
   ```
 
    where `<role-description-path>` is the path the Referee specified (e.g. `.claude/agents/mad-participant-contract.md`). The script exits non-zero and prints a diagnostic to stderr if the file lacks a complete frontmatter block — when that happens, halt the session and surface the error to the Referee rather than proceeding with empty system content.
@@ -69,7 +69,7 @@ Per **Secrets handling** below, the liaison MUST treat `API_KEY_FILE` as opaque 
 2. Initialize the session messages file using the extracted role description as the system prompt and the Referee's initial review instructions as the first user turn:
 
   ```bash
-   .claude/agents/liaison-tools/msg-util.sh init \
+   .claude/agents/liaison_tools/msg-util.sh init \
      --system-prompt="${GUEST_SYS_PROMPT_FILE}" \
      --instructions="<topic-file>" \
      <messages-file>
@@ -84,7 +84,7 @@ Per **Secrets handling** below, the liaison MUST treat `API_KEY_FILE` as opaque 
   if the optional requirements file was provided by the Referee, append it to the messages file
 
   ```bash
-   .claude/agents/liaison-tools/msg-util.sh append --role=user <messages-file> <requirements-file>
+   .claude/agents/liaison_tools/msg-util.sh append --role=user <messages-file> <requirements-file>
   ```
 
   **The Referee's instructions arrive as a FILE PATH, never as inline text.** The Referee writes the *exact* verbatim instruction text to a file in the review directory (e.g. `mad-review/<review-name>/referee-instructions.md`) and passes you that path as `REFEREE_INSTRUCTIONS_FILE`. You assemble the guest instruction block by **concatenation** — the caller-authored instruction text flows ONLY through `cat "${REFEREE_INSTRUCTIONS_FILE}"`; only the tiny static header/footer go through `echo`:
@@ -103,7 +103,7 @@ GUEST_INSTRUCTIONS_FILE=$(TMPDIR=mad-review/<review-name>/tmp/ mktemp -t instruc
   echo "You cannot see the repository, run tools, or read files yourself. Any statement you make about the code MUST be grounded in file contents your liaison has actually delivered to you in this conversation. You MUST NOT infer, guess, or reconstruct code behavior from file names, line counts, the diff stat, the artifact description, the requirements documents, summaries, or your prior knowledge of similar projects. Before making ANY claim about a file, request its contents from the liaison — name the exact path, and line ranges if useful — and wait for them to be delivered. Issuing several file-read requests before you produce any findings is the expected and correct behavior, not a delay. A finding you cannot tie to file contents the liaison delivered to you is not permitted: request the source instead of asserting. When you do cite, reference the delivered file and the specific lines."
 } > "${GUEST_INSTRUCTIONS_FILE}"
 
-.claude/agents/liaison-tools/msg-util.sh append --role=user <messages-file> "${GUEST_INSTRUCTIONS_FILE}"
+.claude/agents/liaison_tools/msg-util.sh append --role=user <messages-file> "${GUEST_INSTRUCTIONS_FILE}"
 ```
 
   > ### ⚠ TEXT TRANSPORT RULE — BINDING
@@ -115,7 +115,7 @@ GUEST_INSTRUCTIONS_FILE=$(TMPDIR=mad-review/<review-name>/tmp/ mktemp -t instruc
 You communicate with the external model using the shell script:
 
 ```bash
-.claude/agents/liaison-tools/post-openai.sh
+.claude/agents/liaison_tools/post-openai.sh
 ```
 
 **Required environment variables** (collected from the user during Onboarding, then set by the liaison when invoking the script):
@@ -123,12 +123,12 @@ You communicate with the external model using the shell script:
 - `API_KEY_FILE` — path to the file containing only the API key; the script reads the key directly so it is not exposed through argv or environment values
 - `MODEL` — model identifier (exact or unambiguous substring; the script will resolve and warn if a substring match is used)
 
-**Optional environment variables:** `MAX_TOKENS`, `ENABLE_THINKING`, `TEMPERATURE`, `DEBUG_POST`, `DEBUG_RESPONSE`. Their accepted values and defaults are documented in the header docstring of `.claude/agents/liaison-tools/post-openai.py`.
+**Optional environment variables:** `MAX_TOKENS`, `ENABLE_THINKING`, `TEMPERATURE`, `DEBUG_POST`, `DEBUG_RESPONSE`. Their accepted values and defaults are documented in the header docstring of `.claude/agents/liaison_tools/post-openai.py`.
 
 **Invocation:**
 ```bash
 API_BASE_URL=<url> API_KEY_FILE=<path-to-api-key-file> MODEL=<model> \
-  .claude/agents/liaison-tools/post-openai.sh <messages.json>
+  .claude/agents/liaison_tools/post-openai.sh <messages.json>
 ```
 
 The script reads a JSON array of `{"role": "<role>", "content": "<text>"}` objects from `<messages.json>` and writes the assistant's reply to stdout. All warnings and errors go to stderr.
@@ -170,13 +170,13 @@ Re-invoke `post-openai.sh` after providing the tool results.
 
 ## Message File Management
 
-Maintain one JSON messages file per session. All creation and mutation of this file goes through `.claude/agents/liaison-tools/msg-util.sh`:
+Maintain one JSON messages file per session. All creation and mutation of this file goes through `.claude/agents/liaison_tools/msg-util.sh`:
 
 - **Initialize** at session start via `msg-util.sh init` (see Onboarding step 2). Run `init` exactly once per session.
 - **Append turns** — both the user side (file content returned in response to a file request, or new instructions from the Referee) and the agent side (the external model's verbatim reply from `post-openai.sh`) — via:
 
   ```bash
-  .claude/agents/liaison-tools/msg-util.sh append --role=<user|agent> <messages-file> <content-file>
+  .claude/agents/liaison_tools/msg-util.sh append --role=<user|agent> <messages-file> <content-file>
   ```
 
   Each turn's body is written to a temporary file first, then passed by path — per the **⚠ Text transport rule** (Onboarding), which governs Referee instructions, round inputs, and file-content returns alike. Use `user` for file-content returns and Referee messages; use `agent` for the external model's replies (the script maps `agent` → the API's `assistant` role).

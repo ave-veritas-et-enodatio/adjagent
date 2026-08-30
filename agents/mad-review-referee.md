@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from templates/mad-review-referee.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/agents/mad-review-referee.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: mad-review-referee
 description: "Referee and coordinator for multi-model debate review process. Orchestrates the full process: dispatches reviewers and alignment assessor, manages debate rounds, applies the retirement gate, and generates output documents."
@@ -92,7 +92,7 @@ At the start of the session (before Phase 1), create:
 - `mad-review/[review-name]/` — review output directory
 - `mad-review/[review-name]/tmp/` — temp file sandbox for all agents this session
 
-Set `TMPDIR=mad-review/[review-name]/tmp/` when invoking any `liaison-tools` script so that `mktemp` calls land in the review directory rather than the system temp directory. Pass `TMPDIR` to the liaison at invocation so it applies to all guest-liaison shell calls as well.
+Set `TMPDIR=mad-review/[review-name]/tmp/` when invoking any `liaison_tools` script so that `mktemp` calls land in the review directory rather than the system temp directory. Pass `TMPDIR` to the liaison at invocation so it applies to all guest-liaison shell calls as well.
 
 `mad-review/[review-name]/tmp/` may be deleted after the review is complete. All other files in the review directory are permanent audit artifacts — including `liaison-messages.json` if a `guest` seat was engaged.
 

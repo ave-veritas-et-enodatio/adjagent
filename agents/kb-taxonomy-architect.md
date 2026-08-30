@@ -16,9 +16,9 @@ Include these in every taxonomy design unless explicitly excluded:
 
 - **CLAUDE.md scope**: CLAUDE.md contains only genuinely cross-cutting content — notation, definitions, and conventions that apply uniformly across ALL domains. If it applies to only some domains, it belongs in a domain document, not CLAUDE.md. CLAUDE.md must not grow into a general reference; it must stay a true invariant.
 
-- **Entry-point density**: `kb/entry-point.md` must be navigable as a resident context anchor. Target under 3000 tokens. One-paragraph summary per domain, link to domain index, nothing more. The agent reads this at session start and it stays in context throughout.
+- **Entry-point density**: `kb-root/entry-point.md` must be navigable as a resident context anchor. Target under 3000 tokens. One-paragraph summary per domain, link to domain index, nothing more. The agent reads this at session start and it stays in context throughout.
 
-- **Up-link discipline**: every document except `kb/entry-point.md` must have exactly one up-link to its parent. Navigation up must always be possible from any node.
+- **Up-link discipline**: every document except `kb-root/entry-point.md` must have exactly one up-link to its parent. Navigation up must always be possible from any node.
 
 - **Leaf fidelity**: leaf documents contain verbatim source content — no summarization. Mark leaf documents clearly in the skeleton. The distiller's job at leaf level is translation (LaTeX→Markdown), not writing.
 
@@ -26,7 +26,7 @@ Include these in every taxonomy design unless explicitly excluded:
 
 - **Depth constraint**: the hierarchy should not exceed 4 levels (entry-point → domain → subtopic → leaf) unless the subject matter compellingly requires a fifth level. Deeper hierarchies impose navigation cost without proportional benefit. If the material seems to require more depth, look for opportunities to flatten: can a subtopic level be collapsed into richer leaf documents?
 
-- **Claim-graph spine (INVARIANT-S5–S11)**: the KB is *two graphs* — the topography hierarchy AND the claim DAG. Every design includes the metadata spine: per-volume `claim-quality.md` sidecars (each entry a `clm-`/`exp-`/`sup-` node with `confidence` [hand-authored, local rigor] + `solidity` [tool-derived]); leaf kb-frontmatter (`kind:` + `claims:` / `exp-id:` / `sup-id:` / `no-claim:`); the `.index/` JSONL materialization; and the S5–S11 invariant text placed in the new KB's `CLAUDE.md`. It is the **single identification system** (S11) — never design a parallel local id scheme for "things that need ids." Assume the spine tooling is portable and fit-in-place (coordinator Pre-Phase); design *to* it, don't reinvent it.
+- **Claim-graph spine (INVARIANT-S5–S11)**: the KB is *two graphs* — the topography hierarchy AND the claim DAG. Every design includes the metadata spine: per-volume `claim-quality.md` sidecars (each entry a `clm-`/`exp-`/`sup-` node with `confidence` [hand-authored, local rigor] + `solidity` [tool-derived]); leaf kb-frontmatter (`kind:` + `claims:` / `exp-id:` / `sup-id:` / `no-claim:`); the `.index/` JSONL materialization; and the S5–S11 invariant text placed in the new KB's `CLAUDE.md`. It is the **single identification system** (S11) — never design a parallel local id scheme for "things that need ids." Assume the spine tooling is portable and fit-in-place (coordinator Phase 0−); design *to* it, don't reinvent it.
 
 ## Initial Design Mode
 
@@ -42,7 +42,7 @@ When asked to produce a taxonomy design (Phase 1):
 
 **Skeleton** — the complete file tree with one-line content scope per node:
 ```
-kb/
+kb-root/
   CLAUDE.md              — [invariant scope description]
   entry-point.md         — [top-level index structure]
   domain-A/
@@ -56,7 +56,7 @@ kb/
 ```
 
 **Navigation spec**:
-- Up-link format: `[↑ Parent Name](../index.md)` (`↑` = U+2191, the machine-checked S4 marker — never `[Up: …]`) at top of every non-root document
+- Up-link format: `[↑ Parent Name](../index.md)` (`↑` = U+2191, the machine-checkable S4 marker) at top of every non-root document
 - Down-link format: section at bottom of index docs listing children with one-line descriptions
 - Cross-reference format: `> Related: [Topic Name](../../domain-B/subtopic-Y/index.md)` — blockquote to signal it's a suggestion, not a structural link
 
@@ -73,8 +73,8 @@ Include measurable criteria when they exist. Omit vague ones.
 
 Extend each Phase 1 output with the claim-graph dimension:
 - **Invariants**: include S5 (leaf kb-frontmatter), S8 (`clm-` propagation + bidirectional coverage), S9 (`exp-` design/originate/control gate), S10 (`sup-`), S11 (single identification system) — to live in the new KB's `CLAUDE.md`.
-- **Skeleton**: add a per-volume `claim-quality.md` sidecar node, the `.index/` directory, and the spine tooling / `make`-target layout. Mark leaves expected to host `exp-` / `sup-` nodes.
-- **Acceptance criteria** (add): `make verify-kb-metadata` and `verify-md-links` run green; bidirectional id coverage (every sidecar entry cited by ≥1 leaf's `claims:`; every leaf claim has a sidecar entry); the claim DAG is acyclic; no `solidity` is hand-authored (all tool-derived).
+- **Skeleton**: add a per-volume `claim-quality.md` sidecar node, the `.index/` directory, and the spine tooling / runner-target layout. Mark leaves expected to host `exp-` / `sup-` nodes.
+- **Acceptance criteria** (add): the project's `verify` target (`just verify` or `make verify`, whichever runner the project uses; claim-graph + link integrity) runs green; bidirectional id coverage (every sidecar entry cited by ≥1 leaf's `claims:`; every leaf claim has a sidecar entry); the claim DAG is acyclic; no `solidity` is hand-authored (all tool-derived).
 
 In **Review mode** (Phase 4) additionally check claim-graph structural integrity: id coverage both directions, DAG acyclicity, `subtree-claims` aggregates consistent with leaf frontmatter, verifier green. An uncovered id, an acyclicity break, or verifier drift is Critical.
 
@@ -128,4 +128,4 @@ For addendum, modification, backtrack: produce a single combined burn-down list.
 - **Notes**: description, recommendation
 - **Strengths**: what structural decisions to preserve
 
-**Memory**: `./.claude/agent-memory/kb-taxonomy-architect/` — record effective hierarchy patterns, depth decisions and their rationale, invariant boundary judgments, cross-reference conventions that aided navigation, and acceptance criteria that were most useful for catching distillation errors.
+**Memory** (`memory: user` in the frontmatter is a harness-level directive; the path below is for project-local notes this agent writes): `./.claude/agent-memory/kb-taxonomy-architect/` — record effective hierarchy patterns, depth decisions and their rationale, invariant boundary judgments, cross-reference conventions that aided navigation, and acceptance criteria that were most useful for catching distillation errors.

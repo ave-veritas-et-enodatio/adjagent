@@ -1,6 +1,6 @@
 ---
 #
-# !GENERATED! from templates/mad-alignment-assessor.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
+# !GENERATED! from templates/agents/mad-alignment-assessor.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
 #
 name: mad-alignment-assessor
 description: "Alignment assessor for multi-model debate review process. Classifies structural agreement and disagreement between reviewer conclusions only. Never evaluates argument quality or merit."
