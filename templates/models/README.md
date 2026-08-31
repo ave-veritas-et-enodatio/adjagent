@@ -2,14 +2,31 @@
 
 Maintainer documentation for the model-tuning mechanism (`gen-defs.py`'s
 docstring is the definitive mechanism description; this is the authoring
-guide for the files that live here). One TOML file per model family; a file
-is loaded with `--model-family FILE`, and `--model NAME` activates that
-model's overrides for the definitions that carry no frontmatter pin of their
-own (see "One NB per anchor" below). `--model-family` also takes a bare family name,
-resolved here as `<name>-addenda.toml` or `<name>.toml` (both matching or
-neither is an error), and a bare `--model` without `--model-family` implies
-the unique family whose `[nb.*.models.*]` tables mention that model — a
-model appearing only in comments is not known. Rendered sets are usually
+guide for the files that live here). One TOML file per model family, reached
+through the one tuning flag: `--model-family SPEC`.
+
+## Resolving a SPEC
+
+Family and model are one flag because they are one choice — a model is only
+ever reachable through the family that declares it. SPEC resolves in three
+steps, against this directory:
+
+1. **A path** — anything containing a path separator or ending in `.toml`:
+   that file, taken as given. The escape hatch for a family file named
+   outside the conventions below.
+2. **A bare family name** — `<name>-addenda.toml` or `<name>.toml` here:
+   that family, asking for no model scope on the definitions that carry no
+   frontmatter pin.
+3. **A bare model name** — declared in exactly one family's
+   `[nb.*.models.<name>]` tables: that family, with `<name>` as the export
+   flavor for those unpinned definitions (see "One NB per anchor" below).
+
+A name matching both a family file and a model is an ambiguity error naming
+both readings; two family files matching the same name is the same error over
+the two candidates; a model declared in several families demands the family
+file path instead; a name matching neither lists the family files and each
+one's known models. A model appearing only in comments is not declared — a
+family's models are exactly its real tables. Rendered sets are usually
 produced out of repo via `--output-dir`.
 
 ## Schema
@@ -38,8 +55,8 @@ Resolution, not accumulation: at most one NB renders per anchor. A matching
 otherwise the anchor renders as nothing. Which `<NAME>` applies is the
 definition's own business: each output resolves model scope against its own
 frontmatter `model:` pin, so a definition pinned to `opus` takes
-`models.opus` whatever `--model` says, and a pin no table matches quietly
-takes the family text instead — `--model NAME` is the export flavor for the
+`models.opus` whatever the SPEC says, and a pin no table matches quietly
+takes the family text instead — a model SPEC is the export flavor for the
 definitions that carry no pin at all. Family and
 model texts are never concatenated. The rendered form is `**NB**: <text>` —
 no family or model name appears in rendered output; this file is the
@@ -67,4 +84,7 @@ model we don't use anymore."
 silently filling axiom gaps, probe data 2026-04-29; provenance in its entry
 comments). `claude-addenda.toml` is a comments-only reservation — a
 zero-entry family file loads cleanly and fills nothing — awaiting an
-observed failure before it carries any entry.
+observed failure before it carries any entry. Neither declares a model in a
+real `[nb.*.models.*]` table today, so both are reached by family name
+(`gemma-4`, `claude`) or by path; the model step of the resolution above
+opens only once an observed per-model failure motivates an override.

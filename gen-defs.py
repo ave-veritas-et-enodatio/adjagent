@@ -77,36 +77,60 @@ Render-to-order flags, accepted by both modes:
                             must already exist (error otherwise); the surface
                             subdirectories are created under it as needed.
     --surfaces WHICH        agents | commands | both (default both): which
-                            surface to render or check.
-    --model-family SPEC     load one model-family NB file (see below). SPEC is
-                            either a path to the file (anything containing a
-                            path separator or ending in .toml), or a bare
-                            family name resolved against templates/models/ —
-                            matching <name>-addenda.toml or <name>.toml. Both
-                            matching is an ambiguity error naming the
-                            candidates; neither matching is an error listing
-                            the available family files.
-    --model NAME            the EXPORT FLAVOR: activate NAME's per-model
-                            overrides for the outputs that carry no
-                            frontmatter `model:` pin. A pinned output
-                            resolves its own model scope (see per-pin
-                            resolution below) and ignores this flag; the
-                            report accounts for both counts out loud.
-                            Without --model-family, the family is implied:
-                            every templates/models/*.toml is scanned for
-                            [nb.*.models.NAME] tables mentioning the model.
-                            Exactly one family mentioning it is used (and
-                            reported); several demand an explicit
-                            --model-family; none is an error listing each
-                            family's known models — a model mentioned only
-                            in comments is NOT known; name the family
-                            explicitly to use one.
+                            surface to render or check. Cannot be combined
+                            with the selection globs below, which imply it.
+    --agent-glob PATTERNS   restrict the run to the agents outputs matching
+                            PATTERNS: one or more fnmatch patterns joined by
+                            "|" ("*app-expert*|*-coder*"). See below.
+    --command-glob PATTERNS the same, over the commands surface.
+    --model-family SPEC     the one model-tuning flag. SPEC names a family
+                            file OR a model inside one, and resolution decides
+                            which (Flavor resolution, below). A family SPEC
+                            loads that family and asks for no model scope; a
+                            model SPEC loads the family declaring that model
+                            and makes it the EXPORT FLAVOR for the outputs
+                            carrying no frontmatter `model:` pin. A pinned
+                            output resolves its own model scope either way
+                            (see per-pin resolution below).
 
 The strictly-inside-this-repository output guard applies only to the implicit
 default output location; an explicit --output-dir is exempt from the
 inside-repo constraint but is still asserted to be an existing directory. The
 full per-target safety table below (banner detection, numbered backups,
 refusal of bannerless files) applies identically to out-of-repo targets.
+
+Definition selection — --agent-glob and --command-glob:
+
+A pattern is matched against an output's SURFACE-RELATIVE path with the .md
+suffix dropped — go-coder, kb-start, mad/participant-contract — under fnmatch
+semantics, in which `*` crosses `/`. A nested output is therefore addressable
+both by its full key (mad/participant-contract) and by any pattern spanning
+the separator (*participant-contract*), and a bare *-coder* selects the
+top-level coders without reaching into a subdirectory only because none of
+those outputs live in one.
+
+Presence of either glob IMPLIES the surface(s) the run covers: --agent-glob
+alone renders/checks the agents surface only, filtered; --command-glob alone
+the commands surface only; both, both surfaces, each filtered by its own
+patterns; neither, every output, as always. --surfaces is therefore redundant
+with a glob and combining them is an argparse error. So is combining a glob
+with --install: an install delivers the whole product, and a partial install
+is a future feature, not this flag.
+
+Selection filters PER OUTPUT, not per template: a glob matching one output of
+a multi-output template renders or checks exactly that one, and the template's
+other outputs are left untouched on disk and reported as nothing at all.
+
+A pattern matching zero outputs — any single "|"-segment, and therefore the
+set — is a hard error naming the pattern and listing what the surface does
+declare. A selection that silently selected nothing would report exactly like
+a clean run. What was selected is stated in the run report, per surface:
+
+    agents: 12 of 24 outputs selected by --agent-glob
+
+Selection composes orthogonally with everything else: NB anchors and per-pin
+model resolution, banners and tuning claims, the write-safety table, and both
+checks all apply to the selected outputs exactly as they do to a full run.
 
 Model tuning — NB anchors and family files:
 
@@ -122,22 +146,45 @@ exists. A family file (templates/models/<family>.toml) fills anchors:
 
     [nb.<anchor-name>.models.<model-name>]
     text = "..."                          # overrides the family text for
-                                          # that model (with --model NAME)
+                                          # that model
 
 Resolution, not accumulation: AT MOST ONE NB renders per anchor — the model
 scope wins over the family scope.
 
+Flavor resolution — what one --model-family SPEC means:
+
+There is exactly ONE tuning flag, because family and model are not independent
+choices: a model is only ever reachable through the family that declares it,
+and naming both invited combinations that contradict each other. SPEC is
+resolved in this order, against templates/models/:
+
+    1. path-shaped   — contains a path separator or ends in .toml: taken as a
+                       path to a family file, unresolved and unvalidated here
+                       (load_family owns the existence error).
+    2. family name   — matches <SPEC>-addenda.toml or <SPEC>.toml: that family
+                       is loaded, and NO model scope is asked for. Both files
+                       existing is an ambiguity error naming the candidates.
+    3. model name    — found in exactly one family's [nb.*.models.<SPEC>]
+                       tables: that family is loaded AND <SPEC> becomes the
+                       export flavor for unpinned outputs. A model mentioned
+                       only in comments is NOT known.
+
+A bare name matching BOTH a family file and a model is an ambiguity error
+naming both readings; matching a model in SEVERAL families is an error naming
+them and demanding the family file path instead; matching NEITHER is an error
+listing the available family files and each one's known models.
+
 Model scope resolves PER OUTPUT, against that output's own frontmatter
 `model:` pin — the value in its RENDERED frontmatter, whether that comes from
 an outputs-table parameter (@@model@@, as the mad-participant template
-declares) or a literal frontmatter line. An output pinned to X resolves
-as if --model X: within the family file --model-family named, or, when none
-was named, within the one family whose [nb.*.models.X] tables mention X. A pin
-matching no family — or matching several — resolves to NO model scope at all,
-SILENTLY: a pin is routine metadata saying which model the definition
-dispatches on, not a request for tuning. CLI --model keeps the opposite
-semantics, because it IS a request: one that matches nothing is still an
-error.
+declares) or a literal frontmatter line. An output pinned to X resolves X's
+overrides: within the family file a family SPEC named, or, when the SPEC named
+a model (or nothing at all), within the one family whose [nb.*.models.X]
+tables mention X. A pin matching no family — or matching several — resolves to
+NO model scope at all, SILENTLY: a pin is routine metadata saying which model
+the definition dispatches on, not a request for tuning. A model SPEC keeps the
+opposite semantics, because it IS a request: one that matches nothing is still
+an error.
 
 Family scope is unchanged by any of that: a loaded family file's family-wide
 text fills its anchors render-wide, for pinned and unpinned outputs alike. A
@@ -147,13 +194,17 @@ actually loaded. The banner records the invocation's tuning; per-pin
 resolution is a deterministic function of that invocation, the templates, and
 templates/models/, so check reproduces it exactly.
 
---model is therefore the EXPORT FLAVOR: it tunes the outputs carrying no pin
-(today the generated commands and the participant contract) and is ignored by
-the pinned ones. That is accounted for out loud rather than silently, in the
+A model SPEC is therefore the EXPORT FLAVOR: it tunes the outputs carrying no
+pin (today the generated commands and the participant contract) and is ignored
+by the pinned ones. That is accounted for out loud rather than silently, in the
 generate/check/install report:
 
-    --model haiku: applied to 5 unpinned output(s); skipped 23 pinned
-    output(s) (pins own their tuning)
+    --model-family haiku (model in family templates/models/claude-addenda.toml):
+    applied to 5 unpinned output(s); skipped 23 pinned output(s) (pins own
+    their tuning)
+
+A family SPEC prints no such line: nothing model-scoped was asked for the
+unpinned outputs, so there is no reach to account for.
 
 The rendered form is `**NB**: <text>`; neither the family nor the model name
 appears in rendered output — the family file is the provenance record. The
@@ -192,11 +243,23 @@ The hash-verified branch is what keeps routine regeneration — and the flavored
 install's render pass over a freshly copied tree — from churning out backups
 nobody reads. A backup sits beside the file it backs up —
 agents/go-coder.md.00.bak next to agents/go-coder.md — and the repo's root
-*.bak gitignore rule keeps it out of git. The backup is a copy (mode and
-timestamps preserved) and the definition is truncated in place, so the live
-file keeps its inode, owner and mode however it is regenerated and by whom.
-Serials are per-target, zero-padded from 00, allocated as the highest existing
-serial plus one, and never reused.
+*.bak gitignore rule keeps it out of git. Serials are per-target, zero-padded
+from 00, allocated as the highest existing serial plus one, and never reused.
+
+Every write in this tool is a CONTENT write and nothing else. An extant target
+is written in place — its inode, owner and mode survive untouched — and a
+backup is a plain content copy into a new file the tool itself owns, never a
+metadata clone of the file it copies. That is a portability property, not a
+detail: writing bytes into an existing file needs only write permission, while
+cloning mtime or mode (utime, chmod — what shutil.copy2/copystat/copymode do)
+requires OWNERSHIP of the target, which fails outright in a shared group-writable
+tree whose files another user installed. Timestamps carry no meaning anywhere in
+this system — integrity is decided by the banner's content hash — so cloned
+metadata bought nothing and cost a mid-run EACCES that could split an install
+into a partial apply. The one metadata write left is on the creation path
+alone: a file the tool has just created takes the source's executable bit (a
+chmod on a file it owns by construction, always legal), so an installed shell
+tool stays runnable.
 
 As a guard against a wrong output-directory constant — which would otherwise
 exit 0 while writing to the wrong place — default-location generation first
@@ -209,7 +272,7 @@ as needed under either mode.
 
 Full-product install — `--install ROOT`:
 
-    python3 gen-defs.py --install <project>/.claude [--model-family F] [--model M]
+    python3 gen-defs.py --install <project>/.claude [--model-family SPEC]
 
 An install delivers the whole deployed product, and it is a PLAIN RECURSIVE
 COPY of both surfaces into ROOT — hand-maintained definitions, the checked-in
@@ -239,6 +302,12 @@ this tool's own output is copied aside as a numbered .bak first, exactly as
 generation does it. The overwrite always happens; the backup only keeps
 divergent human work from being destroyed by it, and *.bak files under an
 installed tree are deletable at will.
+
+An install writes exactly as generation does (see the content-write paragraph
+above): an extant installed file is rewritten through its own inode, so a tree
+installed by one user updates cleanly under another so long as the group can
+write. Ownership and mode are whatever the first install left; only a file this
+run creates is chmodded, and only to carry the source's executable bit.
 
 Every COPIED file is stamped with an !INSTALLED! banner carrying the same
 !BODY-SHA256! line the generated banner carries, in whatever comment syntax
@@ -271,9 +340,12 @@ changes and no backups.
 
 The banner is a four-line YAML-comment block naming the source template
 (`# !GENERATED! from templates/agents/<name>.md.tmpl ...`). When rendered with
-a family file, the banner line additionally names the family file (and the
-model when --model was given) — the banner is a tuned set's claim to its
-tuning, just as it is a definition's claim to being generated. The banner
+a family file, the banner line additionally names the family file, and the
+model too when the SPEC named a model — the minimal claim that separates two
+renders: family and model SPECs resolving to the same file still render
+unpinned outputs differently, so the model half is recorded exactly when it
+was asked for. The banner is a tuned set's claim to its tuning, just as it is
+a definition's claim to being generated. The banner
 always lives inside YAML frontmatter, never in the body that becomes a prompt:
 
   - An agent template must open with a frontmatter block; the banner is
@@ -310,8 +382,8 @@ Check mode runs two checks, each failing nonzero:
      templates and so is blind to a definition claiming generation with no
      template behind it; this walks the claims back the other way.
 
-Check accepts the same --output-dir / --surfaces / --model-family / --model
-flags, so a tuned out-of-repo set gets the identical render-identity and
+Check accepts the same --output-dir / --surfaces / --model-family flags, so a
+tuned out-of-repo set gets the identical render-identity and
 banner-claims validation. Tuning claims are part of both checks: check runs
 under exactly one tuning configuration (the one it was invoked with), renders
 with it, and requires every target's banner to claim exactly that
@@ -319,7 +391,7 @@ configuration. A banner naming a family file (or model) that check was not
 invoked with — or omitting one it was — is reported MISTUNED, naming both
 sides, instead of an opaque byte diff; a target whose tuning claim matches but
 whose bytes differ is ordinary DRIFT. Validating a tuned set therefore means
-invoking check with that set's --output-dir and its family/model flags;
+invoking check with that set's --output-dir and its --model-family SPEC;
 checking the same directory under a different tuning is expected to fail —
 that is the mismatch the banner exists to catch.
 
@@ -343,9 +415,10 @@ error, so a typo fails loudly rather than shipping into a system prompt.
 
 import argparse
 import difflib
+import fnmatch
 import hashlib
 import re
-import shutil
+import stat
 import sys
 import tomllib
 from collections.abc import Callable
@@ -367,11 +440,22 @@ from pathlib import Path
 # stamps every COPIED file with an !INSTALLED! banner in its filetype's comment
 # syntax, extending the hash-gated write-safety table to the install; 1.7.0
 # resolves model-scope NBs per output, against that output's own frontmatter
-# model: pin, which makes CLI --model the export flavor for unpinned outputs
-# alone — loudly accounted for, and silent for a pin matching nothing).
+# model: pin, which makes a CLI model ask the export flavor for unpinned
+# outputs alone — loudly accounted for, silent for a pin matching nothing; 1.8.0
+# adds definition-selection globs — --agent-glob / --command-glob, matched
+# per output against the surface-relative output path, implying the surfaces
+# they cover and hard-erroring on a pattern that matches nothing; 1.8.1 makes
+# every write a pure content write — in-place into the extant inode, backups
+# as plain content copies, and no utime/chmod on a file the runner may not
+# own, which is what made an install over another user's tree fail; 2.0.0
+# collapses --model-family and --model into ONE flag — --model-family SPEC,
+# whose bare name resolves to a family file OR to a model inside one — because
+# the pair let an operator name a family and a model that contradicted each
+# other; --model is REMOVED rather than deprecated, this tool having one
+# operator, so the old flag is an unknown-flag error).
 # Deliberately NOT embedded in rendered banners — that would churn every
 # generated file on every bump.
-__version__ = "1.7.0"
+__version__ = "2.0.0"
 
 REPO_ROOT = Path(__file__).parent
 TEMPLATES_DIR = REPO_ROOT / "templates"
@@ -384,6 +468,10 @@ MAX_EXPANSION_DEPTH = 10
 SURFACE_NAMES = ("agents", "commands")
 COMMAND_SURFACE = "commands"
 OUTPUTS_FENCE = "+++"
+# Definition selection: the flag each surface is globbed with, and the
+# separator joining several patterns into one flag value.
+SURFACE_GLOB_FLAG = {"agents": "--agent-glob", "commands": "--command-glob"}
+GLOB_SEPARATOR = "|"
 # The NB model-tuning marker's reserved name; no chunk or placeholder may
 # claim it. Anchor names share the marker-name charset.
 NB_MARKER = "nb"
@@ -393,6 +481,9 @@ ANCHOR_NAME = re.compile(r"[a-z0-9-]+")
 # literal line. Quotes are optional in YAML and stripped here.
 FRONTMATTER_PIN = re.compile(r"""^model:[ \t]*["']?([^"'\s#]+)["']?[ \t]*$""", re.MULTILINE)
 
+# Surface -> the fnmatch patterns selecting that surface's outputs. A surface
+# absent from the map is unfiltered, so None and {} both mean "everything".
+GlobMap = dict[str, list[str]]
 # anchor name -> (NB text, the scope it resolved from: "family" or "model").
 NBMap = dict[str, tuple[str, str]]
 # What the render path accepts for `nb`: a per-pin resolver (pin -> map), or a
@@ -460,6 +551,62 @@ def surface_map(
     if not set(names) <= set(SURFACE_NAMES):
         raise TemplateError(f"unknown surface '{surfaces}'")
     return {name: (templates_root / name, root / name) for name in names}
+
+
+# ─── Definition selection ────────────────────────────────────────────────────
+
+
+def split_globs(spec: str) -> list[str]:
+    """One --agent-glob/--command-glob value as its individual patterns."""
+    return spec.split(GLOB_SEPARATOR)
+
+
+def output_key(target: Path, surface_root: Path) -> str:
+    """What a selection pattern matches: the output's path relative to its
+    surface, without the .md suffix — go-coder, mad/participant-contract."""
+    return target.relative_to(surface_root).with_suffix("").as_posix()
+
+
+def selected(surface: str, key: str, globs: GlobMap | None) -> bool:
+    """Does the selection cover this output? A surface with no patterns is
+    covered entire. fnmatchcase, not fnmatch: matching must not depend on the
+    host filesystem's case rules."""
+    patterns = (globs or {}).get(surface)
+    return patterns is None or any(fnmatch.fnmatchcase(key, pattern) for pattern in patterns)
+
+
+def output_keys(smap: dict[str, tuple[Path, Path]]) -> dict[str, list[str]]:
+    """Surface -> every output key its templates declare, sorted. The set a
+    selection is validated and accounted against, without rendering anything."""
+    keys: dict[str, list[str]] = {surface: [] for surface in smap}
+    for surface, template, out_dir in template_targets(smap):
+        surface_root = smap[surface][1]
+        keys[surface].extend(output_key(out_dir / f"{name}.md", surface_root) for name in split_outputs(template)[0])
+    return {surface: sorted(found) for surface, found in keys.items()}
+
+
+def validate_selection(keys: dict[str, list[str]], globs: GlobMap) -> None:
+    """A pattern matching no output is a hard error naming it and listing what
+    its surface declares. Every "|"-segment is held to this individually, so a
+    typo inside an alternation cannot hide behind a sibling that matches — and
+    a selection that selected nothing can never report like a clean run."""
+    for surface, patterns in globs.items():
+        available = keys.get(surface, [])
+        for pattern in patterns:
+            if not any(fnmatch.fnmatchcase(key, pattern) for key in available):
+                raise TemplateError(
+                    f"{SURFACE_GLOB_FLAG[surface]} pattern '{pattern}' matches none of "
+                    f"the {len(available)} {surface} output(s): " + (", ".join(available) or "(none)")
+                )
+
+
+def report_selection(keys: dict[str, list[str]], globs: GlobMap) -> None:
+    """State what each globbed surface selected, out of what it declares."""
+    print()
+    for surface, patterns in sorted(globs.items()):
+        available = keys.get(surface, [])
+        chosen = sum(1 for key in available if selected(surface, key, globs))
+        print(f"{surface}: {chosen} of {len(available)} outputs selected by {SURFACE_GLOB_FLAG[surface]}")
 
 
 # ─── Rendering ───────────────────────────────────────────────────────────────
@@ -558,39 +705,6 @@ def load_family(path: Path) -> dict[str, dict]:
     return entries
 
 
-def resolve_family(spec: str, models_dir: Path = MODELS_DIR) -> Path:
-    """Resolve a --model-family argument to a family-file path.
-
-    Anything path-shaped — containing a path separator or ending in .toml —
-    is taken as a path, exactly as before. A bare family name is resolved
-    against `models_dir`, matching <name>-addenda.toml or <name>.toml: both
-    existing is an ambiguity error naming the candidates; neither is an error
-    listing the available family files.
-    """
-    if "/" in spec or "\\" in spec or spec.endswith(FAMILY_SUFFIX):
-        return Path(spec)
-    candidates = [
-        path
-        for path in (
-            models_dir / f"{spec}-addenda{FAMILY_SUFFIX}",
-            models_dir / f"{spec}{FAMILY_SUFFIX}",
-        )
-        if path.is_file()
-    ]
-    if len(candidates) > 1:
-        raise TemplateError(
-            f"--model-family '{spec}' is ambiguous — candidates: " + ", ".join(rel(path) for path in candidates)
-        )
-    if not candidates:
-        available = ", ".join(rel(path) for path in sorted(models_dir.glob(f"*{FAMILY_SUFFIX}")))
-        raise TemplateError(
-            f"--model-family '{spec}' matches no family file under "
-            f"{rel(models_dir)}/ (tried {spec}-addenda{FAMILY_SUFFIX} and "
-            f"{spec}{FAMILY_SUFFIX}) — available: {available or '(none)'}"
-        )
-    return candidates[0]
-
-
 def family_models(models_dir: Path = MODELS_DIR) -> dict[Path, set[str]]:
     """Family file -> the model names its [nb.*.models.*] tables mention.
 
@@ -604,32 +718,77 @@ def family_models(models_dir: Path = MODELS_DIR) -> dict[Path, set[str]]:
     }
 
 
-def imply_family(model: str, models_dir: Path = MODELS_DIR) -> Path:
-    """The family file a bare --model implies: the unique family whose
-    [nb.*.models.<model>] tables mention it. None or several is an error —
-    the caller must name the family explicitly."""
+def resolve_flavor(spec: str, models_dir: Path = MODELS_DIR) -> tuple[Path, str | None]:
+    """Resolve the single --model-family SPEC to (family file, model or None).
+
+    Family and model are one flag because they are one choice: a model is only
+    reachable through the family declaring it. SPEC resolves in three steps —
+
+      1. path-shaped (a path separator, or a .toml suffix): a family file path,
+         taken as given. load_family owns the existence error.
+      2. a bare family name: <spec>-addenda.toml or <spec>.toml under
+         `models_dir`. That family, and no model scope.
+      3. a bare model name: found in exactly one family's [nb.*.models.<spec>]
+         tables. That family, with <spec> as the export flavor.
+
+    Matching a family AND a model is an ambiguity error naming both readings;
+    matching two family files is the same error over the two candidates;
+    matching a model in several families demands the family file path instead;
+    matching nothing lists the family files and each one's known models.
+
+    Every family file is loaded to decide steps 2 and 3 apart, so a malformed
+    sibling family file fails a bare SPEC that does not name it. That is
+    inherent to resolving one flag against both namespaces, and loud.
+    """
+    if "/" in spec or "\\" in spec or spec.endswith(FAMILY_SUFFIX):
+        return Path(spec), None
+    families = [
+        path
+        for path in (
+            models_dir / f"{spec}-addenda{FAMILY_SUFFIX}",
+            models_dir / f"{spec}{FAMILY_SUFFIX}",
+        )
+        if path.is_file()
+    ]
     known = family_models(models_dir)
-    matches = [path for path, models in known.items() if model in models]
-    if len(matches) == 1:
-        return matches[0]
-    if matches:
+    declaring = [path for path, models in known.items() if spec in models]
+
+    if families and declaring:
         raise TemplateError(
-            f"--model '{model}' appears in more than one family file ("
-            + ", ".join(rel(path) for path in matches)
-            + ") — name one explicitly with --model-family"
+            f"--model-family '{spec}' is ambiguous: it names the family file(s) "
+            + ", ".join(rel(path) for path in families)
+            + " and a model declared in "
+            + ", ".join(rel(path) for path in declaring)
+            + " — pass the family file path to mean the family, or rename one of the two"
+        )
+    if len(families) > 1:
+        raise TemplateError(
+            f"--model-family '{spec}' is ambiguous — candidates: " + ", ".join(rel(path) for path in families)
+        )
+    if families:
+        return families[0], None
+    if len(declaring) == 1:
+        return declaring[0], spec
+    if declaring:
+        raise TemplateError(
+            f"--model-family '{spec}' is a model declared in more than one family file ("
+            + ", ".join(rel(path) for path in declaring)
+            + ") — pass the family file path instead"
         )
     listing = (
         "; ".join(
-            f"{rel(path)}: " + (", ".join(sorted(models)) if models else "(none)") for path, models in known.items()
+            f"{rel(path)}: " + (", ".join(sorted(models)) if models else "(no models)")
+            for path, models in known.items()
         )
         or "(no family files)"
     )
     raise TemplateError(
-        f"--model '{model}' given without --model-family, and no family file "
-        f"under {rel(models_dir)}/ mentions that model in a [nb.*.models.*] "
-        f"table. Known models per family: {listing}. A model mentioned only "
-        f"in comments is not known — to use it, name its family explicitly: "
-        f"--model-family <family> --model {model}"
+        f"--model-family '{spec}' names neither a family file nor a known "
+        f"model: no {spec}-addenda{FAMILY_SUFFIX} or {spec}{FAMILY_SUFFIX} "
+        f"under {rel(models_dir)}/, and no family's [nb.*.models.*] tables "
+        f"declare it. Available families and their known models: {listing}. A "
+        f"model mentioned only in comments is not declared; a family file "
+        f"named otherwise is reachable by its path."
     )
 
 
@@ -681,21 +840,24 @@ def per_pin_resolver(
     """Build the per-output NB resolver: output's model pin -> resolved NBs.
 
     Model scope belongs to the output, not to the render. An output pinned to
-    X resolves X's overrides — within the family file --model-family named, or
+    X resolves X's overrides — within the family file a family SPEC named, or
     else within the one family whose [nb.*.models.X] tables mention X. A pin
     matching no family, or several, resolves to no model scope at all and says
     nothing about it: a pin is metadata about which model the definition
-    dispatches on, not a request for tuning (CLI --model, which IS a request,
-    still errors when it matches nothing — see imply_family).
+    dispatches on, not a request for tuning (a CLI model SPEC, which IS a
+    request, still errors when it matches nothing — see resolve_flavor).
 
-    An output with no pin takes `cli_model` instead — the export flavor. The
-    loaded family's family-wide text applies to every output either way.
+    An output with no pin takes `cli_model` instead — the export flavor, set
+    only when the SPEC named a model. `family_given` says the SPEC named the
+    family directly, which confines pin resolution to it; a model SPEC implies
+    its family rather than naming it, and leaves pins free to imply their own.
+    The loaded family's family-wide text applies to every output either way.
     """
     wide = family_scope(entries or {})
     if family_given:
         sources = [entries or {}]
     else:
-        # A pin can imply its own family exactly as a bare --model does, so
+        # A pin can imply its own family exactly as a model SPEC does, so
         # every family file is a candidate. Loading them validates their
         # schema as a side effect, which is why a malformed family file is an
         # error even for a render that ends up using none of them.
@@ -1003,13 +1165,20 @@ def render_template(
     return rendered
 
 
-def template_targets(smap: dict[str, tuple[Path, Path]]) -> list[tuple[str, Path, Path]]:
+def template_targets(
+    smap: dict[str, tuple[Path, Path]],
+    globs: GlobMap | None = None,
+) -> list[tuple[str, Path, Path]]:
     """(surface name, template path, output directory) for every template.
 
     Discovery recurses through each surface's template tree (an absent tree is
     tolerated), and a template's relative subpath is mirrored into its surface:
     templates/agents/mad/participant-contract.md.tmpl has output directory
     agents/mad/. Placement is declared by the filesystem and nothing else.
+
+    `globs` drops a template none of whose declared outputs are selected; a
+    partially selected one stays, and its unselected outputs are filtered out
+    per output where they are rendered.
     """
     found: list[tuple[str, Path, Path]] = []
     for name, (template_dir, out_dir) in smap.items():
@@ -1017,7 +1186,13 @@ def template_targets(smap: dict[str, tuple[Path, Path]]) -> list[tuple[str, Path
             continue
         for template in template_dir.rglob(f"*{TEMPLATE_SUFFIX}"):
             subpath = template.parent.relative_to(template_dir)
-            found.append((name, template, out_dir / subpath))
+            mirrored = out_dir / subpath
+            if globs and not any(
+                selected(name, output_key(mirrored / f"{output}.md", out_dir), globs)
+                for output in split_outputs(template)[0]
+            ):
+                continue
+            found.append((name, template, mirrored))
     return sorted(found, key=lambda target: rel(target[1]))
 
 
@@ -1034,7 +1209,7 @@ def declared_outputs(smap: dict[str, tuple[Path, Path]]) -> dict[str, set[str]]:
     return outputs
 
 
-def check_banner_claims(smap: dict[str, tuple[Path, Path]]) -> list[str]:
+def check_banner_claims(smap: dict[str, tuple[Path, Path]], globs: GlobMap | None = None) -> list[str]:
     """Verify every definition carrying a banner has the template it names.
 
     Enrollment runs template -> definition, so iterating templates cannot see a
@@ -1043,11 +1218,16 @@ def check_banner_claims(smap: dict[str, tuple[Path, Path]]) -> list[str]:
     check and drifting silently. This walks the claims the other way, across
     both deployed surfaces (agents/ and commands/) and recursively through
     their subdirectories, since outputs mirror nested template paths.
+
+    `globs` narrows the WALK, never the claim map: a selected file's banner is
+    still checked against everything every template declares.
     """
     errors = []
     outputs = declared_outputs(smap)
-    for _, out_dir in smap.values():
+    for surface, (_, out_dir) in smap.items():
         for path in sorted(out_dir.rglob("*.md")):
+            if not selected(surface, output_key(path, out_dir), globs):
+                continue
             claimed = banner_claim(path.read_text(encoding="utf-8"))
             if claimed is None:
                 continue
@@ -1091,15 +1271,21 @@ def next_backup(target: Path) -> Path:
 
 
 def back_up(target: Path) -> Path:
-    """Copy the extant definition aside before it is overwritten in place.
+    """Copy the extant definition's CONTENT aside before it is overwritten.
 
-    Copy, not rename: the subsequent write truncates the original inode, so the
-    live definition keeps its identity, owner and mode no matter who runs the
-    tool. Renaming would hand the original inode to the disposable backup and
-    leave the tracked file owned by whoever regenerated it.
+    Copy, not rename: the subsequent write goes through the original inode, so
+    the live definition keeps its identity, owner and mode no matter who runs
+    the tool. Renaming would hand the original inode to the disposable backup
+    and leave the tracked file owned by whoever regenerated it.
+
+    Content only — the .bak is a recovery artifact, not a mirror. It is a new
+    file this run owns, with this run's default mode and its own timestamps;
+    cloning the original's metadata would need ownership of a file the runner
+    may not own, and would buy nothing, since nothing in this system reads a
+    timestamp (integrity is the banner's content hash).
     """
     backup = next_backup(target)
-    shutil.copy2(target, backup)
+    backup.write_bytes(target.read_bytes())
     return backup
 
 
@@ -1108,11 +1294,18 @@ def all_renders(
     smap: dict[str, tuple[Path, Path]],
     nb: NBSource = None,
     tuning: tuple[Path, str | None] | None = None,
+    globs: GlobMap | None = None,
 ) -> list[tuple[Path, str]]:
-    """Every (target, rendered text) pair across every template, sorted."""
+    """Every (target, rendered text) pair across every template, sorted — the
+    ones `globs` selects, when a selection is in force."""
     pairs = []
-    for surface, template, out_dir in template_targets(smap):
-        pairs.extend(render_template(template, chunks, out_dir, surface=surface, nb=nb, tuning=tuning))
+    for surface, template, out_dir in template_targets(smap, globs):
+        surface_root = smap[surface][1]
+        pairs.extend(
+            pair
+            for pair in render_template(template, chunks, out_dir, surface=surface, nb=nb, tuning=tuning)
+            if selected(surface, output_key(pair[0], surface_root), globs)
+        )
     return sorted(pairs, key=lambda pair: rel(pair[0]))
 
 
@@ -1137,8 +1330,8 @@ def report_nb(
     nb: NBMap,
     tuning: tuple[Path, str | None],
 ) -> None:
-    """State which anchors the family file filled, and from which scope. With
-    a --model, that is the resolution the flavor gives an UNPINNED output; a
+    """State which anchors the family file filled, and from which scope. Under
+    a model SPEC, that is the resolution the flavor gives an UNPINNED output; a
     pinned one resolves its own model scope (report_model_flavor accounts for
     which outputs are which)."""
     family, model = tuning
@@ -1150,22 +1343,25 @@ def report_nb(
         print(f"  {anchor:<28} {scope}")
 
 
-def report_model_flavor(model: str, pairs: list[tuple[Path, str]]) -> None:
-    """Account for where --model landed. It is the export flavor: it tunes the
-    outputs carrying no frontmatter pin and is ignored by the rest. Said out
-    loud, always — a flavored render that reached nothing must not read like
-    one that worked."""
+def report_model_flavor(model: str, family: Path, pairs: list[tuple[Path, str]]) -> None:
+    """Account for where a model SPEC landed. It is the export flavor: it tunes
+    the outputs carrying no frontmatter pin and is ignored by the rest. Said out
+    loud whenever the SPEC named a model — a flavored render that reached
+    nothing must not read like one that worked. A family SPEC asked for no model
+    scope on unpinned outputs, so it has no reach to account for and prints
+    nothing here."""
     pinned = sum(1 for _, text in pairs if frontmatter_pin(text) is not None)
     unpinned = len(pairs) - pinned
+    asked = f"--model-family {model} (model in family {rel(family)})"
     print()
     if unpinned:
         print(
-            f"--model {model}: applied to {unpinned} unpinned output(s); "
+            f"{asked}: applied to {unpinned} unpinned output(s); "
             f"skipped {pinned} pinned output(s) (pins own their tuning)"
         )
     else:
         print(
-            f"--model {model}: applied to 0 unpinned output(s) — all "
+            f"{asked}: applied to 0 unpinned output(s) — all "
             f"{pinned} output(s) carry a frontmatter pin (pins own their tuning)"
         )
 
@@ -1176,6 +1372,7 @@ def generate(
     *,
     nb: NBSource = None,
     tuning: tuple[Path, str | None] | None = None,
+    globs: GlobMap | None = None,
     explicit_root: bool = False,
     verbose: bool = False,
 ) -> bool:
@@ -1183,12 +1380,12 @@ def generate(
     unchanged = 0
     print("Generating definitions")
     print("=" * 60)
-    found = template_targets(smap)
+    found = template_targets(smap, globs)
     if not found:
         print(f"  ERROR      no templates found under {rel(TEMPLATES_DIR)}/")
         return False
 
-    pairs = all_renders(chunks, smap, nb, tuning)
+    pairs = all_renders(chunks, smap, nb, tuning, globs)
     if not explicit_root:
         # The wrong-constant guard covers the surface directories only; the
         # mirrored subdirectories below them come from the template tree.
@@ -1248,6 +1445,7 @@ def check(
     *,
     nb: NBSource = None,
     tuning: tuple[Path, str | None] | None = None,
+    globs: GlobMap | None = None,
     verbose: bool = False,
     show_diff: bool = True,
 ) -> bool:
@@ -1267,7 +1465,7 @@ def check(
     if tuning is not None:
         expected_tuning = (rel(tuning[0]), tuning[1])
 
-    for target, rendered in all_renders(chunks, smap, nb, tuning):
+    for target, rendered in all_renders(chunks, smap, nb, tuning, globs):
         if not target.exists():
             print(f"  {'MISSING':<8} {rel(target)} — run --generate")
             clean = False
@@ -1311,7 +1509,7 @@ def check(
     print()
     print("Banner claims vs templates")
     print("=" * 60)
-    claim_errors = check_banner_claims(smap)
+    claim_errors = check_banner_claims(smap, globs)
     if claim_errors:
         clean = False
         for err in claim_errors:
@@ -1355,6 +1553,10 @@ INSTALLED_NOTICE = "!INSTALLED! from the agents repo — do not edit in place; "
 # in point), so its file is copied verbatim and the install reports it.
 HASH_COMMENT_SUFFIXES = frozenset({".py", ".sh", ".toml", ".mk", ".just"})
 MARKDOWN_SUFFIX = ".md"
+# The only mode bits an install ever sets, and only on a file it just created:
+# an executable source (the liaison shell tools) must land runnable. An update
+# writes in place and inherits whatever mode the target already carries.
+EXEC_BITS = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
 
 
 def bannerable(source: Path) -> bool:
@@ -1423,12 +1625,12 @@ def install_content(source: Path, *, surface: str) -> str | None:
     return stamp_installed(text, style=style)
 
 
-def provably_ours(target: Path) -> bool:
-    """Does the extant target's body still hash to its own banner's claim?
-    A file that cannot be read as text carries no banner and proves nothing."""
+def provably_ours(extant: bytes) -> bool:
+    """Do these extant bytes still hash to their own banner's claim? Bytes that
+    are not utf-8 text carry no banner and prove nothing."""
     try:
-        return body_untouched(target.read_text(encoding="utf-8"))
-    except (UnicodeDecodeError, OSError):
+        return body_untouched(extant.decode("utf-8"))
+    except UnicodeDecodeError:
         return False
 
 
@@ -1440,23 +1642,35 @@ def install_file(source: Path, target: Path, content: str | None) -> str:
     (its body did not hash to its own banner's claim, or it carried no banner
     at all) and was copied aside before being replaced. The replacement itself
     is never in question: the tree is an artifact.
+
+    The extant target is read ONCE and every verdict is reached over those bytes
+    in memory; the write that follows goes straight through the target's own
+    inode, so an update never touches ownership, mode, or timestamps — see the
+    content-write paragraph in the module docstring for why that matters in a
+    tree whose files another user installed. Only a file created by this call is
+    chmodded, and only to carry the source's executable bit.
+
+    Bytes throughout: the copy set includes filetypes this tool never decodes
+    (a stamped file's content is already utf-8 text, encoded here), and both the
+    comparison and the write have to be byte-exact.
     """
     desired = source.read_bytes() if content is None else content.encode("utf-8")
+    if not target.exists():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(desired)
+        if source.stat().st_mode & EXEC_BITS:
+            target.chmod(target.stat().st_mode | EXEC_BITS)
+        return "written"
+
+    extant = target.read_bytes()
+    if extant == desired:
+        return "unchanged"
     outcome = "written"
-    if target.exists():
-        if target.read_bytes() == desired:
-            return "unchanged"
-        if not provably_ours(target):
-            back_up(target)
-            outcome = "backed up"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    if content is None:
-        shutil.copy2(source, target)
-    else:
-        # Written as text and then mode-matched to the source: the executable
-        # bit on the installed shell tools has to survive the stamping.
-        target.write_text(content, encoding="utf-8", newline="\n")
-        shutil.copymode(source, target)
+    if not provably_ours(extant):
+        back_up(target)
+        outcome = "backed up"
+    # In place: write_bytes opens the extant inode "wb" and truncates it.
+    target.write_bytes(desired)
     return outcome
 
 
@@ -1567,7 +1781,14 @@ def install(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate and check the generated agent/command definitions.")
+    parser = argparse.ArgumentParser(
+        description="Generate and check the generated agent/command definitions.",
+        # Exact flag names only. Prefix abbreviation would silently keep the
+        # retired --model alive as an alias for --model-family, whose SPEC
+        # means something else entirely — the one collapse 2.0.0 exists to make
+        # would land as a wrong-argument bug instead of an unknown-flag error.
+        allow_abbrev=False,
+    )
     parser.add_argument(
         "--generate",
         action="store_true",
@@ -1580,7 +1801,7 @@ def main() -> None:
         help="full-product install into ROOT (a project's existing .claude "
         "directory): copy the deployed surfaces entire, minus test suites and "
         "caches, stamping each copied file with an !INSTALLED! banner. A "
-        "flavor (--model-family/--model) adds a render pass over the copy. "
+        "flavor (--model-family SPEC) adds a render pass over the copy. "
         "Implies --output-dir ROOT",
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -1600,51 +1821,85 @@ def main() -> None:
     parser.add_argument(
         "--surfaces",
         choices=("agents", "commands", "both"),
-        default="both",
-        help="which surface to render or check (default: both)",
+        # No default: the selection globs imply their surfaces, so combining
+        # the two flags has to be distinguishable from not passing this one.
+        help="which surface to render or check (default: both). Not combinable "
+        "with --agent-glob/--command-glob, which imply their surfaces",
+    )
+    parser.add_argument(
+        "--agent-glob",
+        metavar="PATTERNS",
+        help="restrict the run to the agents outputs matching PATTERNS — one "
+        'or more fnmatch patterns joined by "|", matched against the '
+        "surface-relative output path without its .md suffix "
+        '(--agent-glob "*app-expert*|*-coder*"). Implies --surfaces agents '
+        "unless --command-glob is given too; a pattern matching nothing is an "
+        "error",
+    )
+    parser.add_argument(
+        "--command-glob",
+        metavar="PATTERNS",
+        help="the same, over the commands surface",
     )
     parser.add_argument(
         "--model-family",
-        metavar="FILE|NAME",
-        help="model-family NB file filling @@nb@@ anchors — a path, or a bare "
-        "family name resolved against templates/models/ "
-        "(see templates/models/README.md)",
-    )
-    parser.add_argument(
-        "--model",
-        metavar="NAME",
-        help="export flavor: activate NAME's per-model overrides for the "
-        "outputs carrying no frontmatter model: pin (a pinned output "
-        "resolves its own and ignores this); without --model-family, the "
-        "one family whose [nb.*.models.*] tables mention NAME is implied",
+        metavar="SPEC",
+        help="the model-tuning flag: SPEC is a family-file path, a bare family "
+        "name resolved against templates/models/, or a bare model name found in "
+        "exactly one family's [nb.*.models.*] tables — which additionally makes "
+        "that model the export flavor for the outputs carrying no frontmatter "
+        "model: pin (a pinned output resolves its own and ignores it). See "
+        "templates/models/README.md",
     )
     args = parser.parse_args()
     if args.install is not None and (args.generate or args.output_dir is not None):
         parser.error("--install ROOT already implies --generate --output-dir ROOT — " "pass it alone")
     output_root = args.install if args.install is not None else args.output_dir
 
+    globs: GlobMap = {
+        surface: split_globs(spec)
+        for surface, spec in (("agents", args.agent_glob), ("commands", args.command_glob))
+        if spec is not None
+    }
+    if globs:
+        if args.surfaces is not None:
+            parser.error(
+                "--agent-glob/--command-glob already select their surface(s) — " "drop --surfaces, which they subsume"
+            )
+        if args.install is not None:
+            parser.error(
+                "--install does not accept selection globs: an install delivers "
+                "the whole product, and a partial install is a future feature. "
+                "Use the globs with --generate or check instead"
+            )
+    # The globs imply the surfaces they cover; without them, --surfaces (or its
+    # default) does.
+    surfaces = ("both" if len(globs) > 1 else next(iter(globs))) if globs else (args.surfaces or "both")
+
     try:
-        smap = surface_map(output_root=output_root, surfaces=args.surfaces)
+        smap = surface_map(output_root=output_root, surfaces=surfaces)
+        if globs:
+            validate_selection(output_keys(smap), globs)
         chunks = load_chunks()
-        nb = tuning = entries = family = None
+        nb = tuning = entries = family = model = None
         if args.model_family is not None:
-            family = resolve_family(args.model_family)
-        elif args.model is not None:
-            family = imply_family(args.model)
-            print(f"--model {args.model} implies model family {rel(family)}")
-        if family is not None:
+            family, model = resolve_flavor(args.model_family)
+            if model is not None:
+                print(f"--model-family {model} resolves to model {model} in family {rel(family)}")
             entries = load_family(family)
             # Anchors are collected across ALL templates and chunks, not just
             # the --surfaces selection, so a filtered render never miscalls a
             # real anchor unknown.
             validate_family_anchors(entries, collect_anchors(chunks, templates(surface_map())))
-            tuning = (family, args.model)
+            tuning = (family, model)
         # Always per-pin: an output's own frontmatter model: pin owns its model
-        # scope, whether or not this invocation asked for a flavor.
+        # scope, whether or not this invocation asked for a flavor. A model SPEC
+        # implies its family rather than naming it, so pins stay free to imply
+        # their own — exactly as they did under the retired bare --model.
         nb = per_pin_resolver(
             entries,
-            cli_model=args.model,
-            family_given=args.model_family is not None,
+            cli_model=model,
+            family_given=args.model_family is not None and model is None,
         )
         if args.install is not None:
             ok = install(
@@ -1663,6 +1918,7 @@ def main() -> None:
                 smap,
                 nb=nb,
                 tuning=tuning,
+                globs=globs,
                 explicit_root=output_root is not None,
                 verbose=args.verbose,
             )
@@ -1674,13 +1930,17 @@ def main() -> None:
                 smap,
                 nb=nb,
                 tuning=tuning,
+                globs=globs,
                 verbose=args.verbose,
                 show_diff=not args.no_diff,
             )
-        if args.model is not None:
-            # The flavor's reach is accounted for in every mode: it is the one
-            # flag whose effect depends on what each output declares.
-            report_model_flavor(args.model, all_renders(chunks, smap, nb, tuning))
+        if globs:
+            report_selection(output_keys(smap), globs)
+        if model is not None:
+            # A model SPEC's reach is accounted for in every mode: it is the one
+            # ask whose effect depends on what each output declares. A family
+            # SPEC asked for none, and prints nothing.
+            report_model_flavor(model, family, all_renders(chunks, smap, nb, tuning, globs))
     except TemplateError as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(2)

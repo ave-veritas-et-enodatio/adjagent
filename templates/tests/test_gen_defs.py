@@ -3,11 +3,15 @@ family-file loading and validation, flavor resolution (bare family names and
 model -> family implication), scope resolution (model wins over family),
 per-pin resolution (each output's model scope comes from its own frontmatter
 model: pin, leaving --model as the export flavor for unpinned outputs),
-surface-map construction, tuned banners, the two body-hash banners
+surface-map construction, definition-selection globs (matching, validation,
+accounting, and the filtered generate/check paths), tuned banners, the two
+body-hash banners
 (!GENERATED! and !INSTALLED!) and the backup branches they gate, the
 render-to-order generate/check round trip, and full-product install (copy set,
-per-filetype banner placement, per-target write safety, and end-to-end
-installs of this repository — plain, flavored, and re-installed).
+per-filetype banner placement, per-target write safety, the content-only write
+path — in-place update, inode and mode preserved, exec bit on creation, backups
+as plain content copies — and end-to-end installs of this repository — plain,
+flavored, and re-installed).
 
 The script lives at the repo root under a hyphenated name, so it is loaded
 here via importlib rather than imported. Filesystem-shaped cases build
@@ -18,8 +22,11 @@ real templates/ and deployed surfaces are never touched or written.
 
 import contextlib
 import io
+import os
 import shutil
+import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 from importlib import util
@@ -122,9 +129,9 @@ class TestFamilyValidation(unittest.TestCase):
             gen_defs.validate_family_anchors({"ghost": {}, "gap": {}}, {"gap"})
 
 
-class TestFamilyNameResolution(unittest.TestCase):
-    """resolve_family: path-shaped specs pass through; bare names resolve
-    against the models dir, <name>-addenda.toml / <name>.toml."""
+class TestFlavorResolution(unittest.TestCase):
+    """resolve_flavor: the single --model-family SPEC, resolved in order —
+    path, family name, model name — to (family file, model or None)."""
 
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -133,81 +140,92 @@ class TestFamilyNameResolution(unittest.TestCase):
 
     def _family(self, filename, toml_text='[nb.gap.models.m1]\ntext = "t"\n'):
         path = self.models / filename
-        path.write_text(toml_text)
+        path.write_text(toml_text, encoding="utf-8")
         return path
 
-    def test_path_with_separator_passes_through(self):
-        # Path-shaped specs are never name-resolved, even when nonexistent —
-        # load_family owns the existence error, exactly as before.
-        spec = "no/such/family"
-        self.assertEqual(gen_defs.resolve_family(spec, self.models), Path(spec))
+    def _resolve(self, spec):
+        return gen_defs.resolve_flavor(spec, self.models)
 
-    def test_toml_suffix_passes_through(self):
-        self.assertEqual(gen_defs.resolve_family("fam.toml", self.models), Path("fam.toml"))
+    def test_path_with_separator_passes_through_with_no_model(self):
+        # Path-shaped specs are never name-resolved, even when nonexistent —
+        # load_family owns the existence error.
+        spec = "no/such/family"
+        self.assertEqual(self._resolve(spec), (Path(spec), None))
+
+    def test_toml_suffix_passes_through_with_no_model(self):
+        self.assertEqual(self._resolve("fam.toml"), (Path("fam.toml"), None))
 
     def test_bare_name_matches_addenda_file(self):
         addenda = self._family("gem-addenda.toml")
-        self.assertEqual(gen_defs.resolve_family("gem", self.models), addenda)
+        self.assertEqual(self._resolve("gem"), (addenda, None))
 
     def test_bare_name_matches_plain_file(self):
         plain = self._family("gem.toml")
-        self.assertEqual(gen_defs.resolve_family("gem", self.models), plain)
+        self.assertEqual(self._resolve("gem"), (plain, None))
 
-    def test_both_candidates_is_ambiguity_error_naming_them(self):
-        self._family("gem-addenda.toml")
-        self._family("gem.toml")
-        with self.assertRaisesRegex(gen_defs.TemplateError, r"ambiguous.*gem-addenda\.toml.*gem\.toml"):
-            gen_defs.resolve_family("gem", self.models)
+    def test_family_spec_asks_for_no_model_scope(self):
+        # Step 2 stops at the family: the models its tables declare are
+        # reachable only by naming one of them.
+        self._family("gem.toml", '[nb.gap]\ntext = "f"\n[nb.gap.models.m1]\ntext = "t"\n')
+        self.assertIsNone(self._resolve("gem")[1])
 
-    def test_no_match_error_lists_available_family_files(self):
-        self._family("other.toml")
-        with self.assertRaisesRegex(gen_defs.TemplateError, r"matches no family file.*other\.toml"):
-            gen_defs.resolve_family("gem", self.models)
-
-
-class TestModelImpliesFamily(unittest.TestCase):
-    """imply_family: a bare --model implies the unique family whose
-    [nb.*.models.*] tables mention it."""
-
-    def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(self._tmp.cleanup)
-        self.models = Path(self._tmp.name)
-
-    def _family(self, filename, toml_text):
-        (self.models / filename).write_text(toml_text)
-
-    def test_unique_family_is_implied(self):
-        self._family("one.toml", '[nb.gap.models.m1]\ntext = "t"\n')
+    def test_model_name_implies_its_family_and_becomes_the_flavor(self):
+        one = self._family("one.toml", '[nb.gap.models.m1]\ntext = "t"\n')
         self._family("two.toml", '[nb.gap.models.m2]\ntext = "t"\n')
-        self.assertEqual(gen_defs.imply_family("m1", self.models), self.models / "one.toml")
+        self.assertEqual(self._resolve("m1"), (one, "m1"))
 
     def test_family_models_ignores_comment_only_mentions(self):
         # A model sketched in comments (claude-addenda.toml's pattern) is
-        # not known to its family.
+        # not declared by its family.
         self._family("sketch.toml", '# [nb.gap.models.ghost]\n# text = "t"\n')
         known = gen_defs.family_models(self.models)
         self.assertEqual(known[self.models / "sketch.toml"], set())
 
-    def test_unknown_model_error_lists_models_and_the_fix(self):
-        self._family("one.toml", '[nb.gap.models.m1]\ntext = "t"\n')
-        self._family("sketch.toml", "# comments only\n")
+    def test_both_family_files_is_ambiguity_error_naming_them(self):
+        self._family("gem-addenda.toml")
+        self._family("gem.toml")
+        with self.assertRaisesRegex(gen_defs.TemplateError, r"ambiguous — candidates.*gem-addenda\.toml.*gem\.toml"):
+            self._resolve("gem")
+
+    def test_name_matching_a_family_and_a_model_names_both_readings(self):
+        # The one collision the two-flag CLI could not have: under one flag a
+        # bare name has two namespaces to land in, so it must refuse.
+        self._family("dual.toml", '[nb.gap.models.m1]\ntext = "t"\n')
+        self._family("other.toml", '[nb.gap.models.dual]\ntext = "t"\n')
         with self.assertRaisesRegex(
             gen_defs.TemplateError,
-            r"no family file.*mentions that model.*one\.toml: m1"
-            r".*sketch\.toml: \(none\)"
-            r".*comments is not known.*--model-family <family> --model ghost",
+            r"ambiguous: it names the family file\(s\) .*dual\.toml"
+            r" and a model declared in .*other\.toml"
+            r" — pass the family file path",
         ):
-            gen_defs.imply_family("ghost", self.models)
+            self._resolve("dual")
 
-    def test_model_in_several_families_demands_explicit_family(self):
+    def test_model_in_several_families_demands_the_family_path(self):
         self._family("one.toml", '[nb.gap.models.m1]\ntext = "t"\n')
         self._family("two.toml", '[nb.gap.models.m1]\ntext = "t"\n')
         with self.assertRaisesRegex(
             gen_defs.TemplateError,
-            r"more than one family file.*one\.toml.*two\.toml.*--model-family",
+            r"model declared in more than one family file.*one\.toml.*two\.toml" r".*pass the family file path instead",
         ):
-            gen_defs.imply_family("m1", self.models)
+            self._resolve("m1")
+
+    def test_matching_neither_lists_families_and_their_known_models(self):
+        self._family("one.toml", '[nb.gap.models.m1]\ntext = "t"\n')
+        self._family("sketch.toml", "# comments only\n")
+        with self.assertRaisesRegex(
+            gen_defs.TemplateError,
+            r"names neither a family file nor a known model"
+            r".*no ghost-addenda\.toml or ghost\.toml"
+            r".*one\.toml: m1"
+            r".*sketch\.toml: \(no models\)"
+            r".*only in comments is not declared"
+            r".*reachable by its path",
+        ):
+            self._resolve("ghost")
+
+    def test_no_family_files_at_all_says_so(self):
+        with self.assertRaisesRegex(gen_defs.TemplateError, r"\(no family files\)"):
+            self._resolve("ghost")
 
 
 class TestNBResolution(unittest.TestCase):
@@ -334,12 +352,12 @@ class TestPerPinResolver(unittest.TestCase):
 
     def test_ambiguous_pin_is_silent_where_the_cli_ask_is_an_error(self):
         # The asymmetry: a pin is routine metadata, so ambiguity costs it its
-        # model scope and nothing else; --model is a request, and a request
-        # that resolves to nothing still fails loudly.
+        # model scope and nothing else; a SPEC is a request, and a request that
+        # resolves to nothing still fails loudly.
         (self.models / "second.toml").write_text('[nb.gap.models.opus]\ntext = "elsewhere"\n', encoding="utf-8")
         self.assertEqual(self._resolver(None)("opus"), {})
         with self.assertRaisesRegex(gen_defs.TemplateError, "more than one family file"):
-            gen_defs.imply_family("opus", self.models)
+            gen_defs.resolve_flavor("opus", self.models)
 
     def test_no_family_files_leaves_every_output_bare(self):
         self.family.unlink()
@@ -432,6 +450,447 @@ class TestSurfaceMap(unittest.TestCase):
             smap = gen_defs.surface_map(templates_root=Path(tmp) / "tsrc", output_root=Path(tmp))
             self.assertEqual(smap["agents"][0], Path(tmp) / "tsrc" / "agents")
             self.assertEqual(smap["commands"][1], Path(tmp) / "commands")
+
+
+class TestSelectionMatching(unittest.TestCase):
+    """What a selection glob covers: surface-relative keys without the .md
+    suffix, fnmatch semantics (`*` crosses `/`), `|`-alternation as a union,
+    and an unglobbed surface passing whole."""
+
+    def test_output_key_is_surface_relative_and_suffixless(self):
+        root = Path("/out/agents")
+        self.assertEqual(gen_defs.output_key(root / "go-coder.md", root), "go-coder")
+        self.assertEqual(
+            gen_defs.output_key(root / "mad" / "participant-contract.md", root),
+            "mad/participant-contract",
+        )
+
+    def test_split_globs_splits_on_the_separator(self):
+        self.assertEqual(gen_defs.split_globs("*-coder*"), ["*-coder*"])
+        self.assertEqual(gen_defs.split_globs("*app-expert*|*-coder*"), ["*app-expert*", "*-coder*"])
+
+    def test_single_pattern_selects_its_matches_only(self):
+        globs = {"agents": ["*-coder*"]}
+        self.assertTrue(gen_defs.selected("agents", "go-coder", globs))
+        self.assertFalse(gen_defs.selected("agents", "architect", globs))
+
+    def test_alternation_selects_the_union(self):
+        globs = {"agents": gen_defs.split_globs("*app-expert*|*-coder*")}
+        for key in ("ios-app-expert", "rust-coder"):
+            self.assertTrue(gen_defs.selected("agents", key, globs), key)
+        self.assertFalse(gen_defs.selected("agents", "architect", globs))
+
+    def test_star_crosses_the_path_separator(self):
+        # A nested output is addressable by its full key and by any pattern
+        # spanning the separator — that is what makes mad/participant-contract
+        # reachable at all.
+        for pattern in ("mad/participant-contract", "mad/*", "*participant-contract", "*contract*"):
+            self.assertTrue(
+                gen_defs.selected("agents", "mad/participant-contract", {"agents": [pattern]}),
+                pattern,
+            )
+        # The subdirectory is still part of the key: a top-level definition
+        # with a similar name is not swept in by mad/*.
+        self.assertFalse(gen_defs.selected("agents", "mad-participant-opus", {"agents": ["mad/*"]}))
+
+    def test_unglobbed_surface_and_empty_selection_pass_whole(self):
+        self.assertTrue(gen_defs.selected("commands", "kb-start", {"agents": ["*-coder*"]}))
+        for nothing in (None, {}):
+            self.assertTrue(gen_defs.selected("agents", "architect", nothing))
+
+    def test_matching_does_not_depend_on_host_case_rules(self):
+        self.assertFalse(gen_defs.selected("agents", "go-coder", {"agents": ["GO-*"]}))
+
+
+class TestSelectionValidationAndAccounting(unittest.TestCase):
+    """A pattern matching nothing is a hard error, per `|`-segment; a run that
+    selects states what it selected, per surface."""
+
+    KEYS = {
+        "agents": ["architect", "go-coder", "mad/participant-contract"],
+        "commands": ["kb-start"],
+    }
+
+    def test_matching_patterns_validate(self):
+        gen_defs.validate_selection(self.KEYS, {"agents": ["*-coder", "mad/*"]})
+
+    def test_zero_match_names_the_pattern_and_lists_the_surface(self):
+        with self.assertRaisesRegex(
+            gen_defs.TemplateError,
+            r"--agent-glob pattern '\*-codr\*' matches none of the 3 agents "
+            r"output\(s\): architect, go-coder, mad/participant-contract",
+        ):
+            gen_defs.validate_selection(self.KEYS, {"agents": ["*-codr*"]})
+
+    def test_every_alternation_segment_is_held_to_the_rule(self):
+        # A typo cannot hide behind a sibling pattern that does match.
+        with self.assertRaisesRegex(gen_defs.TemplateError, "'ghost'"):
+            gen_defs.validate_selection(self.KEYS, {"agents": ["*-coder", "ghost"]})
+
+    def test_each_surface_error_names_its_own_flag(self):
+        with self.assertRaisesRegex(gen_defs.TemplateError, r"--command-glob pattern 'nope'"):
+            gen_defs.validate_selection(self.KEYS, {"commands": ["nope"]})
+
+    def test_accounting_states_selected_of_declared_per_surface(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            gen_defs.report_selection(self.KEYS, {"agents": ["*-coder", "mad/*"], "commands": ["kb-*"]})
+        self.assertIn("agents: 2 of 3 outputs selected by --agent-glob", buf.getvalue())
+        self.assertIn("commands: 1 of 1 outputs selected by --command-glob", buf.getvalue())
+
+
+class TestSelectedGeneration(unittest.TestCase):
+    """Selection over a scratch tree: per-output filtering of a multi-output
+    template, nested-path selection, unselected outputs left untouched, a
+    narrowed check, and composition with per-pin model tuning."""
+
+    CHUNKS = {"shared": {"text": "shared text"}}
+    PINNED = '---\nname: @@name@@\nmodel: opus\n---\nbody @@shared@@\n@@nb name="probe"@@\n'
+    UNPINNED = "---\nname: @@name@@\n---\nbody @@shared@@\n" '@@nb name="probe"@@\n'
+    MULTI = (
+        "+++\n"
+        "[outputs.multi-one]\n"
+        'model = "opus"\n'
+        "[outputs.multi-two]\n"
+        'model = "haiku"\n'
+        "+++\n"
+        "---\nname: @@name@@\nmodel: @@model@@\n---\nbody @@shared@@\n"
+    )
+    FAMILY = (
+        '[nb.probe]\ntext = "family"\n'
+        '[nb.probe.models.opus]\ntext = "opus text"\n'
+        '[nb.probe.models.haiku]\ntext = "haiku text"\n'
+    )
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        root = Path(self._tmp.name)
+        self.tsrc = root / "templates"
+        agents = self.tsrc / "agents"
+        (agents / "mad").mkdir(parents=True)
+        (agents / "go-coder.md.tmpl").write_text(self.PINNED, encoding="utf-8")
+        (agents / "architect.md.tmpl").write_text(self.UNPINNED, encoding="utf-8")
+        (agents / "multi.md.tmpl").write_text(self.MULTI, encoding="utf-8")
+        self.nested_template = agents / "mad" / "participant-contract.md.tmpl"
+        self.nested_template.write_text(self.UNPINNED, encoding="utf-8")
+        self.out = root / "out"
+        self.out.mkdir()
+        self.smap = gen_defs.surface_map(templates_root=self.tsrc, output_root=self.out)
+        self.models = root / "models"
+        self.models.mkdir()
+        self.family = self.models / "fam-addenda.toml"
+        self.family.write_text(self.FAMILY, encoding="utf-8")
+
+    def _generate(self, globs=None, chunks=None, **kwargs):
+        return _quiet(
+            gen_defs.generate,
+            self.CHUNKS if chunks is None else chunks,
+            self.smap,
+            globs=globs,
+            explicit_root=True,
+            **kwargs,
+        )
+
+    def _rendered(self):
+        return sorted(path.relative_to(self.out).as_posix() for path in self.out.rglob("*.md"))
+
+    def test_output_keys_span_both_surfaces_and_nested_paths(self):
+        self.assertEqual(
+            gen_defs.output_keys(self.smap)["agents"],
+            ["architect", "go-coder", "mad/participant-contract", "multi-one", "multi-two"],
+        )
+
+    def test_glob_renders_only_its_matches(self):
+        self.assertTrue(self._generate({"agents": ["*-coder"]}))
+        self.assertEqual(self._rendered(), ["agents/go-coder.md"])
+
+    def test_multi_output_template_filters_per_output(self):
+        self.assertTrue(self._generate({"agents": ["multi-one"]}))
+        self.assertEqual(self._rendered(), ["agents/multi-one.md"])
+
+    def test_nested_output_is_addressable_by_its_key(self):
+        self.assertTrue(self._generate({"agents": ["mad/*"]}))
+        self.assertEqual(self._rendered(), ["agents/mad/participant-contract.md"])
+
+    def test_unselected_outputs_are_left_untouched_on_disk(self):
+        self._generate()
+        before = {name: (self.out / name).read_bytes() for name in self._rendered()}
+        stamps = {name: (self.out / name).stat().st_mtime_ns for name in before}
+        # A chunk change every output would pick up, applied under a selection
+        # that covers exactly one of them.
+        self.assertTrue(self._generate({"agents": ["multi-one"]}, chunks={"shared": {"text": "changed text"}}))
+        self.assertIn("changed text", (self.out / "agents" / "multi-one.md").read_text(encoding="utf-8"))
+        for name, content in before.items():
+            if name == "agents/multi-one.md":
+                continue
+            self.assertEqual((self.out / name).read_bytes(), content, name)
+            self.assertEqual((self.out / name).stat().st_mtime_ns, stamps[name], name)
+
+    def test_check_under_a_selection_ignores_everything_else(self):
+        self.assertTrue(self._generate({"agents": ["*-coder"]}))
+        self.assertTrue(_quiet(gen_defs.check, self.CHUNKS, self.smap, globs={"agents": ["*-coder"]}))
+        # The same tree unselected: the outputs never rendered are MISSING.
+        self.assertFalse(_quiet(gen_defs.check, self.CHUNKS, self.smap))
+
+    def test_check_two_walk_is_narrowed_by_the_selection(self):
+        self._generate()
+        self.nested_template.unlink()
+        orphans = gen_defs.check_banner_claims(self.smap)
+        self.assertEqual(len(orphans), 1)
+        self.assertIn("ORPHAN", orphans[0])
+        self.assertEqual(gen_defs.check_banner_claims(self.smap, {"agents": ["*-coder"]}), [])
+
+    def test_selection_composes_with_per_pin_tuning(self):
+        resolve = gen_defs.per_pin_resolver(
+            gen_defs.load_family(self.family),
+            cli_model="haiku",
+            family_given=True,
+            models_dir=self.models,
+        )
+        globs = {"agents": ["go-coder", "architect"]}
+        self.assertTrue(self._generate(globs, nb=resolve, tuning=(self.family, "haiku")))
+        self.assertEqual(self._rendered(), ["agents/architect.md", "agents/go-coder.md"])
+        pinned = (self.out / "agents" / "go-coder.md").read_text(encoding="utf-8")
+        unpinned = (self.out / "agents" / "architect.md").read_text(encoding="utf-8")
+        # Selection changes which outputs are rendered and nothing about how:
+        # the pin still owns its model scope, the flavor still reaches only
+        # the unpinned output, and the banner still claims the tuning.
+        self.assertIn("**NB**: opus text", pinned)
+        self.assertIn("**NB**: haiku text", unpinned)
+        self.assertEqual(gen_defs.tuning_claim(pinned), (gen_defs.rel(self.family), "haiku"))
+        self.assertTrue(gen_defs.body_untouched(pinned))
+        self.assertTrue(
+            _quiet(gen_defs.check, self.CHUNKS, self.smap, nb=resolve, tuning=(self.family, "haiku"), globs=globs)
+        )
+
+
+class TestSelectionCLI(unittest.TestCase):
+    """The flags as shipped, driven through gen-defs.py itself: surface
+    implication, both-glob runs, the two conflict errors, and the loud
+    no-match."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.out = Path(self._tmp.name)
+
+    def _run(self, *args):
+        return subprocess.run(
+            [sys.executable, str(_REPO_ROOT / "gen-defs.py"), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=_REPO_ROOT,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        )
+
+    def _rendered(self):
+        return sorted(path.relative_to(self.out).as_posix() for path in self.out.rglob("*.md"))
+
+    def test_agent_glob_alone_excludes_the_commands_surface(self):
+        done = self._run("--generate", "--output-dir", str(self.out), "--agent-glob", "*-coder*")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(
+            self._rendered(),
+            [
+                "agents/generalist-coder.md",
+                "agents/go-coder.md",
+                "agents/python-coder.md",
+                "agents/rust-coder.md",
+                "agents/shell-dsl-coder.md",
+            ],
+        )
+        self.assertFalse((self.out / "commands").exists())
+
+    def test_both_globs_filter_each_surface_and_report_the_accounting(self):
+        done = self._run(
+            "--generate",
+            "--output-dir",
+            str(self.out),
+            "--agent-glob",
+            "mad/*",
+            "--command-glob",
+            "kb-*",
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        rendered = self._rendered()
+        agents = [name for name in rendered if name.startswith("agents/")]
+        commands = [name for name in rendered if name.startswith("commands/")]
+        # Each surface filtered by its own patterns, and both present.
+        self.assertEqual(agents, ["agents/mad/participant-contract.md"])
+        self.assertTrue(commands)
+        for name in commands:
+            self.assertTrue(Path(name).name.startswith("kb-"), name)
+        self.assertRegex(done.stdout, r"agents: 1 of \d+ outputs selected by --agent-glob")
+        self.assertRegex(done.stdout, r"commands: \d+ of \d+ outputs selected by --command-glob")
+
+    def test_surfaces_is_subsumed_and_refused(self):
+        done = self._run("--agent-glob", "*", "--surfaces", "agents")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("drop --surfaces", done.stderr)
+
+    def test_install_refuses_globs_and_names_the_future_feature(self):
+        done = self._run("--install", str(self.out), "--agent-glob", "*")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("future feature", done.stderr)
+        self.assertEqual(self._rendered(), [])
+
+    def test_zero_match_is_a_hard_error_listing_the_surface(self):
+        done = self._run("--generate", "--output-dir", str(self.out), "--agent-glob", "*-codr*")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("--agent-glob pattern '*-codr*' matches none of", done.stderr)
+        self.assertIn("go-coder", done.stderr)
+        self.assertEqual(self._rendered(), [])
+
+
+class TestFlavorCLI(unittest.TestCase):
+    """The one tuning flag as shipped, driven through gen-defs.py itself.
+
+    Against an isolated COPY of the repo's templates, not the real tree: the
+    model route needs a family declaring a model, neither shipped family does,
+    and templates/models/ is scanned wholesale by every pin-resolving run — a
+    fixture planted there would be loaded as real input by unrelated runs.
+    """
+
+    PROBE = (
+        '[nb.gap-aversion]\ntext = "probe family text"\n'
+        '[nb.gap-aversion.models.probe-model]\ntext = "probe model text"\n'
+        '[nb.gap-aversion.models.opus]\ntext = "probe opus text"\n'
+    )
+    # Two outputs, one of each kind: applied-mathematician authors the anchors
+    # and is pinned to opus; the participant contract carries no pin.
+    SELECT = ("--agent-glob", "applied-mathematician|mad/participant-contract")
+
+    @classmethod
+    def setUpClass(cls):
+        cls._class_tmp = tempfile.TemporaryDirectory()
+        cls.repo = Path(cls._class_tmp.name) / "repo"
+        cls.repo.mkdir()
+        shutil.copytree(
+            gen_defs.TEMPLATES_DIR,
+            cls.repo / "templates",
+            ignore=shutil.ignore_patterns("tests", "__pycache__"),
+        )
+        shutil.copy(_REPO_ROOT / "gen-defs.py", cls.repo / "gen-defs.py")
+        cls.models = cls.repo / "templates" / "models"
+        (cls.models / "probe-addenda.toml").write_text(cls.PROBE, encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._class_tmp.cleanup()
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.out = Path(self._tmp.name)
+
+    def _extra_family(self, name, toml_text='[nb.gap-aversion]\ntext = "x"\n'):
+        path = self.models / name
+        path.write_text(toml_text, encoding="utf-8")
+        self.addCleanup(path.unlink)
+
+    def _run(self, *args):
+        return subprocess.run(
+            [sys.executable, str(self.repo / "gen-defs.py"), *args],
+            capture_output=True,
+            text=True,
+            check=False,
+            cwd=self.repo,
+            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+        )
+
+    def _generate(self, spec):
+        return self._run("--generate", "--output-dir", str(self.out), *self.SELECT, "--model-family", spec)
+
+    def _bodies(self):
+        return {
+            path.relative_to(self.out).as_posix(): path.read_text(encoding="utf-8") for path in self.out.rglob("*.md")
+        }
+
+    def test_family_name_spec_loads_the_family_and_asks_for_no_model(self):
+        done = self._generate("probe")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        pinned = self._bodies()["agents/applied-mathematician.md"]
+        self.assertEqual(gen_defs.tuning_claim(pinned), ("templates/models/probe-addenda.toml", None))
+        # A family SPEC asked for no model scope on unpinned outputs, so there
+        # is no reach to account for and no accounting line.
+        self.assertNotIn("unpinned output(s)", done.stdout)
+
+    def test_model_name_spec_implies_its_family_and_reports_the_reach(self):
+        done = self._generate("probe-model")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn(
+            "--model-family probe-model resolves to model probe-model in " "family templates/models/probe-addenda.toml",
+            done.stdout,
+        )
+        self.assertRegex(
+            done.stdout,
+            r"--model-family probe-model \(model in family "
+            r"templates/models/probe-addenda\.toml\): applied to \d+ unpinned "
+            r"output\(s\); skipped \d+ pinned output\(s\) \(pins own their tuning\)",
+        )
+        bodies = self._bodies()
+        self.assertEqual(
+            gen_defs.tuning_claim(bodies["agents/applied-mathematician.md"]),
+            ("templates/models/probe-addenda.toml", "probe-model"),
+        )
+        # The flavor is for unpinned outputs; the pinned one resolves its own
+        # model scope and never sees it.
+        self.assertIn("**NB**: probe opus text", bodies["agents/applied-mathematician.md"])
+        self.assertNotIn("probe model text", bodies["agents/applied-mathematician.md"])
+
+    def test_path_spec_loads_the_file_with_no_model(self):
+        done = self._generate("templates/models/probe-addenda.toml")
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertEqual(
+            gen_defs.tuning_claim(self._bodies()["agents/applied-mathematician.md"]),
+            ("templates/models/probe-addenda.toml", None),
+        )
+        self.assertNotIn("unpinned output(s)", done.stdout)
+
+    def test_name_matching_a_family_and_a_model_is_refused(self):
+        self._extra_family("probe-model.toml")
+        done = self._generate("probe-model")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("is ambiguous: it names the family file(s)", done.stderr)
+        self.assertIn("templates/models/probe-model.toml", done.stderr)
+        self.assertIn("a model declared in templates/models/probe-addenda.toml", done.stderr)
+        self.assertEqual(self._bodies(), {})
+
+    def test_model_in_several_families_demands_the_path(self):
+        self._extra_family("second-addenda.toml", '[nb.gap-aversion.models.probe-model]\ntext = "x"\n')
+        done = self._generate("probe-model")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("model declared in more than one family file", done.stderr)
+        self.assertIn("pass the family file path instead", done.stderr)
+
+    def test_matching_neither_lists_families_and_models(self):
+        done = self._generate("ghost")
+        self.assertEqual(done.returncode, 2)
+        self.assertIn("names neither a family file nor a known model", done.stderr)
+        self.assertIn("templates/models/probe-addenda.toml: opus, probe-model", done.stderr)
+        self.assertIn("templates/models/gemma-4-addenda.toml: (no models)", done.stderr)
+
+    def test_the_retired_model_flag_is_an_unknown_flag(self):
+        # Not a deprecation shim and not an abbreviation of --model-family:
+        # argparse prefix matching is off, so the retired spelling fails.
+        for args in (("--model", "probe-model"), ("--model-family", "probe", "--model", "probe-model")):
+            done = self._run("--generate", "--output-dir", str(self.out), *args)
+            self.assertEqual(done.returncode, 2, args)
+            self.assertIn("unrecognized arguments: --model", done.stderr, args)
+        self.assertEqual(self._bodies(), {})
+
+    def test_check_holds_a_tuned_set_to_the_spec_that_rendered_it(self):
+        self.assertEqual(self._generate("probe-model").returncode, 0)
+        same = self._run("--output-dir", str(self.out), *self.SELECT, "--model-family", "probe-model")
+        self.assertEqual(same.returncode, 0, same.stdout)
+        # The same directory checked under the family SPEC: the model half of
+        # the claim is what separates them, so this is MISTUNED, not DRIFT.
+        other = self._run("--output-dir", str(self.out), *self.SELECT, "--model-family", "probe", "--no-diff")
+        self.assertEqual(other.returncode, 1)
+        self.assertIn("MISTUNED", other.stdout)
+        self.assertIn("model probe-model", other.stdout)
 
 
 class TestTunedBanner(unittest.TestCase):
@@ -675,29 +1134,33 @@ class TestMixedPinRender(unittest.TestCase):
 
 
 class TestModelFlavorAccounting(unittest.TestCase):
-    """--model's reach is reported out loud: a flavored render that reached
-    nothing must not read like one that worked."""
+    """A model SPEC's reach is reported out loud, naming the family it was
+    found in: a flavored render that reached nothing must not read like one
+    that worked."""
 
     PINNED = "---\nname: a\nmodel: opus\n---\nbody\n"
     UNPINNED = "---\nname: b\n---\nbody\n"
+    FAMILY = gen_defs.MODELS_DIR / "fam-addenda.toml"
 
     def _report(self, texts):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
-            gen_defs.report_model_flavor("haiku", [(Path("agents/x.md"), text) for text in texts])
+            gen_defs.report_model_flavor("haiku", self.FAMILY, [(Path("agents/x.md"), text) for text in texts])
         return buf.getvalue()
 
-    def test_both_counts_are_named(self):
+    def test_both_counts_are_named_under_the_one_flag(self):
         out = self._report([self.PINNED] * 3 + [self.UNPINNED] * 2)
         self.assertIn(
-            "--model haiku: applied to 2 unpinned output(s); skipped 3 pinned output(s) (pins own their tuning)",
+            "--model-family haiku (model in family templates/models/fam-addenda.toml): "
+            "applied to 2 unpinned output(s); skipped 3 pinned output(s) (pins own their tuning)",
             out,
         )
 
     def test_reaching_nothing_says_exactly_that(self):
         out = self._report([self.PINNED] * 4)
         self.assertIn(
-            "--model haiku: applied to 0 unpinned output(s) — all 4 output(s) carry a frontmatter pin",
+            "--model-family haiku (model in family templates/models/fam-addenda.toml): "
+            "applied to 0 unpinned output(s) — all 4 output(s) carry a frontmatter pin",
             out,
         )
 
@@ -1116,6 +1579,100 @@ class TestInstallWriteSafety(unittest.TestCase):
         self.assertEqual(install(), "unchanged")
         target.write_text('{"a": 2}\n', encoding="utf-8")
         self.assertEqual(install(), "backed up")
+
+
+class TestInstallWritePath(unittest.TestCase):
+    """An install writes CONTENT and nothing else. An update goes through the
+    target's own inode — no utime/chmod, which require ownership of a file
+    another user may have installed — and only a file this run creates is
+    chmodded, to carry the source's executable bit."""
+
+    SOURCE = "---\nname: hand\n---\nprompt body\n"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self.source = self.root / "hand.md"
+        self.source.write_text(self.SOURCE, encoding="utf-8")
+        self.target = self.root / "out" / "hand.md"
+
+    def _install(self, source=None, target=None):
+        source = self.source if source is None else source
+        target = self.target if target is None else target
+        return gen_defs.install_file(source, target, gen_defs.install_content(source, surface="agents"))
+
+    def _revise(self, body):
+        self.source.write_text(f"---\nname: hand\n---\n{body}\n", encoding="utf-8")
+
+    def _mode(self, path):
+        return stat.S_IMODE(path.stat().st_mode)
+
+    def test_update_keeps_the_target_inode(self):
+        self._install()
+        before = self.target.stat().st_ino
+        self._revise("revised body")
+        self.assertEqual(self._install(), "written")
+        self.assertIn("revised body", self.target.read_text(encoding="utf-8"))
+        self.assertEqual(self.target.stat().st_ino, before)
+
+    def test_update_preserves_an_odd_target_mode(self):
+        self._install()
+        self.target.chmod(0o646)
+        self._revise("revised body")
+        self.assertEqual(self._install(), "written")
+        self.assertEqual(self._mode(self.target), 0o646)
+
+    def test_backup_branch_keeps_the_target_inode_too(self):
+        self._install()
+        self.target.write_text(
+            self.target.read_text(encoding="utf-8") + "hand-added\n",
+            encoding="utf-8",
+        )
+        before = self.target.stat().st_ino
+        self.assertEqual(self._install(), "backed up")
+        self.assertEqual(self.target.stat().st_ino, before)
+
+    def test_backup_is_a_content_copy_with_its_own_identity(self):
+        self._install()
+        self.target.chmod(0o646)
+        self.target.write_text(
+            self.target.read_text(encoding="utf-8") + "hand-added\n",
+            encoding="utf-8",
+        )
+        pre_overwrite = self.target.read_bytes()
+        self._revise("revised body")
+        self.assertEqual(self._install(), "backed up")
+        backup = self.target.parent / "hand.md.00.bak"
+        self.assertEqual(backup.read_bytes(), pre_overwrite)
+        # A recovery artifact, not a mirror: its own inode, and the mode this
+        # process gives a file it creates — nothing cloned off the target,
+        # which cloning would have required ownership of.
+        self.assertNotEqual(backup.stat().st_ino, self.target.stat().st_ino)
+        probe = self.target.parent / "probe"
+        probe.write_bytes(b"")
+        self.assertEqual(self._mode(backup), self._mode(probe))
+
+    def test_creation_carries_the_sources_exec_bit(self):
+        # The post-openai.sh shape: an installed shell tool has to land
+        # runnable, and stamping rewrites the content rather than copying it.
+        source = self.root / "post-openai.sh"
+        source.write_text("#!/usr/bin/env bash\nexec true\n", encoding="utf-8")
+        source.chmod(0o755)
+        target = self.target.with_name("post-openai.sh")
+        self.assertEqual(self._install(source, target), "written")
+        self.assertTrue(self._mode(target) & 0o111)
+        self.assertIn(gen_defs.INSTALLED_NOTICE, target.read_text(encoding="utf-8"))
+
+        # And survives an update, which preserves the mode by not touching it.
+        source.write_text("#!/usr/bin/env bash\nexec false\n", encoding="utf-8")
+        self.assertEqual(self._install(source, target), "written")
+        self.assertTrue(self._mode(target) & 0o111)
+
+    def test_creation_leaves_a_non_executable_source_non_executable(self):
+        self.assertFalse(self._mode(self.source) & 0o111)
+        self._install()
+        self.assertFalse(self._mode(self.target) & 0o111)
 
 
 class TestInstallEndToEnd(unittest.TestCase):

@@ -8,10 +8,11 @@
 #   charter-term  - what the free-form instruction text is called
 #   suggest-tail  - the roster-widening rationale in "Seats are the
 #                   invoker's call"
-#   target-bullet - the one structurally different extraction bullet: review
-#                   points at an extant artifact; design admits an existing
-#                   brief OR an empty output location, in which case the
-#                   referee elicits the problem statement interactively.
+#   target-bullet - the one structurally different argument: review points at
+#                   an extant artifact; design admits an existing brief OR an
+#                   empty output location, in which case the referee elicits
+#                   the problem statement interactively. Reads as the value of
+#                   the TARGET= bullet, so it starts lowercase.
 # No hand-authored frontmatter here: the command surface's generator
 # machinery emits the minimal banner-only frontmatter block above this body.
 [outputs.mad-review]
@@ -21,7 +22,7 @@ mode-cap = "Review"
 mode = "review"
 charter-term = "charter"
 suggest-tail = "the material rewards more independent looks"
-target-bullet = "Path to the artifact under review (file or directory)"
+target-bullet = "path to the artifact under review (file or directory)"
 
 [outputs.mad-design]
 referee = "mad-design-referee.md"
@@ -30,7 +31,7 @@ mode-cap = "Design"
 mode = "design"
 charter-term = "brief"
 suggest-tail = "the problem rewards more independent constructions"
-target-bullet = "Path to the problem statement. Either (a) an existing brief defining the open problem (file or directory), or (b) an empty/not-yet-created output location — in case (b) the referee will elicit the problem statement from the user interactively before dispatching participants"
+target-bullet = "path to the problem statement. Either (a) an existing brief defining the open problem (file or directory), or (b) an empty/not-yet-created output location — in case (b) the referee will elicit the problem statement from the user interactively before dispatching participants"
 +++
 @.claude/agents/@@referee@@
 @.claude/agents/mad/participant-contract.md
@@ -51,10 +52,11 @@ Parse the arguments as follows:
 - **Topic name**: the first token — matches a file in `.claude/agents/@@topics-dir@@/[topic-name].md`. Load that file as the topic. If the file does not exist, list available topics from `.claude/agents/@@topics-dir@@/` and halt.
 - **Seat roster** (`SEATS=`): the seats staffing this run — a comma-separated subset of `fable`, `opus`, `sonnet`, `haiku`, `guest`, at most one of each, at least two. **Required.**
 - **Env file** (`ENV_FILE=`): path to the guest model's env file (containing `API_BASE_URL=`, `API_KEY_FILE=`, and `MODEL=`). Required if and only if `SEATS=` includes `guest`.
-- **Remaining text**: free-form description of the @@mode@@ target. Extract from it:
-  - A short @@mode@@ name (for output folder and document titles)
-  - @@target-bullet@@
-  - Path to a requirements/invariants/conventions document, if mentioned
+- **Constraints doc** (`CONSTRAINTS=`): path to a requirements/invariants/conventions document. Optional.
+- **Target** (`TARGET=`): @@target-bullet@@.
+- **Remaining text**: free-form description of the @@mode@@ target, minus the `KEY=` tokens. The keyed forms win wherever present; extract from what remains only what they did not supply:
+  - A short @@mode@@ name (for output folder and document titles) — this one has no key
+  - The @@mode@@ target and the constraints doc, when named in prose rather than by `TARGET=`/`CONSTRAINTS=`
 
 ### Seats are the invoker's call
 

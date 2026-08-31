@@ -116,10 +116,10 @@ install-user-config:
 # The one deployment shape (README.md, "Install"): copies both deployed
 # surfaces into <target>/.claude/ via gen-defs.py --install, minus test suites
 # and caches, stamping each copied file with an !INSTALLED! banner carrying the
-# hash of the content below it. `flavor` disambiguates
-# by file existence only: a templates/models/<flavor>*.toml match means
-# family, otherwise model — gen-defs.py then resolves the bare name (or errors
-# helpfully) itself, and a flavor adds a render pass over the copy.
+# hash of the content below it. `flavor` is forwarded verbatim as the single
+# --model-family SPEC: gen-defs.py 2.0.0 owns the family-vs-model resolution
+# (and its ambiguity/no-match errors), so this recipe does no disambiguation of
+# its own. A flavor adds a render pass over the copy.
 [doc("install both surfaces into <target>/.claude/ — optional flavor is a model family or model name")]
 install-defs target flavor="":
     #!/usr/bin/env bash
@@ -134,14 +134,8 @@ install-defs target flavor="":
     tuning_args=()
     tuning_desc="no model tuning"
     if [[ -n "${flavor}" ]]; then
-        matches=("{{justfile_directory() / 'templates' / 'models'}}/${flavor}"*.toml)
-        if [[ -e "${matches[0]}" ]]; then  # unmatched glob stays literal
-            tuning_args=(--model-family "${flavor}")
-            tuning_desc="model family '${flavor}'"
-        else
-            tuning_args=(--model "${flavor}")
-            tuning_desc="model '${flavor}'"
-        fi
+        tuning_args=(--model-family "${flavor}")
+        tuning_desc="flavor '${flavor}'"
     fi
     # ${arr[@]+...} guard: expanding an empty array trips `set -u` on the
     # bash 3.2 that macOS ships at /bin/bash.

@@ -1,7 +1,7 @@
 ---
 #
 # !GENERATED! from templates/commands/mad-debate.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
-# !BODY-SHA256! bf0b177f9880c3dd75a8ae0eca283e07766ef6abdb736241017cedb1acf1ac47
+# !BODY-SHA256! e6bdc0010b8b4168ce8fc7322c963a4d9378028fd4f3641027fb6676824780ad
 #
 ---
 @.claude/agents/mad-review-referee.md
@@ -23,10 +23,11 @@ Parse the arguments as follows:
 - **Topic name**: the first token — matches a file in `.claude/agents/mad/review-topics/[topic-name].md`. Load that file as the topic. If the file does not exist, list available topics from `.claude/agents/mad/review-topics/` and halt.
 - **Seat roster** (`SEATS=`): the seats staffing this run — a comma-separated subset of `fable`, `opus`, `sonnet`, `haiku`, `guest`, at most one of each, at least two. **Required.**
 - **Env file** (`ENV_FILE=`): path to the guest model's env file (containing `API_BASE_URL=`, `API_KEY_FILE=`, and `MODEL=`). Required if and only if `SEATS=` includes `guest`.
-- **Remaining text**: free-form description of the review target. Extract from it:
-  - A short review name (for output folder and document titles)
-  - Path to the artifact under review (file or directory)
-  - Path to a requirements/invariants/conventions document, if mentioned
+- **Constraints doc** (`CONSTRAINTS=`): path to a requirements/invariants/conventions document. Optional.
+- **Target** (`TARGET=`): path to the artifact under review (file or directory).
+- **Remaining text**: free-form description of the review target, minus the `KEY=` tokens. The keyed forms win wherever present; extract from what remains only what they did not supply:
+  - A short review name (for output folder and document titles) — this one has no key
+  - The review target and the constraints doc, when named in prose rather than by `TARGET=`/`CONSTRAINTS=`
 
 ### Seats are the invoker's call
 

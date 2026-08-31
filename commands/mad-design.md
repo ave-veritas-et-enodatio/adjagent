@@ -1,7 +1,7 @@
 ---
 #
 # !GENERATED! from templates/commands/mad-debate.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
-# !BODY-SHA256! 4648deebadec95601bed0202b96051fbf8c132ac91a8f0e56c31ca39e904c5e0
+# !BODY-SHA256! b5d78034f20e22aa580a46fd05b1a137a7bf6678ba6778ff23042793094b0a33
 #
 ---
 @.claude/agents/mad-design-referee.md
@@ -23,10 +23,11 @@ Parse the arguments as follows:
 - **Topic name**: the first token — matches a file in `.claude/agents/mad/design-topics/[topic-name].md`. Load that file as the topic. If the file does not exist, list available topics from `.claude/agents/mad/design-topics/` and halt.
 - **Seat roster** (`SEATS=`): the seats staffing this run — a comma-separated subset of `fable`, `opus`, `sonnet`, `haiku`, `guest`, at most one of each, at least two. **Required.**
 - **Env file** (`ENV_FILE=`): path to the guest model's env file (containing `API_BASE_URL=`, `API_KEY_FILE=`, and `MODEL=`). Required if and only if `SEATS=` includes `guest`.
-- **Remaining text**: free-form description of the design target. Extract from it:
-  - A short design name (for output folder and document titles)
-  - Path to the problem statement. Either (a) an existing brief defining the open problem (file or directory), or (b) an empty/not-yet-created output location — in case (b) the referee will elicit the problem statement from the user interactively before dispatching participants
-  - Path to a requirements/invariants/conventions document, if mentioned
+- **Constraints doc** (`CONSTRAINTS=`): path to a requirements/invariants/conventions document. Optional.
+- **Target** (`TARGET=`): path to the problem statement. Either (a) an existing brief defining the open problem (file or directory), or (b) an empty/not-yet-created output location — in case (b) the referee will elicit the problem statement from the user interactively before dispatching participants.
+- **Remaining text**: free-form description of the design target, minus the `KEY=` tokens. The keyed forms win wherever present; extract from what remains only what they did not supply:
+  - A short design name (for output folder and document titles) — this one has no key
+  - The design target and the constraints doc, when named in prose rather than by `TARGET=`/`CONSTRAINTS=`
 
 ### Seats are the invoker's call
 
