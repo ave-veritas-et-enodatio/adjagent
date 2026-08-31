@@ -1,5 +1,5 @@
-# Claude Code Agent Set
-A general-purpose Claude Code agent set — coder and platform specialists, multi-agent debate processes, knowledge-base tooling, and guest-model liaisons — plus the slash commands and generator tooling that maintain them.
+# README — Agent and Command Set Generator
+This repository generates agents rather than collecting them — a single-sourced generation system paired with the multi-capability agent and command set it renders. Definitions are produced to order: tuned per model or model family, installed into consuming projects as hash-verified artifacts, regenerated rather than copied and hand-maintained. The generator owns the guarantees — one source for every shared span of text, additive-only model tuning, drift caught by content hash; the rendered set does the work — coder and platform specialists, multi-agent debate processes, knowledge-base construction and tooling, guest-model liaisons.
 
 ## Install
 

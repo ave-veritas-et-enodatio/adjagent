@@ -1,6 +1,6 @@
-# SPEC — Agent Definition Repository
+# SPEC — Agent and Command Set Generator
 
-This repository is the source of a Claude Code agent/command definition set, consumed by other projects. This document states the observable contract — what the repository guarantees, independent of how the guarantee is implemented. See ARCHITECTURE.md for mechanism.
+This repository is the source of a drift-proof, model-tunable generation system that renders Claude Code agent and command definitions to order; the multi-capability agent/command set it ships, consumed by other projects, is its flagship rendering. This document states the observable contract — what the repository guarantees, independent of how the guarantee is implemented. See ARCHITECTURE.md for mechanism.
 
 ## Deployed Surfaces
 
@@ -10,7 +10,7 @@ The repository exposes exactly two deployed surfaces, `agents/` and `commands/`.
 just install-defs <path-to-consuming-project> [flavor]
 ```
 
-An install delivers the surfaces entire, into the project's `.claude/`: every definition, generated and hand-maintained alike, together with the supporting material those definitions read — the MAD topic sets, `kb_tools/`, `liaison_tools/`. What is not part of the product does not travel: test suites and their fixtures, caches, and generator safety copies. The optional flavor renders the generated definitions under a model family or model; Generated-Definition Integrity below then holds for the flavor the install was given.
+An install delivers the surfaces entire, into the project's `.claude/`: every definition, generated and hand-maintained alike, together with the supporting material those definitions read — the MAD topic sets, `kb_tools/`, `liaison_tools/`. What is not part of the product does not travel: test suites and their fixtures, caches, and generator safety copies. The optional flavor renders the generated definitions under a model family or model (see Generation System, below).
 
 An installed tree is an **artifact**, not a working copy. This repository is the source of truth, and a re-install always overwrites — local edits to installed files are never preserved, by design. The fix for a wrong installed definition is a change made here and a re-install. The overwrite replaces without destroying: an installed file that is not provably this tool's own output is set aside as a numbered `.bak` beside itself before being replaced, and those safety copies are the consumer's to delete.
 
@@ -19,6 +19,16 @@ Every installed file states its own origin and records the hash of the content b
 Every path written inside a definition body — a file the agent is told to `Read`, a script it invokes — is written against `.claude/agents/...`, not against the repository's own path: that is where an installed definition actually lives, and the path it must resolve from inside a consuming session.
 
 Every file directly under `agents/` matching `*.md` and carrying frontmatter with dispatch keys (`name`, `description`, `model`) is a dispatchable agent definition — the rule holds without exception. Supporting material — read by definitions, never dispatched as one — lives in subdirectories: `mad/` (the participant contract, plus the two referees' methodology topic sets `mad/review-topics/` and `mad/design-topics/`), `liaison_tools/`, and `kb_tools/`. The participant contract at `agents/mad/participant-contract.md` is therefore structurally outside the dispatch namespace; it additionally carries a frontmatter block empty of dispatch keys, an independent second guard that keeps it undispatchable on its own terms (see Guest-Extraction Contract).
+
+## Generation System
+
+The mechanism behind every definition in the deployed surfaces guarantees three observable properties, independent of how they are implemented (see ARCHITECTURE.md):
+
+- **Single-sourcing.** Text shared across two or more definitions has exactly one source. Wherever rendered output shares text across definitions, that text is identical by construction — not by maintenance discipline that could silently drift apart.
+- **Additive-only model tuning.** A model or model-family tuning file may extend a definition's base text at declared anchor points; it can never replace, suppress, or fork that text. A definition rendered with no tuning applied is byte-identical to its base render.
+- **Pin-coherent tuning.** A definition carrying a frontmatter model pin resolves its tuning against that pin, per definition. A render-wide tuning selection cannot retune a pinned definition against a different model, so what a definition is tuned for and what it actually runs on cannot diverge.
+
+An install that requests a flavor (Deployed Surfaces, above) renders the generated definitions under that tuning; Generated-Definition Integrity, below, holds for the flavor the install was given exactly as it holds for an unflavored render.
 
 ## Generated-Definition Integrity
 

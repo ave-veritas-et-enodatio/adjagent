@@ -1,4 +1,4 @@
-# AGENTS.md — House Rules
+# AGENTS — Agent and Command Set Generator
 
 House rules and project-specific traps only. Doc-structure conventions and general engineering ethos live in operator config (`user-config/CLAUDE.md`), not here.
 
