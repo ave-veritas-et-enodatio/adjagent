@@ -56,5 +56,3 @@ Each finding must:
 1. Identify the specific directive, section, or structural element under scrutiny
 2. Describe the failure mode: how does this produce incorrect, inconsistent, or unpredictable agent behavior?
 3. State what is needed: the decision required or the concrete gap to fill — not a full redesign
-
-Where a requirements document or coordinator file is provided, validate the definition against any invariants stated there.

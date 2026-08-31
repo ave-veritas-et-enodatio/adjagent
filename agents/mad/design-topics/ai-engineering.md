@@ -41,8 +41,6 @@ A successful debate terminates in one of these states:
 - **(d) Theoretical under-determination**: all active participants converge on the same diagnosis that the problem cannot be closed from the supplied context — missing baseline, missing prior measurement, missing model-behavior characterization, or missing constraint. The diagnostic statement is the deliverable.
 - **(e) Unresolved divergence**: participants remain at distinct techniques making different mechanism-level claims after the round cap. All candidates are documented with their full triple (mechanism, justification, measurement) and preserved for human arbitration.
 
-States (a), (b), (c), and (d) all retire the debate as productive. State (e) escalates to human arbitration with the candidate space preserved.
-
 ## Empirical Validation and Reference Values
 
 Where the problem has a known reference value or measurement (e.g., a published baseline, a logprob match against a reference implementation, a benchmark score), participants may compute their proposal's prediction and compare. A proposal that disagrees with the reference is not automatically wrong — the reference may itself be specific to a regime that does not transfer — but the disagreement must be acknowledged and explained.
@@ -63,5 +61,3 @@ When the resolution path is "run the experiment," the experiment specification m
 In debate rounds, attacks and defenses must be grounded in specific evidence — a specific tensor or operation in the mechanism, a specific claim in the justification, a specific metric in the measurement plan, a specific cost line in the accounting. Vague disagreements ("I don't think this will work") are not actionable and do not advance the debate.
 
 Tradeoff and uncertainty disagreements should be framed as "this proposal optimizes for X (e.g., compute) at cost to Y (e.g., flexibility); the problem prioritizes X" — not as right/wrong. When the disagreement reduces to "we won't know until we measure," that is the signal for empirical under-determination convergence, not for continued argumentation.
-
-For artifact-specific invariants a requirements document may be provided. When provided it is additive and authoritative — the proposed technique must conform to every invariant it states.

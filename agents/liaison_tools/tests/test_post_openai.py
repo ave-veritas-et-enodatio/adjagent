@@ -318,9 +318,7 @@ class TestEndToEndStubbedEndpoint(unittest.TestCase):
                 check=False,
             )
             stats_exists = stats_path.exists() if stats_path is not None else None
-            stats_text = (
-                stats_path.read_text(encoding="utf-8") if stats_exists else None
-            )
+            stats_text = stats_path.read_text(encoding="utf-8") if stats_exists else None
         return result, stats_exists, stats_text
 
     def _run_against_fixture(self, fixture_name):
@@ -403,18 +401,14 @@ class TestEndToEndStubbedEndpoint(unittest.TestCase):
         # Usage events present in the stream, env var unset: stdout stays
         # byte-identical to the plain run and no stats file is created.
         body = self._fixture_with_usage("test-fixture-stream.txt")
-        result, stats_exists, _ = self._run_stub(
-            body, stats_rel="stats.jsonl", set_stats_env=False
-        )
+        result, stats_exists, _ = self._run_stub(body, stats_rel="stats.jsonl", set_stats_env=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "Hello, world!\n")
         self.assertFalse(stats_exists)
 
     def test_usage_stats_unwritable_path_warns_but_call_succeeds(self):
         body = self._fixture_with_usage("test-fixture-stream.txt")
-        result, stats_exists, _ = self._run_stub(
-            body, stats_rel="no-such-dir/stats.jsonl"
-        )
+        result, stats_exists, _ = self._run_stub(body, stats_rel="no-such-dir/stats.jsonl")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout, "Hello, world!\n")
         self.assertFalse(stats_exists)

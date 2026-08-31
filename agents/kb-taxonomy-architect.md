@@ -74,7 +74,7 @@ Include measurable criteria when they exist. Omit vague ones.
 Extend each Phase 1 output with the claim-graph dimension:
 - **Invariants**: include S5 (leaf kb-frontmatter), S8 (`clm-` propagation + bidirectional coverage), S9 (`exp-` design/originate/control gate), S10 (`sup-`), S11 (single identification system) — to live in the new KB's `CLAUDE.md`.
 - **Skeleton**: add a per-volume `claim-quality.md` sidecar node, the `.index/` directory, and the spine tooling / runner-target layout. Mark leaves expected to host `exp-` / `sup-` nodes.
-- **Acceptance criteria** (add): the project's `verify` target (`just verify` or `make verify`, whichever runner the project uses; claim-graph + link integrity) runs green; bidirectional id coverage (every sidecar entry cited by ≥1 leaf's `claims:`; every leaf claim has a sidecar entry); the claim DAG is acyclic; no `solidity` is hand-authored (all tool-derived).
+- **Acceptance criteria** (add): the project's `kb-verify` target (`just kb-verify` or `make kb-verify`, whichever runner the project uses; claim-graph + link integrity) runs green; bidirectional id coverage (every sidecar entry cited by ≥1 leaf's `claims:`; every leaf claim has a sidecar entry); the claim DAG is acyclic; no `solidity` is hand-authored (all tool-derived).
 
 In **Review mode** (Phase 4) additionally check claim-graph structural integrity: id coverage both directions, DAG acyclicity, `subtree-claims` aggregates consistent with leaf frontmatter, verifier green. An uncovered id, an acyclicity break, or verifier drift is Critical.
 

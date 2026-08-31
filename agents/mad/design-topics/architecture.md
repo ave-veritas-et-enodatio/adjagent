@@ -39,8 +39,6 @@ A successful debate terminates in one of these states:
 - **(d) Constraint under-determination**: all active participants converge on the same diagnosis that the problem cannot be closed from the supplied requirements at all, and identify the specific missing constraint, invariant, capability target, or stakeholder decision required. The diagnostic statement is the deliverable.
 - **(e) Unresolved divergence**: participants remain at distinct architectures making different structural commitments after the round cap. All candidates are documented with their cost/capability accounting and preserved for human arbitration.
 
-States (a), (b), (c), and (d) all retire the debate as productive. State (e) escalates to human arbitration with the candidate space preserved.
-
 ## What This Topic Is Not
 
 - This is not architecture *review* of an existing system. If the artifact already exists and the goal is to find flaws, use `mad/review-topics/architecture.md` with the review referee.
@@ -51,5 +49,3 @@ States (a), (b), (c), and (d) all retire the debate as productive. State (e) esc
 ## How to Report Proposals and Findings
 
 In debate rounds, attacks and defenses must be grounded in specific structural evidence (a named interface, a named dependency, a named pattern), not general preferences. Tradeoff disagreements should be framed as "this choice optimizes axis X at cost to axis Y; the requirements weigh X higher" — not as right/wrong.
-
-For artifact-specific invariants a requirements document may be provided. When provided it is additive and authoritative — the proposed architecture must conform to every invariant it states.

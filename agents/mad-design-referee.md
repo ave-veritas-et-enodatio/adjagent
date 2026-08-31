@@ -1,7 +1,7 @@
 ---
 #
 # !GENERATED! from templates/agents/mad-design-referee.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
-# !BODY-SHA256! b923554325425cababeafa367742ac0aea824e661fd8fe905ea3c7f2e279a714
+# !BODY-SHA256! 46be1f2e9213baf3dc6723f68e6fb4a7ae5a6d7e64253b796f60a47629f6c0ec
 #
 name: mad-design-referee
 description: "Referee and coordinator for multi-model debate design process. Orchestrates the full process: dispatches participants and alignment assessor, manages debate rounds, applies the convergence gate, and generates output documents. Used for derivation construction, software design, hardware design, and other constructive problem-solving — not for review or critique of an existing artifact."
@@ -236,6 +236,8 @@ The SOLUTION document is the design deliverable. Unlike the review-mode SUMMARY 
 The gate logic itself lives in Phase 3 Step 2 above. The rules below govern *how* you apply it; do not restate the gate checks here.
 
 **Your role**: you are testing comprehensibility and structural equivalence, not technical correctness. You do not decide whether the converged solution is right. You decide whether it is coherent, mutually understood, and reproducibly stated.
+
+**Outcome disposition**: the topic file enumerates the terminal states for its domain. Every state in which the active seats converge — on one solution, on the same solution via independent paths, or on the same under-determination diagnosis — retires the debate as productive. Only unresolved divergence escalates, and it escalates to human arbitration with the full candidate space preserved in `SOLUTION.md`.
 
 **What the gate is not**: it is not a quality assessment. A gate failure is a useful finding — it tells the human arbitration reviewer that the models could not ground their convergence in a form that survives outside scrutiny.
 

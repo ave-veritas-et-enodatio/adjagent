@@ -86,16 +86,21 @@ Render-to-order flags, accepted by both modes:
                             matching is an ambiguity error naming the
                             candidates; neither matching is an error listing
                             the available family files.
-    --model NAME            activate NAME's per-model overrides within the
-                            loaded family file. Without --model-family, the
-                            family is implied: every templates/models/*.toml
-                            is scanned for [nb.*.models.NAME] tables
-                            mentioning the model. Exactly one family
-                            mentioning it is used (and reported); several
-                            demand an explicit --model-family; none is an
-                            error listing each family's known models — a
-                            model mentioned only in comments is NOT known;
-                            name the family explicitly to use one.
+    --model NAME            the EXPORT FLAVOR: activate NAME's per-model
+                            overrides for the outputs that carry no
+                            frontmatter `model:` pin. A pinned output
+                            resolves its own model scope (see per-pin
+                            resolution below) and ignores this flag; the
+                            report accounts for both counts out loud.
+                            Without --model-family, the family is implied:
+                            every templates/models/*.toml is scanned for
+                            [nb.*.models.NAME] tables mentioning the model.
+                            Exactly one family mentioning it is used (and
+                            reported); several demand an explicit
+                            --model-family; none is an error listing each
+                            family's known models — a model mentioned only
+                            in comments is NOT known; name the family
+                            explicitly to use one.
 
 The strictly-inside-this-repository output guard applies only to the implicit
 default output location; an explicit --output-dir is exempt from the
@@ -120,7 +125,36 @@ exists. A family file (templates/models/<family>.toml) fills anchors:
                                           # that model (with --model NAME)
 
 Resolution, not accumulation: AT MOST ONE NB renders per anchor — the model
-scope wins over the family scope when --model names a model the entry covers.
+scope wins over the family scope.
+
+Model scope resolves PER OUTPUT, against that output's own frontmatter
+`model:` pin — the value in its RENDERED frontmatter, whether that comes from
+an outputs-table parameter (@@model@@, as the mad-participant template
+declares) or a literal frontmatter line. An output pinned to X resolves
+as if --model X: within the family file --model-family named, or, when none
+was named, within the one family whose [nb.*.models.X] tables mention X. A pin
+matching no family — or matching several — resolves to NO model scope at all,
+SILENTLY: a pin is routine metadata saying which model the definition
+dispatches on, not a request for tuning. CLI --model keeps the opposite
+semantics, because it IS a request: one that matches nothing is still an
+error.
+
+Family scope is unchanged by any of that: a loaded family file's family-wide
+text fills its anchors render-wide, for pinned and unpinned outputs alike. A
+family a PIN implies contributes only its model-scope entry for that pin,
+never its family-wide text — that text belongs to the family the invocation
+actually loaded. The banner records the invocation's tuning; per-pin
+resolution is a deterministic function of that invocation, the templates, and
+templates/models/, so check reproduces it exactly.
+
+--model is therefore the EXPORT FLAVOR: it tunes the outputs carrying no pin
+(today the generated commands and the participant contract) and is ignored by
+the pinned ones. That is accounted for out loud rather than silently, in the
+generate/check/install report:
+
+    --model haiku: applied to 5 unpinned output(s); skipped 23 pinned
+    output(s) (pins own their tuning)
+
 The rendered form is `**NB**: <text>`; neither the family nor the model name
 appears in rendered output — the family file is the provenance record. The
 filled text is itself marker-expanded, so a typo'd chunk reference inside it
@@ -198,13 +232,42 @@ definitions are provably untouched tool output (see the banner's body hash
 below), so that pass leaves no numbered backups behind.
 
 The installed tree is an ARTIFACT, not a working copy: this repository is the
-source of truth and a re-install overwrites unconditionally. Local edits to
-installed files are not protected — edit the templates or the definitions here
-and re-install. The manifest written into ROOT (agents-install-manifest.json)
-is therefore a provenance stamp, not a ledger: gen-defs version, source repo
-commit (`git rev-parse HEAD`, suffixed -dirty for a modified work tree), the
-flavor, and a timestamp. Nothing reads it back; it answers "what is this tree,
-and where did it come from".
+source of truth and a re-install always overwrites. Local edits to installed
+files are never preserved — edit the templates or the definitions here and
+re-install — but they are not destroyed either: a target that is not provably
+this tool's own output is copied aside as a numbered .bak first, exactly as
+generation does it. The overwrite always happens; the backup only keeps
+divergent human work from being destroyed by it, and *.bak files under an
+installed tree are deletable at will.
+
+Every COPIED file is stamped with an !INSTALLED! banner carrying the same
+!BODY-SHA256! line the generated banner carries, in whatever comment syntax
+its filetype admits:
+
+    *.md with frontmatter    comment lines inside the frontmatter block —
+                             dropped by every frontmatter reader, including
+                             liaison_tools/extract-agent-body.sh
+    *.md without, commands/  a minimal frontmatter block holding only the
+                             banner, as render_template already does for a
+                             frontmatter-less command template: a command's
+                             first BODY line is the description Claude Code
+                             lists it by, and nothing may displace it
+    *.md without, agents/    an HTML comment block above the content —
+                             supporting material must not gain frontmatter,
+                             which would make a methodology topic look
+                             extractable as a definition body
+    .py .sh .toml .mk .just  `#` comment lines at the top, below a shebang
+    any other suffix         no comment syntax to carry a banner: the file is
+                             copied verbatim and the install reports it
+
+A generated definition is exempt: it arrives carrying its own !GENERATED!
+banner, which already forbids in-place edits and names the real edit path.
+The two banners are one marking scheme — provenance plus a body hash — and
+the hash buys the same thing on re-install that it buys on regeneration: a
+target whose body still hashes to its own banner is provably ours and is
+overwritten silently, while a mismatched or unbannered target is backed up
+first. Re-installing an untouched tree is therefore byte-stable: no content
+changes and no backups.
 
 The banner is a four-line YAML-comment block naming the source template
 (`# !GENERATED! from templates/agents/<name>.md.tmpl ...`). When rendered with
@@ -222,13 +285,13 @@ always lives inside YAML frontmatter, never in the body that becomes a prompt:
     text.
 
 Its third line, `# !BODY-SHA256! <hex>`, is the sha256 of everything the file
-holds AFTER the banner block, exactly as written. That single line lets any
-later reader answer a question the banner alone cannot: is this file still the
-bytes the tool wrote, or has someone edited it since? A definition whose body
-hashes to its own claim is provably untouched tool output — reproducible at
-will, and therefore safe to overwrite without a backup (see the safety table
-above). A pre-1.5.0 banner carries no hash line and proves nothing, so it is
-treated as possibly hand-edited.
+holds AFTER the banner block, exactly as written — the one line both banner
+kinds share. It lets any later reader answer a question the banner alone
+cannot: is this file still the bytes the tool wrote, or has someone edited it
+since? A file whose body hashes to its own claim is provably untouched tool
+output — reproducible at will, and therefore safe to overwrite without a
+backup (see the safety table above). A pre-1.5.0 banner carries no hash line
+and proves nothing, so it is treated as possibly hand-edited.
 
 A definition without a banner is presumed hand-maintained and outside this
 tool's remit; if it should be generated, delete it and re-run.
@@ -281,13 +344,11 @@ error, so a typo fails loudly rather than shipping into a system prompt.
 import argparse
 import difflib
 import hashlib
-import json
 import re
 import shutil
-import subprocess
 import sys
 import tomllib
-from datetime import UTC, datetime
+from collections.abc import Callable
 from pathlib import Path
 
 # Bumped per semver on mechanism changes (1.0.0 marks the two-surface
@@ -302,10 +363,15 @@ from pathlib import Path
 # recursive copy of both surfaces plus a provenance stamp, with a render pass
 # only when a flavor is requested — and stamps each banner with the sha256 of
 # the body below it, which lets an overwrite of provably untouched output skip
-# the numbered backup).
+# the numbered backup; 1.6.0 drops the write-only install manifest and instead
+# stamps every COPIED file with an !INSTALLED! banner in its filetype's comment
+# syntax, extending the hash-gated write-safety table to the install; 1.7.0
+# resolves model-scope NBs per output, against that output's own frontmatter
+# model: pin, which makes CLI --model the export flavor for unpinned outputs
+# alone — loudly accounted for, and silent for a pin matching nothing).
 # Deliberately NOT embedded in rendered banners — that would churn every
 # generated file on every bump.
-__version__ = "1.5.0"
+__version__ = "1.7.0"
 
 REPO_ROOT = Path(__file__).parent
 TEMPLATES_DIR = REPO_ROOT / "templates"
@@ -322,6 +388,16 @@ OUTPUTS_FENCE = "+++"
 # claim it. Anchor names share the marker-name charset.
 NB_MARKER = "nb"
 ANCHOR_NAME = re.compile(r"[a-z0-9-]+")
+# An output's own model pin, read out of its RENDERED frontmatter: the value
+# of a `model:` key, however it got there — an outputs-table parameter or a
+# literal line. Quotes are optional in YAML and stripped here.
+FRONTMATTER_PIN = re.compile(r"""^model:[ \t]*["']?([^"'\s#]+)["']?[ \t]*$""", re.MULTILINE)
+
+# anchor name -> (NB text, the scope it resolved from: "family" or "model").
+NBMap = dict[str, tuple[str, str]]
+# What the render path accepts for `nb`: a per-pin resolver (pin -> map), or a
+# plain map applied render-wide, or nothing at all.
+NBSource = NBMap | Callable[[str | None], NBMap | None] | None
 
 MARKER = re.compile(r'@@([a-z0-9-]+)((?:\s+[a-z_]+="[^"]*")*)\s*@@')
 ARG = re.compile(r'([a-z_]+)="([^"]*)"')
@@ -330,14 +406,15 @@ ARG = re.compile(r'([a-z_]+)="([^"]*)"')
 # (gating write safety); whether the claimed template exists and declares the
 # file is check 2's job, so a stale claim is ORPHAN/MISLABELED, not REFUSED.
 BANNER_CLAIM = re.compile(r"^# !GENERATED! from (\S+\.md\.tmpl)\b", re.MULTILINE)
-# The banner's third line and the block's closing "#": the hash of everything
-# after it, and the marker for where "everything after it" begins. Matching
-# both together means one search locates the claim and the bytes it covers.
-BODY_HASH_CLAIM = re.compile(r"^# !BODY-SHA256! ([0-9a-f]{64})\n#\n", re.MULTILINE)
+# The banner's hash line and the line that closes the block around it: the
+# hash of everything after it, and the marker for where "everything after it"
+# begins. Matching both together means one search locates the claim and the
+# bytes it covers — for either banner kind, since an !INSTALLED! banner in an
+# HTML comment closes with "-->" where the others close with "#".
+BODY_HASH_CLAIM = re.compile(r"^# !BODY-SHA256! ([0-9a-f]{64})\n(?:#|-->)\n", re.MULTILINE)
 # A tuned banner's second claim: which family file (and model) rendered it.
 TUNING_CLAIM = re.compile(
-    r"^# !GENERATED! from \S+\.md\.tmpl and \S+"
-    r" with model family (\S+)(?:, model (\S+))? — edit",
+    r"^# !GENERATED! from \S+\.md\.tmpl and \S+" r" with model family (\S+)(?:, model (\S+))? — edit",
     re.MULTILINE,
 )
 
@@ -420,9 +497,7 @@ def anchors_in(text: str) -> set[str]:
     return found
 
 
-def collect_anchors(
-    chunks: dict[str, dict], template_paths: list[Path]
-) -> set[str]:
+def collect_anchors(chunks: dict[str, dict], template_paths: list[Path]) -> set[str]:
     """Every NB anchor authored anywhere — template bodies and chunk bodies
     (text, variants, and defaults values) alike."""
     found: set[str] = set()
@@ -475,12 +550,8 @@ def load_family(path: Path) -> dict[str, dict]:
         models = entry.get("models", {})
         for model, override in models.items():
             mwhere = f"{where}.models.{model}"
-            if (
-                not isinstance(override, dict)
-                or set(override) != {"text"}
-                or not isinstance(override["text"], str)
-            ):
-                raise TemplateError(f"{mwhere}: exactly one key, text = \"...\"")
+            if not isinstance(override, dict) or set(override) != {"text"} or not isinstance(override["text"], str):
+                raise TemplateError(f'{mwhere}: exactly one key, text = "..."')
             override["text"] = override["text"].strip("\n")
         if "text" not in entry and not models:
             raise TemplateError(f"{where}: fills nothing (no text, no models)")
@@ -508,13 +579,10 @@ def resolve_family(spec: str, models_dir: Path = MODELS_DIR) -> Path:
     ]
     if len(candidates) > 1:
         raise TemplateError(
-            f"--model-family '{spec}' is ambiguous — candidates: "
-            + ", ".join(rel(path) for path in candidates)
+            f"--model-family '{spec}' is ambiguous — candidates: " + ", ".join(rel(path) for path in candidates)
         )
     if not candidates:
-        available = ", ".join(
-            rel(path) for path in sorted(models_dir.glob(f"*{FAMILY_SUFFIX}"))
-        )
+        available = ", ".join(rel(path) for path in sorted(models_dir.glob(f"*{FAMILY_SUFFIX}")))
         raise TemplateError(
             f"--model-family '{spec}' matches no family file under "
             f"{rel(models_dir)}/ (tried {spec}-addenda{FAMILY_SUFFIX} and "
@@ -531,11 +599,7 @@ def family_models(models_dir: Path = MODELS_DIR) -> dict[Path, set[str]]:
     known to its family.
     """
     return {
-        path: {
-            model
-            for entry in load_family(path).values()
-            for model in entry.get("models", {})
-        }
+        path: {model for entry in load_family(path).values() for model in entry.get("models", {})}
         for path in sorted(models_dir.glob(f"*{FAMILY_SUFFIX}"))
     }
 
@@ -556,9 +620,7 @@ def imply_family(model: str, models_dir: Path = MODELS_DIR) -> Path:
         )
     listing = (
         "; ".join(
-            f"{rel(path)}: "
-            + (", ".join(sorted(models)) if models else "(none)")
-            for path, models in known.items()
+            f"{rel(path)}: " + (", ".join(sorted(models)) if models else "(none)") for path, models in known.items()
         )
         or "(no family files)"
     )
@@ -576,29 +638,90 @@ def validate_family_anchors(entries: dict[str, dict], known: set[str]) -> None:
     hard error — the file would silently fill nothing."""
     unknown = sorted(set(entries) - known)
     if unknown:
-        raise TemplateError(
-            "family file names anchor(s) that exist in no template or chunk: "
-            + ", ".join(unknown)
-        )
+        raise TemplateError("family file names anchor(s) that exist in no template or chunk: " + ", ".join(unknown))
 
 
-def resolve_nb(
-    entries: dict[str, dict], model: str | None
-) -> dict[str, tuple[str, str]]:
+def model_scope(entries: dict[str, dict], model: str) -> NBMap:
+    """Only the model-scope NBs `model` matches in `entries`.
+
+    The per-pin half of resolution, on its own: a pin pulls a family file's
+    override for its own model and nothing else — never that file's
+    family-wide text, which belongs to the family the invocation loaded.
+    """
+    return {
+        anchor: (entry["models"][model]["text"], "model")
+        for anchor, entry in entries.items()
+        if model in entry.get("models", {})
+    }
+
+
+def family_scope(entries: dict[str, dict]) -> NBMap:
+    """Only the family-wide NBs in `entries` — what a loaded family file fills
+    render-wide, for pinned and unpinned outputs alike."""
+    return {anchor: (entry["text"], "family") for anchor, entry in entries.items() if "text" in entry}
+
+
+def resolve_nb(entries: dict[str, dict], model: str | None) -> NBMap:
     """Resolve a loaded family file to anchor -> (text, scope).
 
     Resolution, not accumulation: at most one NB per anchor, the model scope
-    ("model", via --model) winning over the family scope ("family"). An entry
-    with only model overrides, none matching, resolves to nothing.
+    ("model") winning over the family scope ("family"). An entry with only
+    model overrides, none matching, resolves to nothing.
     """
-    resolved = {}
-    for anchor, entry in entries.items():
-        models = entry.get("models", {})
-        if model is not None and model in models:
-            resolved[anchor] = (models[model]["text"], "model")
-        elif "text" in entry:
-            resolved[anchor] = (entry["text"], "family")
-    return resolved
+    return {**family_scope(entries), **(model_scope(entries, model) if model is not None else {})}
+
+
+def per_pin_resolver(
+    entries: dict[str, dict] | None,
+    *,
+    cli_model: str | None,
+    family_given: bool,
+    models_dir: Path = MODELS_DIR,
+) -> Callable[[str | None], NBMap]:
+    """Build the per-output NB resolver: output's model pin -> resolved NBs.
+
+    Model scope belongs to the output, not to the render. An output pinned to
+    X resolves X's overrides — within the family file --model-family named, or
+    else within the one family whose [nb.*.models.X] tables mention X. A pin
+    matching no family, or several, resolves to no model scope at all and says
+    nothing about it: a pin is metadata about which model the definition
+    dispatches on, not a request for tuning (CLI --model, which IS a request,
+    still errors when it matches nothing — see imply_family).
+
+    An output with no pin takes `cli_model` instead — the export flavor. The
+    loaded family's family-wide text applies to every output either way.
+    """
+    wide = family_scope(entries or {})
+    if family_given:
+        sources = [entries or {}]
+    else:
+        # A pin can imply its own family exactly as a bare --model does, so
+        # every family file is a candidate. Loading them validates their
+        # schema as a side effect, which is why a malformed family file is an
+        # error even for a render that ends up using none of them.
+        sources = [load_family(path) for path in sorted(models_dir.glob(f"*{FAMILY_SUFFIX}"))]
+    owner: dict[str, dict[str, dict] | None] = {}
+    for source in sources:
+        for model in {model for entry in source.values() for model in entry.get("models", {})}:
+            # Mentioned by two families: ambiguous, and therefore nothing.
+            owner[model] = source if model not in owner else None
+
+    def resolve(pin: str | None) -> NBMap:
+        if pin is None:
+            return resolve_nb(entries or {}, cli_model)
+        source = owner.get(pin)
+        return dict(wide) if source is None else {**wide, **model_scope(source, pin)}
+
+    return resolve
+
+
+def as_resolver(nb: NBSource) -> Callable[[str | None], NBMap | None]:
+    """Normalize a render call's `nb` argument to a per-pin resolver.
+
+    A resolver passes through; a plain map (or None) is render-wide — every
+    output resolves to it, pinned or not.
+    """
+    return nb if callable(nb) else lambda pin: nb
 
 
 def wrap(text: str, width: int) -> str:
@@ -629,13 +752,9 @@ def chunk_body(name: str, chunk: dict, args: dict[str, str]) -> str:
         return chunk["text"]
     variant = args.get("variant")
     if variant is None:
-        raise TemplateError(
-            f"chunk '{name}' requires variant= (one of {sorted(variants)})"
-        )
+        raise TemplateError(f"chunk '{name}' requires variant= (one of {sorted(variants)})")
     if variant not in variants:
-        raise TemplateError(
-            f"chunk '{name}' has no variant '{variant}' (one of {sorted(variants)})"
-        )
+        raise TemplateError(f"chunk '{name}' has no variant '{variant}' (one of {sorted(variants)})")
     return variants[variant]
 
 
@@ -643,12 +762,13 @@ def render(
     text: str,
     chunks: dict[str, dict],
     scope: dict[str, str],
-    nb: dict[str, tuple[str, str]] | None = None,
+    nb: NBMap | None = None,
     depth: int = 0,
 ) -> str:
     """Expand every marker in `text`. `scope` binds placeholder arguments;
-    `nb` is the resolved anchor -> (text, scope-label) map from a family file
-    (None or missing anchor: the @@nb@@ marker expands to nothing)."""
+    `nb` is one output's resolved anchor -> (text, scope-label) map (None or
+    missing anchor: the @@nb@@ marker expands to nothing). Per-output
+    resolution happens above this, in render_output."""
     if depth > MAX_EXPANSION_DEPTH:
         raise TemplateError("marker expansion exceeded maximum depth (cycle?)")
 
@@ -658,9 +778,7 @@ def render(
         if name == NB_MARKER:
             anchor = args.pop("name", None)
             if not anchor or args:
-                raise TemplateError(
-                    f'@@{NB_MARKER}@@ takes exactly one argument: name="<anchor>"'
-                )
+                raise TemplateError(f'@@{NB_MARKER}@@ takes exactly one argument: name="<anchor>"')
             entry = None if nb is None else nb.get(anchor)
             if entry is None:
                 return ""
@@ -751,6 +869,18 @@ def frontmatter_of(text: str) -> str | None:
     return None
 
 
+def frontmatter_pin(text: str) -> str | None:
+    """The output's own model pin: the `model:` value in its rendered
+    frontmatter, or None when it declares none (the generated commands and the
+    participant contract, today). Read from the rendered text because a pin may
+    arrive as an outputs-table parameter rather than a literal line."""
+    front = frontmatter_of(text)
+    if front is None:
+        return None
+    match = FRONTMATTER_PIN.search(front)
+    return match.group(1) if match else None
+
+
 def banner_claim(text: str) -> str | None:
     """Return the template path a definition's banner claims, if it has one."""
     front = frontmatter_of(text)
@@ -814,13 +944,36 @@ def split_outputs(path: Path) -> tuple[dict[str, dict[str, str]], str]:
     return outputs, body
 
 
+def render_output(
+    body: str,
+    chunks: dict[str, dict],
+    params: dict[str, str],
+    resolve: Callable[[str | None], NBMap | None],
+) -> str:
+    """Render one declared output, its NBs resolved against its own model pin.
+
+    The pin lives in the output's rendered frontmatter, so it can only be read
+    from a render: the body is rendered once under the unpinned resolution to
+    read it, and re-rendered only when the pin resolves to a different NB set.
+    NB anchors are authored in prompt bodies, never in frontmatter, so the pin
+    the first pass reads is the pin the second pass renders under.
+    """
+    unpinned = resolve(None)
+    text = render(body, chunks, params, unpinned)
+    pin = frontmatter_pin(text)
+    if pin is None:
+        return text
+    nb = resolve(pin)
+    return text if nb == unpinned else render(body, chunks, params, nb)
+
+
 def render_template(
     path: Path,
     chunks: dict[str, dict],
     out_dir: Path,
     *,
     surface: str,
-    nb: dict[str, tuple[str, str]] | None = None,
+    nb: NBSource = None,
     tuning: tuple[Path, str | None] | None = None,
 ) -> list[tuple[Path, str]]:
     """Render every definition a template declares, banner stamped into each.
@@ -833,9 +986,10 @@ def render_template(
     The banner is stamped last, since it carries the hash of what follows it.
     """
     outputs, body = split_outputs(path)
+    resolve = as_resolver(nb)
     rendered = []
     for name, params in sorted(outputs.items()):
-        text = render(body, chunks, params, nb)
+        text = render_output(body, chunks, params, resolve)
         if text.startswith("---\n"):
             # YAML comments: valid frontmatter, dropped by every parser, and
             # outside the body that becomes the prompt.
@@ -843,17 +997,13 @@ def render_template(
         elif surface == COMMAND_SURFACE:
             rest = "---\n" + text
         else:
-            raise TemplateError(
-                f"{rel(path)}: agent template must open with YAML frontmatter"
-            )
+            raise TemplateError(f"{rel(path)}: agent template must open with YAML frontmatter")
         stamp = banner(path, body_hash=sha256_text(rest), tuning=tuning)
         rendered.append((out_dir / f"{name}.md", "---\n" + stamp + "\n" + rest))
     return rendered
 
 
-def template_targets(
-    smap: dict[str, tuple[Path, Path]]
-) -> list[tuple[str, Path, Path]]:
+def template_targets(smap: dict[str, tuple[Path, Path]]) -> list[tuple[str, Path, Path]]:
     """(surface name, template path, output directory) for every template.
 
     Discovery recurses through each surface's template tree (an absent tree is
@@ -880,9 +1030,7 @@ def declared_outputs(smap: dict[str, tuple[Path, Path]]) -> dict[str, set[str]]:
     """Map template path (repo-relative) -> the output paths it declares."""
     outputs = {}
     for _, template, out_dir in template_targets(smap):
-        outputs[rel(template)] = {
-            rel(out_dir / f"{name}.md") for name in split_outputs(template)[0]
-        }
+        outputs[rel(template)] = {rel(out_dir / f"{name}.md") for name in split_outputs(template)[0]}
     return outputs
 
 
@@ -912,13 +1060,10 @@ def check_banner_claims(smap: dict[str, tuple[Path, Path]]) -> list[str]:
                 # A multi-render template names several definitions, so the
                 # claim is checked against what the template declares, not
                 # against its stem.
-                owner = next(
-                    (t for t, outs in outputs.items() if rel(path) in outs), None
-                )
+                owner = next((t for t, outs in outputs.items() if rel(path) in outs), None)
                 errors.append(
                     f"MISLABELED  {rel(path)} is banner-marked as generated from "
-                    f"{claimed}, which does not declare it"
-                    + (f" — its template is {owner}" if owner else "")
+                    f"{claimed}, which does not declare it" + (f" — its template is {owner}" if owner else "")
                 )
     return errors
 
@@ -961,17 +1106,13 @@ def back_up(target: Path) -> Path:
 def all_renders(
     chunks: dict[str, dict],
     smap: dict[str, tuple[Path, Path]],
-    nb: dict[str, tuple[str, str]] | None = None,
+    nb: NBSource = None,
     tuning: tuple[Path, str | None] | None = None,
 ) -> list[tuple[Path, str]]:
     """Every (target, rendered text) pair across every template, sorted."""
     pairs = []
     for surface, template, out_dir in template_targets(smap):
-        pairs.extend(
-            render_template(
-                template, chunks, out_dir, surface=surface, nb=nb, tuning=tuning
-            )
-        )
+        pairs.extend(render_template(template, chunks, out_dir, surface=surface, nb=nb, tuning=tuning))
     return sorted(pairs, key=lambda pair: rel(pair[0]))
 
 
@@ -984,9 +1125,7 @@ def assert_output_dirs(out_dirs: set[Path]) -> None:
     root = REPO_ROOT.resolve()
     for out_dir in sorted(out_dirs):
         resolved = out_dir.resolve()
-        if not (
-            resolved.is_dir() and resolved != root and resolved.is_relative_to(root)
-        ):
+        if not (resolved.is_dir() and resolved != root and resolved.is_relative_to(root)):
             raise TemplateError(
                 f"output directory '{out_dir}' is not an existing directory "
                 f"inside the repository — refusing to write"
@@ -995,24 +1134,47 @@ def assert_output_dirs(out_dirs: set[Path]) -> None:
 
 def report_nb(
     entries: dict[str, dict],
-    nb: dict[str, tuple[str, str]],
+    nb: NBMap,
     tuning: tuple[Path, str | None],
 ) -> None:
-    """State which anchors the family file filled, and from which scope."""
+    """State which anchors the family file filled, and from which scope. With
+    a --model, that is the resolution the flavor gives an UNPINNED output; a
+    pinned one resolves its own model scope (report_model_flavor accounts for
+    which outputs are which)."""
     family, model = tuning
     print()
-    print(f"NB anchors from {rel(family)}" + (f" (model {model})" if model else ""))
+    print(f"NB anchors from {rel(family)}" + (f" (model {model}, as unpinned outputs resolve it)" if model else ""))
     print("=" * 60)
     for anchor in sorted(entries):
         scope = nb[anchor][1] if anchor in nb else "unfilled (no scope matched)"
         print(f"  {anchor:<28} {scope}")
 
 
+def report_model_flavor(model: str, pairs: list[tuple[Path, str]]) -> None:
+    """Account for where --model landed. It is the export flavor: it tunes the
+    outputs carrying no frontmatter pin and is ignored by the rest. Said out
+    loud, always — a flavored render that reached nothing must not read like
+    one that worked."""
+    pinned = sum(1 for _, text in pairs if frontmatter_pin(text) is not None)
+    unpinned = len(pairs) - pinned
+    print()
+    if unpinned:
+        print(
+            f"--model {model}: applied to {unpinned} unpinned output(s); "
+            f"skipped {pinned} pinned output(s) (pins own their tuning)"
+        )
+    else:
+        print(
+            f"--model {model}: applied to 0 unpinned output(s) — all "
+            f"{pinned} output(s) carry a frontmatter pin (pins own their tuning)"
+        )
+
+
 def generate(
     chunks: dict[str, dict],
     smap: dict[str, tuple[Path, Path]],
     *,
-    nb: dict[str, tuple[str, str]] | None = None,
+    nb: NBSource = None,
     tuning: tuple[Path, str | None] | None = None,
     explicit_root: bool = False,
     verbose: bool = False,
@@ -1084,7 +1246,7 @@ def check(
     chunks: dict[str, dict],
     smap: dict[str, tuple[Path, Path]],
     *,
-    nb: dict[str, tuple[str, str]] | None = None,
+    nb: NBSource = None,
     tuning: tuple[Path, str | None] | None = None,
     verbose: bool = False,
     show_diff: bool = True,
@@ -1184,8 +1346,118 @@ INSTALL_EXCLUDED_DIRS = frozenset({"tests", "__pycache__", ".pytest_cache"})
 INSTALL_EXCLUDED_NAMES = frozenset({".DS_Store"})
 INSTALL_EXCLUDED_SUFFIX = ".bak"
 
-MANIFEST_NAME = "agents-install-manifest.json"
-MANIFEST_VERSION = 1
+# The !INSTALLED! banner: what a copied file says about itself. Deterministic
+# text — nothing dated, nothing per-run — so an unchanged source re-installs to
+# the identical bytes.
+INSTALLED_NOTICE = "!INSTALLED! from the agents repo — do not edit in place; " "edit the source repo and re-install."
+# Filetypes whose comment syntax can carry the banner as `#` lines. A suffix
+# absent here and not .md admits no comment we can rely on (JSON is the case
+# in point), so its file is copied verbatim and the install reports it.
+HASH_COMMENT_SUFFIXES = frozenset({".py", ".sh", ".toml", ".mk", ".just"})
+MARKDOWN_SUFFIX = ".md"
+
+
+def bannerable(source: Path) -> bool:
+    """Does this file's type admit a comment the !INSTALLED! banner can live
+    in? (Whether it *needs* one is install_content's question.)"""
+    return source.suffix == MARKDOWN_SUFFIX or source.suffix in HASH_COMMENT_SUFFIXES
+
+
+def stamp_installed(text: str, *, style: str) -> str:
+    """`text` with an !INSTALLED! banner stamped in, in `style`'s comment
+    syntax, above the bytes its !BODY-SHA256! line covers.
+
+    Four styles, one block: "frontmatter" opens the file's own YAML block and
+    injects at its top (a frontmatter reader drops the comment lines, so the
+    banner never reaches the prompt); "bare-frontmatter" emits a minimal block
+    holding only the banner above a file that has none, exactly as
+    render_template does for a frontmatter-less command template; "html" wraps
+    the block in an HTML comment above content that must not gain frontmatter;
+    "hash" puts it at the top of the file, below a shebang when there is one.
+    The hashed body is everything after the block in every case, so
+    banner_body / body_untouched read either banner kind without knowing which
+    it met.
+    """
+    prefix = ""
+    if style in ("frontmatter", "bare-frontmatter"):
+        prefix = "---\n"
+        body = text[len("---\n") :] if style == "frontmatter" else "---\n" + text
+        opening, closing = "#\n", "#\n"
+    elif style == "html":
+        body = text
+        opening, closing = "<!--\n", "-->\n"
+    else:
+        body = text
+        if text.startswith("#!"):
+            shebang, _, body = text.partition("\n")
+            prefix = shebang + "\n"
+        opening, closing = "#\n", "#\n"
+    return f"{prefix}{opening}# {INSTALLED_NOTICE}\n" f"# !BODY-SHA256! {sha256_text(body)}\n{closing}{body}"
+
+
+def install_content(source: Path, *, surface: str) -> str | None:
+    """The text to install for a copied file — its source, banner stamped in —
+    or None when the file travels verbatim: a generated definition (its own
+    !GENERATED! banner already forbids in-place edits and names the real edit
+    path), or a filetype with no comment syntax to carry a banner.
+
+    `surface` decides where a markdown file with no frontmatter of its own puts
+    the banner, on the same split render_template already makes: a command is
+    given a minimal frontmatter block (its first BODY line is the description
+    Claude Code lists it by, so nothing may displace it), while supporting
+    material under agents/ takes an HTML comment instead — frontmatter there
+    would make a methodology topic look extractable as a definition body, which
+    SPEC.md's Guest-Extraction Contract requires it not to be.
+    """
+    if not bannerable(source):
+        return None
+    text = source.read_text(encoding="utf-8")
+    if source.suffix != MARKDOWN_SUFFIX:
+        return stamp_installed(text, style="hash")
+    if banner_claim(text) is not None:
+        return None
+    if text.startswith("---\n"):
+        style = "frontmatter"
+    else:
+        style = "bare-frontmatter" if surface == COMMAND_SURFACE else "html"
+    return stamp_installed(text, style=style)
+
+
+def provably_ours(target: Path) -> bool:
+    """Does the extant target's body still hash to its own banner's claim?
+    A file that cannot be read as text carries no banner and proves nothing."""
+    try:
+        return body_untouched(target.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, OSError):
+        return False
+
+
+def install_file(source: Path, target: Path, content: str | None) -> str:
+    """Write one copied file, under the same per-target safety generation uses.
+
+    Returns the outcome — "unchanged", "written", or "backed up" — where
+    "backed up" means the extant target was not provably this tool's output
+    (its body did not hash to its own banner's claim, or it carried no banner
+    at all) and was copied aside before being replaced. The replacement itself
+    is never in question: the tree is an artifact.
+    """
+    desired = source.read_bytes() if content is None else content.encode("utf-8")
+    outcome = "written"
+    if target.exists():
+        if target.read_bytes() == desired:
+            return "unchanged"
+        if not provably_ours(target):
+            back_up(target)
+            outcome = "backed up"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if content is None:
+        shutil.copy2(source, target)
+    else:
+        # Written as text and then mode-matched to the source: the executable
+        # bit on the installed shell tools has to survive the stamping.
+        target.write_text(content, encoding="utf-8", newline="\n")
+        shutil.copymode(source, target)
+    return outcome
 
 
 def excluded_from_install(relpath: Path) -> bool:
@@ -1197,9 +1469,7 @@ def excluded_from_install(relpath: Path) -> bool:
     )
 
 
-def install_pairs(
-    smap: dict[str, tuple[Path, Path]], *, source_root: Path = REPO_ROOT
-) -> list[tuple[str, Path, Path]]:
+def install_pairs(smap: dict[str, tuple[Path, Path]], *, source_root: Path = REPO_ROOT) -> list[tuple[str, Path, Path]]:
     """(surface-relative key, source, target) for every file an install copies:
     the deployed surfaces entire, minus the exclusion list. The generated
     definitions are copied like everything else — a checked-in surface already
@@ -1215,53 +1485,8 @@ def install_pairs(
             relpath = source.relative_to(surface_root)
             if excluded_from_install(relpath):
                 continue
-            found.append(
-                ((Path(surface) / relpath).as_posix(), source, out_dir / relpath)
-            )
+            found.append(((Path(surface) / relpath).as_posix(), source, out_dir / relpath))
     return found
-
-
-def source_commit(repo: Path = REPO_ROOT) -> str:
-    """`git rev-parse HEAD`, suffixed -dirty when the work tree has changes.
-    'unknown' when git cannot answer — an install from an unpacked tarball is
-    still a legitimate install, it just cannot cite a commit."""
-
-    def git(*args: str) -> str | None:
-        try:
-            done = subprocess.run(
-                ("git", "-C", str(repo), *args),
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-        except (OSError, subprocess.CalledProcessError):
-            return None
-        return done.stdout.strip()
-
-    head = git("rev-parse", "HEAD")
-    if head is None:
-        return "unknown"
-    return head + ("-dirty" if git("status", "--porcelain") else "")
-
-
-def write_manifest(
-    path: Path, *, tuning: tuple[Path, str | None] | None
-) -> None:
-    """Stamp the installed tree with its provenance. Write-only: nothing reads
-    it back, because the tree is an artifact — a re-install overwrites it
-    unconditionally rather than reasoning about what is already there."""
-    payload = {
-        "manifest_version": MANIFEST_VERSION,
-        "gen_defs_version": __version__,
-        "source_commit": source_commit(),
-        "flavor": (
-            None
-            if tuning is None
-            else {"family": rel(tuning[0]), "model": tuning[1]}
-        ),
-        "installed": datetime.now(UTC).isoformat(timespec="seconds"),
-    }
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
 def install(
@@ -1269,31 +1494,38 @@ def install(
     smap: dict[str, tuple[Path, Path]],
     *,
     root: Path,
-    nb: dict[str, tuple[str, str]] | None = None,
+    nb: NBSource = None,
     tuning: tuple[Path, str | None] | None = None,
     source_root: Path = REPO_ROOT,
     verbose: bool = False,
 ) -> bool:
     """Install the full product into `root` (a consuming project's .claude).
 
-    A plain recursive copy of the deployed surfaces under `source_root` (this
-    repository, in every real invocation), minus the exclusion list, followed
-    by a provenance stamp. The copied definitions are already their own base
-    renders, so an untuned install renders nothing and merely checks the
-    result; a tuned install runs the ordinary generation pass over the copy,
-    which rewrites what the flavor changes without leaving backups behind
-    (freshly copied definitions are provably untouched output).
+    A recursive copy of the deployed surfaces under `source_root` (this
+    repository, in every real invocation), minus the exclusion list, with an
+    !INSTALLED! banner stamped into every copied file whose type admits one.
+    The copied definitions are already their own base renders, so an untuned
+    install renders nothing and merely checks the result; a tuned install runs
+    the ordinary generation pass over the copy, which rewrites what the flavor
+    changes without leaving backups behind (freshly copied definitions are
+    provably untouched output).
     """
     pairs = install_pairs(smap, source_root=source_root)
     print("Installing deployed surfaces")
     print("=" * 60)
     landed: dict[str, int] = {}
+    outcomes: dict[str, int] = {}
+    skipped: list[str] = []
     for key, source, target in pairs:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-        landed[key.split("/", 1)[0]] = landed.get(key.split("/", 1)[0], 0) + 1
+        surface = key.split("/", 1)[0]
+        content = install_content(source, surface=surface)
+        if content is None and not bannerable(source):
+            skipped.append(key)
+        outcome = install_file(source, target, content)
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+        landed[surface] = landed.get(surface, 0) + 1
         if verbose:
-            print(f"  {'copied':<10} {key}")
+            print(f"  {outcome:<10} {key}")
     for surface, count in sorted(landed.items()):
         print(f"  {'copied':<10} {count} file(s) into {rel(root / surface)}/")
     if not pairs:
@@ -1309,32 +1541,33 @@ def install(
         verdict = "rendered 0, integrity " + ("OK" if integrity else "REPORTED ABOVE")
         ok = True
     else:
-        ok = generate(
-            chunks, smap, nb=nb, tuning=tuning, explicit_root=True, verbose=verbose
-        )
+        ok = generate(chunks, smap, nb=nb, tuning=tuning, explicit_root=True, verbose=verbose)
         verdict = f"rendered {len(all_renders(chunks, smap, nb, tuning))}"
 
-    manifest_path = root / MANIFEST_NAME
-    write_manifest(manifest_path, tuning=tuning)
-
     claim = None if tuning is None else (rel(tuning[0]), tuning[1])
+    backups = outcomes.get("backed up", 0)
     print()
     print(
-        f"install: copied {len(pairs)}, {verdict}; "
-        f"manifest {rel(manifest_path)}; {describe_tuning(claim)}"
+        f"install: copied {len(pairs)} "
+        f"({outcomes.get('unchanged', 0)} already current), "
+        f"{verdict}; {describe_tuning(claim)}"
     )
     print(
+        f"backups: {backups} extant file(s) copied aside as *.bak before being "
+        f"overwritten — an installed tree is an artifact, so its *.bak files "
+        f"are yours to delete."
+    )
+    if skipped:
+        print(f"unbannered: {len(skipped)} file(s) whose type admits no comment — " + ", ".join(skipped))
+    print(
         "the installed tree is an artifact — re-install to update it; local "
-        "edits to installed files are overwritten, not preserved."
+        "edits to installed files are replaced, not preserved."
     )
     return ok
 
 
-
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Generate and check the generated agent/command definitions."
-    )
+    parser = argparse.ArgumentParser(description="Generate and check the generated agent/command definitions.")
     parser.add_argument(
         "--generate",
         action="store_true",
@@ -1346,13 +1579,11 @@ def main() -> None:
         metavar="ROOT",
         help="full-product install into ROOT (a project's existing .claude "
         "directory): copy the deployed surfaces entire, minus test suites and "
-        "caches, and stamp the tree with its provenance. A flavor "
-        "(--model-family/--model) adds a render pass over the copy. Implies "
-        "--output-dir ROOT",
+        "caches, stamping each copied file with an !INSTALLED! banner. A "
+        "flavor (--model-family/--model) adds a render pass over the copy. "
+        "Implies --output-dir ROOT",
     )
-    parser.add_argument(
-        "--version", action="version", version=f"%(prog)s {__version__}"
-    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--verbose", "-v", action="store_true", help="list every file")
     parser.add_argument(
         "--no-diff",
@@ -1382,16 +1613,14 @@ def main() -> None:
     parser.add_argument(
         "--model",
         metavar="NAME",
-        help="activate NAME's per-model overrides in the family file; "
-        "without --model-family, the one family whose [nb.*.models.*] "
-        "tables mention NAME is implied",
+        help="export flavor: activate NAME's per-model overrides for the "
+        "outputs carrying no frontmatter model: pin (a pinned output "
+        "resolves its own and ignores this); without --model-family, the "
+        "one family whose [nb.*.models.*] tables mention NAME is implied",
     )
     args = parser.parse_args()
     if args.install is not None and (args.generate or args.output_dir is not None):
-        parser.error(
-            "--install ROOT already implies --generate --output-dir ROOT — "
-            "pass it alone"
-        )
+        parser.error("--install ROOT already implies --generate --output-dir ROOT — " "pass it alone")
     output_root = args.install if args.install is not None else args.output_dir
 
     try:
@@ -1408,11 +1637,15 @@ def main() -> None:
             # Anchors are collected across ALL templates and chunks, not just
             # the --surfaces selection, so a filtered render never miscalls a
             # real anchor unknown.
-            validate_family_anchors(
-                entries, collect_anchors(chunks, templates(surface_map()))
-            )
-            nb = resolve_nb(entries, args.model)
+            validate_family_anchors(entries, collect_anchors(chunks, templates(surface_map())))
             tuning = (family, args.model)
+        # Always per-pin: an output's own frontmatter model: pin owns its model
+        # scope, whether or not this invocation asked for a flavor.
+        nb = per_pin_resolver(
+            entries,
+            cli_model=args.model,
+            family_given=args.model_family is not None,
+        )
         if args.install is not None:
             ok = install(
                 chunks,
@@ -1423,7 +1656,7 @@ def main() -> None:
                 verbose=args.verbose,
             )
             if entries is not None:
-                report_nb(entries, nb, tuning)
+                report_nb(entries, nb(None), tuning)
         elif args.generate:
             ok = generate(
                 chunks,
@@ -1434,7 +1667,7 @@ def main() -> None:
                 verbose=args.verbose,
             )
             if entries is not None:
-                report_nb(entries, nb, tuning)
+                report_nb(entries, nb(None), tuning)
         else:
             ok = check(
                 chunks,
@@ -1444,6 +1677,10 @@ def main() -> None:
                 verbose=args.verbose,
                 show_diff=not args.no_diff,
             )
+        if args.model is not None:
+            # The flavor's reach is accounted for in every mode: it is the one
+            # flag whose effect depends on what each output declares.
+            report_model_flavor(args.model, all_renders(chunks, smap, nb, tuning))
     except TemplateError as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(2)

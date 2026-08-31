@@ -65,8 +65,8 @@ test: venv
 
 [doc("black-format and isort agents/kb_tools")]
 format-python: venv
-    PYTHONDONTWRITEBYTECODE=1 "{{VENV / PYBIN / 'black' + EXE}}" --line-length=120 {{AGENTS_DIR}}/kb_tools
-    PYTHONDONTWRITEBYTECODE=1 "{{VENV / PYBIN / 'isort' + EXE}}" --profile black --line-length 120 {{AGENTS_DIR}}/kb_tools
+    PYTHONDONTWRITEBYTECODE=1 "{{VENV / PYBIN / 'black' + EXE}}" --line-length=120 {{AGENTS_DIR}}/kb_tools {{AGENTS_DIR}}/liaison_tools templates/tests gen-defs.py
+    PYTHONDONTWRITEBYTECODE=1 "{{VENV / PYBIN / 'isort' + EXE}}" --profile black --line-length 120 {{AGENTS_DIR}}/kb_tools {{AGENTS_DIR}}/liaison_tools templates/tests gen-defs.py
 
 # The live ~/.claude/CLAUDE.md is a real file, deliberately not a symlink
 # (see user-config/README.md): updates flow only by explicit act, never
@@ -115,7 +115,8 @@ install-user-config:
 
 # The one deployment shape (README.md, "Install"): copies both deployed
 # surfaces into <target>/.claude/ via gen-defs.py --install, minus test suites
-# and caches, and stamps the tree with its provenance. `flavor` disambiguates
+# and caches, stamping each copied file with an !INSTALLED! banner carrying the
+# hash of the content below it. `flavor` disambiguates
 # by file existence only: a templates/models/<flavor>*.toml match means
 # family, otherwise model — gen-defs.py then resolves the bare name (or errors
 # helpfully) itself, and a flavor adds a render pass over the copy.
@@ -145,4 +146,4 @@ install-defs target flavor="":
     # ${arr[@]+...} guard: expanding an empty array trips `set -u` on the
     # bash 3.2 that macOS ships at /bin/bash.
     PYTHONDONTWRITEBYTECODE=1 python3 "{{justfile_directory() / GEN}}" --install "${target}/.claude" ${tuning_args[@]+"${tuning_args[@]}"}
-    printf '%s\n' "installed the full agents/ and commands/ product into ${target}/.claude/ with ${tuning_desc} — see the install summary above for counts, the manifest path, and the integrity verdict."
+    printf '%s\n' "installed the full agents/ and commands/ product into ${target}/.claude/ with ${tuning_desc} — see the install summary above for counts, backups, and the integrity verdict."

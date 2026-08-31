@@ -11,7 +11,7 @@ just install-defs ~/projects/foo
 
 That copies `agents/` and `commands/` into `~/projects/foo/.claude/` in full: every definition, the MAD topic sets, `kb_tools/`, `liaison_tools/`, and the slash commands. Test suites and caches stay behind. An optional flavor argument tunes the generated definitions for a model family or a specific model — `just install-defs ~/projects/foo gemma-4` (see "Variants and platform compatibility" below).
 
-The installed tree is an **artifact**: this repo is the source of truth, and re-running the install overwrites it unconditionally. Don't edit files under a consuming project's `.claude/agents/` — change them here (template or definition), then re-install. Each install drops a provenance stamp at `.claude/agents-install-manifest.json` recording the generator version, this repo's commit, the flavor, and the time, so you can always tell what a given tree is.
+The installed tree is an **artifact**: this repo is the source of truth, and re-running the install overwrites it. Don't edit files under a consuming project's `.claude/agents/` — change them here (template or definition), then re-install. Every installed file says as much in a banner of its own, which also records the hash of the content below it; an edit that breaks that hash is not lost when the re-install replaces the file, but set aside beside it as a numbered `.bak` (yours to delete). Re-installing an untouched tree changes nothing and backs up nothing.
 
 Claude Code reads agent and command definitions from `.claude/`; nothing outside `agents/` and `commands/` is installed, so nothing else is visible to a session. Optionally, a symlink gives sessions in a consuming project a path to this repo's project space (justfile, templates, contract docs):
 
@@ -30,9 +30,22 @@ templates/    template sources (not session-visible), rendered by gen-defs.py at
 user-config/  published operator baseline — see user-config/README.md
 ```
 
-The agent definitions assume a set of operator-level working rules; `user-config/` publishes that recommended baseline (`~/.claude/CLAUDE.md`) so it travels with the repo — see [user-config/README.md](user-config/README.md) for install and sync.
+The agent definitions assume a set of operator-level working rules; `user-config/` publishes that recommended baseline (`~/.claude/CLAUDE.md`) so it travels with the repo — install with `just install-user-config` (diffs against a differing live file, backs it up with a numbered `.bak`, then overwrites); see [user-config/README.md](user-config/README.md) for details and manual sync.
 
 Contract docs, precedence in this order (code is the defect when it disagrees with a higher one): [SPEC.md](SPEC.md) — observable contract, [ARCHITECTURE.md](ARCHITECTURE.md) — how the mechanism works, [AGENTS.md](AGENTS.md) — house rules. [ROADMAP.md](ROADMAP.md) tracks open follow-on work, outside the precedence chain.
+
+Working in this repo itself: `just check` must pass before any handoff touching `templates/`, `agents/`, or `commands/`; `just test` runs the full tooling test suite (`kb_tools` + `liaison_tools` + `gen-defs.py`, auto-provisioning a `.venv`); `just clean-backups` sweeps the generator's numbered `*.bak` safety copies from both surface trees.
+
+## Variants and platform compatibility
+
+Model-specific defensive text is delivered through **NB anchors and model-family files**. A template or shared chunk may expose an `@@nb name="<anchor>"@@` anchor at a spot where an observed failure mode needs a targeted note; with no family file loaded the anchor renders as nothing, so the base definitions are byte-identical to an anchor-free render. A family file — `templates/models/<family>.toml`, one per model family, schema in [templates/models/README.md](templates/models/README.md) — fills anchors: family-wide `text`, with per-model overrides inside the same file. Model scope wins over family scope and at most one `**NB**:` renders per anchor. A family file can never replace, suppress, or modify base text — it only fills anchors. Tuned sets are rendered to order, typically out of repo: `gen-defs.py --generate --output-dir <root> --model-family <file> [--model <name>]`; `just install-defs <target> <flavor>` applies the same mechanism to an install (see "Install" above). (The earlier delivery vehicle — a parallel per-model definition file, e.g. `applied-mathematician-strict.md`, a gap-aversion variant built for running the math agent on Gemma 4 — was retired 2026-08-21; the anchor mechanism replaces whole-definition forks.)
+
+The mechanism is a response to a real phenomenon: agent definitions tend to accumulate defensive language that's keyed to the *specific* model they were tested against. Defensive clauses that *protect* one model can *smother* another — same clause, opposite effect, no error event. (Example: probe data from 2026-04-29 showed Gemma 4 31B-it silently filling axiom gaps with textbook conventions, while Gemini 3.1 Pro spontaneously surfaced the same gaps. A "do not fill gaps" clause helps the first model and slows the second.)
+
+The operating rule when porting an agent definition to a new model:
+**strip first, observe, patch.** Run the base definitions with the new model on a known-shape probe set. Watch for failure modes; only then author an anchor and a family-file entry targeted at the failure modes you actually observed. Anchors are never pre-sprinkled speculatively. Heavy scaffolding hides the model's true tendencies; you can't engineer for failure modes you never see.
+
+When adding defensive clauses, record *what tendency the clause was added to correct, against which model*. Without that record, future maintainers can't distinguish "still load-bearing" from "residue from a model we don't use anymore." Comment family-file entries like code: not what the NB says, but why and against which observed behavior it was added.
 
 ## Coding Agent Set
 
@@ -62,15 +75,9 @@ Single-purpose agents invoked directly for non-coding work.
 * marketing-comms-expert.md - messaging, positioning, copywriting, competitive framing
 * biz-dev-strategist.md - business strategy, market analysis, GTM, monetization
 * applied-mathematician.md - rigorous derivation, model construction, dimensional analysis, claim classification (identity / manifestation / consistency check / derived prediction). Takes given axioms at face value and derives consequences honestly. Use when working inside a formal system — established, novel, or mid-construction — and the task requires careful step-by-step reasoning rather than retrieval of textbook results.
-### Variants and platform compatibility
-Model-specific defensive text is delivered through **NB anchors and model-family files**. A template or shared chunk may expose an `@@nb name="<anchor>"@@` anchor at a spot where an observed failure mode needs a targeted note; with no family file loaded the anchor renders as nothing, so the base definitions are byte-identical to an anchor-free render. A family file — `templates/models/<family>.toml`, one per model family, schema in [templates/models/README.md](templates/models/README.md) — fills anchors: family-wide `text`, with per-model overrides inside the same file. Model scope wins over family scope and at most one `**NB**:` renders per anchor. A family file can never replace, suppress, or modify base text — it only fills anchors. Tuned sets are rendered to order, typically out of repo: `gen-defs.py --generate --output-dir <root> --model-family <file> [--model <name>]`. (The earlier delivery vehicle — a parallel per-model definition file, e.g. `applied-mathematician-strict.md`, a gap-aversion variant built for running the math agent on Gemma 4 — was retired 2026-08-21; the anchor mechanism replaces whole-definition forks.)
-
-The mechanism is a response to a real phenomenon: agent definitions tend to accumulate defensive language that's keyed to the *specific* model they were tested against. Defensive clauses that *protect* one model can *smother* another — same clause, opposite effect, no error event. (Example: probe data from 2026-04-29 showed Gemma 4 31B-it silently filling axiom gaps with textbook conventions, while Gemini 3.1 Pro spontaneously surfaced the same gaps. A "do not fill gaps" clause helps the first model and slows the second.)
-
-The operating rule when porting an agent definition to a new model:
-**strip first, observe, patch.** Run the base definitions with the new model on a known-shape probe set. Watch for failure modes; only then author an anchor and a family-file entry targeted at the failure modes you actually observed. Anchors are never pre-sprinkled speculatively. Heavy scaffolding hides the model's true tendencies; you can't engineer for failure modes you never see.
-
-When adding defensive clauses, record *what tendency the clause was added to correct, against which model*. Without that record, future maintainers can't distinguish "still load-bearing" from "residue from a model we don't use anymore." Comment family-file entries like code: not what the NB says, but why and against which observed behavior it was added.
+* economic-historian.md - stress-tests historical claims, analogies, and "laws of history" against the record; the history lens in an adversarial panel
+* literature-scout.md - finds the citations a manuscript should include, especially the omissions a referee would flag; verifies real references via web search rather than inventing them
+* theoretical-economist.md - stress-tests production/growth, market-structure, and mechanism-design claims; the economics lens in an adversarial panel
 
 ## Multi-Agent Debate Agent Set
 Uses Multi-Agent Debate Process.
@@ -98,8 +105,9 @@ Two modes share the same participants but use different referees and topic libra
 * commands
   * mad-review.md - initiates a review process. you must provide:
     * a topic from .claude/agents/mad/review-topics/
-      * agent-definition.md 
+      * agent-definition.md
       * architecture.md
+      * contract-conformance.md
       * general-code.md
       * math-derivation.md
       * sim-code.md
@@ -115,8 +123,8 @@ Two modes share the same participants but use different referees and topic libra
     * all artifacts, temporary or otherwise, are produced under the review work directory
   * round cap: 5
   * examples 
-    * ```/mad-review TOPIC=.claude/agents/mad/review-topics/sim-code.md SEATS=opus,sonnet CONSTRAINTS=ARCHITECTURE.md TARGET=src/sim/```
-    * ```/mad-review TOPIC=.claude/agents/mad/review-topics/general-code.md SEATS=opus,sonnet,guest ENV_FILE=~/.config/guest.env CONSTRAINTS=AGENTS.md TARGET=src/ **IGNORE
+    * ```/mad-review sim-code SEATS=opus,sonnet CONSTRAINTS=ARCHITECTURE.md TARGET=src/sim/```
+    * ```/mad-review general-code SEATS=opus,sonnet,guest ENV_FILE=~/.config/guest.env CONSTRAINTS=AGENTS.md TARGET=src/ **IGNORE
     `src/third_party`**```
 
 ### Design Mode
@@ -145,7 +153,7 @@ Two modes share the same participants but use different referees and topic libra
     * **under-determined**: all participants converge on the same diagnosis of why the problem cannot be closed from the supplied axioms, identifying the specific missing axiom/principle/input
     * **unresolved**: candidates preserved for human arbitration if no convergence within round cap
   * examples
-    * ```/mad-design TOPIC=.claude/agents/mad/design-topics/math-derivation.md SEATS=fable,opus,sonnet CONSTRAINTS=SPEC.md TARGET=mad-design/my-derivation/```
+    * ```/mad-design math-derivation SEATS=fable,opus,sonnet CONSTRAINTS=SPEC.md TARGET=mad-design/my-derivation/```
 
 ## Guest Liaison
 
@@ -232,4 +240,8 @@ Agents and portable tooling for building, navigating, and maintaining a knowledg
 
 1. Installs `.claude/agents` as in [Install](#install) and keeps its KB in `kb-root/` at the repo root — the tools self-anchor by walking up from the cwd to `.git` and requiring `kb-root/` beside it.
 2. Installs the runner targets once, from the project root: `PYTHONPATH=.claude/agents python3 -m kb_tools.kb_util --install-targets` — this adds a single non-fatal include line to the project's justfile or Makefile.
-3. Uses `just`/`make` `verify`, `refresh`, and `stats` from then on.
+3. Uses `just`/`make` `kb-verify`, `kb-refresh`, and `kb-stats` from then on.
+
+## Third Party Acknowledgements
+
+The deployed runtime (`agents/`, `commands/`) is stdlib-only Python and shell with no third-party dependencies. `pytest`, `black`, and `isort` are dev/test-only tools, installed into a local `.venv` by the `just test` and `just format-python` recipes.

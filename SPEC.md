@@ -12,7 +12,9 @@ just install-defs <path-to-consuming-project> [flavor]
 
 An install delivers the surfaces entire, into the project's `.claude/`: every definition, generated and hand-maintained alike, together with the supporting material those definitions read — the MAD topic sets, `kb_tools/`, `liaison_tools/`. What is not part of the product does not travel: test suites and their fixtures, caches, and generator safety copies. The optional flavor renders the generated definitions under a model family or model; Generated-Definition Integrity below then holds for the flavor the install was given.
 
-An installed tree is an **artifact**, not a working copy. This repository is the source of truth, and a re-install overwrites unconditionally — local edits to installed files are not preserved, by design. The fix for a wrong installed definition is a change made here and a re-install. Every installed tree carries a provenance stamp at `.claude/agents-install-manifest.json` naming the generator version, the source commit, the flavor, and the install time, so any tree can be traced back to what produced it.
+An installed tree is an **artifact**, not a working copy. This repository is the source of truth, and a re-install always overwrites — local edits to installed files are never preserved, by design. The fix for a wrong installed definition is a change made here and a re-install. The overwrite replaces without destroying: an installed file that is not provably this tool's own output is set aside as a numbered `.bak` beside itself before being replaced, and those safety copies are the consumer's to delete.
+
+Every installed file states its own origin and records the hash of the content beneath that statement — the generated banner (Generated-Definition Integrity) on a definition rendered here, an installed banner on a file copied here. The banner is written in whatever comment syntax the file's type admits, and never where it changes how the file is read: out of a definition's prompt body, out of a script's executable content, out of the first body line a frontmatter-less command is described by, and never in a form that would make supporting material extract as a definition body (Guest-Extraction Contract). A filetype admitting no comment is installed unbannered, and the install names it. The recorded hash is what makes Write Safety below decidable for an installed tree exactly as it is for a regenerated one.
 
 Every path written inside a definition body — a file the agent is told to `Read`, a script it invokes — is written against `.claude/agents/...`, not against the repository's own path: that is where an installed definition actually lives, and the path it must resolve from inside a consuming session.
 
@@ -41,6 +43,8 @@ Regenerating definitions never destroys hand-maintained or already-correct conte
 | no generated banner | refused — never written |
 
 A target is written only when it is provably the tool's own output. A hand-maintained file that happens to share a name with a template's declared output is never silently overwritten.
+
+An install writes copies rather than renders, and reads the same table with one row changed: a target carrying no banner is backed up and overwritten rather than refused, because an installed tree is an artifact and not a place hand-maintained content may live.
 
 The banner's body hash is what separates the two overwrite rows. Content that hashes to its own banner's claim is reproducible from the template at will, so preserving a copy of it protects nothing; content that does not — because someone edited it, or because it predates the hash — is unreproducible and is preserved before being replaced.
 

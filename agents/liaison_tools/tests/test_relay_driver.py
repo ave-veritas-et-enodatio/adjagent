@@ -54,8 +54,7 @@ def _load_relay_driver():
 rd = _load_relay_driver()
 
 _TOOL_CALLS_REPLY = (
-    'TOOL_CALLS\n[{"id": "call_1", "type": "function", '
-    '"function": {"name": "read_file", "arguments": "{}"}}]\n'
+    'TOOL_CALLS\n[{"id": "call_1", "type": "function", ' '"function": {"name": "read_file", "arguments": "{}"}}]\n'
 )
 
 
@@ -87,16 +86,12 @@ class TestClassifier(unittest.TestCase):
         self.assertEqual(kind, "malformed")
 
     def test_single_request_line(self):
-        self.assertEqual(
-            rd.classify("READ: notes.txt\n"), ("request", [("READ", "notes.txt")])
-        )
+        self.assertEqual(rd.classify("READ: notes.txt\n"), ("request", [("READ", "notes.txt")]))
 
     def test_three_mixed_request_lines(self):
         kind, payload = rd.classify("READ: a.md\nLIST: sub\nGREP: needle\n")
         self.assertEqual(kind, "request")
-        self.assertEqual(
-            payload, [("READ", "a.md"), ("LIST", "sub"), ("GREP", "needle")]
-        )
+        self.assertEqual(payload, [("READ", "a.md"), ("LIST", "sub"), ("GREP", "needle")])
 
     def test_request_lines_tolerate_surrounding_blank_lines(self):
         kind, payload = rd.classify("\nREAD: a.md\n\nLIST: sub\n\n")
@@ -108,9 +103,7 @@ class TestClassifier(unittest.TestCase):
         self.assertEqual(rd.classify(reply), ("malformed", None))
 
     def test_mixed_request_and_prose_is_malformed(self):
-        self.assertEqual(
-            rd.classify("READ: a.md\nplease and thank you\n"), ("malformed", None)
-        )
+        self.assertEqual(rd.classify("READ: a.md\nplease and thank you\n"), ("malformed", None))
 
     def test_unknown_verb_is_malformed(self):
         self.assertEqual(rd.classify("WRITE: a.md\n"), ("malformed", None))
@@ -399,9 +392,7 @@ class TestToolCallsStub(_ScriptedDriverMixin, unittest.TestCase):
         result = driver.run_question("q01", "What is alpha?")
         self.assertEqual(result.outcome, "final")
         users = self._user_turns(self._messages(driver))
-        self.assertEqual(
-            users[1], "Tool call read_file is not available in this environment."
-        )
+        self.assertEqual(users[1], "Tool call read_file is not available in this environment.")
 
 
 class TestRetriesAndHalt(_ScriptedDriverMixin, unittest.TestCase):
@@ -425,9 +416,7 @@ class TestRetriesAndHalt(_ScriptedDriverMixin, unittest.TestCase):
         with mock.patch.object(rd, "RETRY_BACKOFF_SECONDS", 0):
             with contextlib.redirect_stderr(io.StringIO()) as err:
                 with contextlib.redirect_stdout(io.StringIO()):
-                    exit_code = driver.run(
-                        [("q01", "What is alpha?"), ("q02", "never reached")]
-                    )
+                    exit_code = driver.run([("q01", "What is alpha?"), ("q02", "never reached")])
         self.assertEqual(exit_code, 1)
         self.assertEqual(len(calls), 2)  # 1 attempt + 1 retry, then halt
         self.assertIn("HALT after q01", err.getvalue())
@@ -522,9 +511,7 @@ def _sse_body(text: str, prompt_tokens: int, completion_tokens: int) -> bytes:
             },
         },
     ]
-    body = b"".join(
-        b"data: " + json.dumps(c).encode("utf-8") + b"\n\n" for c in chunks
-    )
+    body = b"".join(b"data: " + json.dumps(c).encode("utf-8") + b"\n\n" for c in chunks)
     return body + b"data: [DONE]\n\n"
 
 
@@ -603,9 +590,7 @@ class TestEndToEndStubbedEndpoint(unittest.TestCase):
             key_file.write_text("test-key\n")
             env_file = base / "guest.env"
             env_file.write_text(
-                f"API_BASE_URL=http://127.0.0.1:{port}\n"
-                "MODEL=stub-model\n"
-                f"API_KEY_FILE={key_file}\n"
+                f"API_BASE_URL=http://127.0.0.1:{port}\n" "MODEL=stub-model\n" f"API_KEY_FILE={key_file}\n"
             )
             out_dir = base / "out"
 
@@ -613,12 +598,18 @@ class TestEndToEndStubbedEndpoint(unittest.TestCase):
                 [
                     sys.executable,
                     str(_SCRIPT),
-                    "--corpus-root", str(corpus),
-                    "--system-prompt", str(doctrine),
-                    "--question", "What is the launch code?",
-                    "--output-dir", str(out_dir),
-                    "--env-file", str(env_file),
-                    "--retries", "0",
+                    "--corpus-root",
+                    str(corpus),
+                    "--system-prompt",
+                    str(doctrine),
+                    "--question",
+                    "What is the launch code?",
+                    "--output-dir",
+                    str(out_dir),
+                    "--env-file",
+                    str(env_file),
+                    "--retries",
+                    "0",
                 ],
                 env=self._base_env(),
                 capture_output=True,
@@ -648,18 +639,14 @@ class TestEndToEndStubbedEndpoint(unittest.TestCase):
             self.assertEqual(row[5], "final")
 
             # Usage side channel: one JSON line per transport call.
-            usage_lines = (
-                (out_dir / "session" / "q01" / "usage.jsonl").read_text().splitlines()
-            )
+            usage_lines = (out_dir / "session" / "q01" / "usage.jsonl").read_text().splitlines()
             self.assertEqual(len(usage_lines), 2)
             self.assertEqual(json.loads(usage_lines[0])["prompt_tokens"], 42)
             self.assertEqual(json.loads(usage_lines[1])["prompt_tokens"], 50)
 
             # messages.json shape: system+init from msg-util init, then
             # assistant request, serviced user reply, assistant FINAL.
-            messages = json.loads(
-                (out_dir / "session" / "q01" / "messages.json").read_text()
-            )
+            messages = json.loads((out_dir / "session" / "q01" / "messages.json").read_text())
             self.assertEqual(
                 [m["role"] for m in messages],
                 ["system", "user", "assistant", "user", "assistant"],
@@ -669,9 +656,7 @@ class TestEndToEndStubbedEndpoint(unittest.TestCase):
             self.assertIn("What is the launch code?", messages[1]["content"])
             self.assertEqual(messages[2]["content"], "READ: notes.txt\n")
             self.assertTrue(
-                messages[3]["content"].startswith(
-                    "Here is the content of notes.txt:\n\nThe launch code is 42.\n"
-                )
+                messages[3]["content"].startswith("Here is the content of notes.txt:\n\nThe launch code is 42.\n")
             )
             self.assertEqual(messages[4]["content"], "FINAL\nThe launch code is 42.\n")
 

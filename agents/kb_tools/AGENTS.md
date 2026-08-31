@@ -110,7 +110,7 @@ Single-source modules (the anti-drift discipline — one definition, many consum
 
 | Module | Role |
 |---|---|
-| `kb_util.py` | Repo/KB path construction (the consuming repo's root is discovered by walking up from the cwd to `.git` with `kb-root/` beside it — never from `__file__`, which points wherever this toolchain happens to have been installed rather than at the repo being worked on; the KB directory name is single-sourced here, not hardwired across tools) **and** maintenance-command hints (`just`/`make` `refresh`/`verify`, detected from the root's runner file) for remediation output + tests. Also the runner-target installer CLI (`--install-targets` / `--uninstall-targets`; see [Runner targets](#runner-targets-the-only-sanctioned-entry-points)). |
+| `kb_util.py` | Repo/KB path construction (the consuming repo's root is discovered by walking up from the cwd to `.git` with `kb-root/` beside it — never from `__file__`, which points wherever this toolchain happens to have been installed rather than at the repo being worked on; the KB directory name is single-sourced here, not hardwired across tools) **and** maintenance-command hints (`just`/`make` `kb-refresh`/`kb-verify`, detected from the root's runner file) for remediation output + tests. Also the runner-target installer CLI (`--install-targets` / `--uninstall-targets`; see [Runner targets](#runner-targets-the-only-sanctioned-entry-points)). |
 | `kb_schema.py` | The build-band ladder, the `clm`/`exp`/`sup` id grammar (`[a-z0-9]{6}` body), and the collision-checked id minter. Mirrors the vocabulary in `METADATA_SCHEMA.md`. |
 | `kb_links.py` | Low-level Markdown link-scanning primitives (code-span neutralization, inline-link regex, file crawl, skip-dir rules) shared by the link checker and the query CLI's reverse-find. Primitives only; classification/gating stays in the checker. |
 
@@ -184,9 +184,9 @@ choice, and on install creates the runner file when it doesn't exist.)
 Consumer-side targets, defined by the included fragment (stdlib-only, run
 under the system `python3` — no venv):
 
-- `verify` — the green gate: `verify_md_links.py` then `verify_kb_metadata.py`.
-- `refresh` — regenerate derived metadata + `.index/` from authored sources.
-- `stats` — claim-graph dashboard via the query CLI.
+- `kb-verify` — the green gate: `verify_md_links.py` then `verify_kb_metadata.py`.
+- `kb-refresh` — regenerate derived metadata + `.index/` from authored sources.
+- `kb-stats` — claim-graph dashboard via the query CLI.
 
 Tooling-repo targets (the agent-definition repo's own justfile; never
 installed into consumers):

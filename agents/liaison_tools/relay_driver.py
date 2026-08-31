@@ -118,8 +118,7 @@ def malformed_reminder() -> str:
     PROTOCOL_BLOCK constant the system prompt carries — never a copy."""
     return (
         "Liaison: could not parse your reply as a valid request or "
-        f"{FINAL_MARKER} report. Reminder of the relay protocol:\n\n"
-        + PROTOCOL_BLOCK
+        f"{FINAL_MARKER} report. Reminder of the relay protocol:\n\n" + PROTOCOL_BLOCK
     )
 
 
@@ -178,10 +177,7 @@ def service_read(root: Path, path_raw: str, max_read_bytes: int) -> str:
     if not p.exists():
         return f"READ: {path_raw}\nError: not found in corpus."
     if p.is_dir():
-        return (
-            f"READ: {path_raw}\nError: '{path_raw}' is a directory, not a "
-            f"file. Use LIST: {path_raw} instead."
-        )
+        return f"READ: {path_raw}\nError: '{path_raw}' is a directory, not a " f"file. Use LIST: {path_raw} instead."
     try:
         data = p.read_bytes()
     except OSError as e:
@@ -194,8 +190,7 @@ def service_read(root: Path, path_raw: str, max_read_bytes: int) -> str:
     except Exception:
         text = data.decode("latin-1", errors="replace")
     suffix = (
-        f"\n\n[TRUNCATED — file exceeds {max_read_bytes} bytes, "
-        f"showing first {max_read_bytes} bytes]"
+        f"\n\n[TRUNCATED — file exceeds {max_read_bytes} bytes, " f"showing first {max_read_bytes} bytes]"
         if truncated
         else ""
     )
@@ -209,10 +204,7 @@ def service_list(root: Path, dir_raw: str) -> str:
     if not p.exists():
         return f"LIST: {dir_raw}\nError: not found in corpus."
     if not p.is_dir():
-        return (
-            f"LIST: {dir_raw}\nError: '{dir_raw}' is a file, not a "
-            f"directory. Use READ: {dir_raw} instead."
-        )
+        return f"LIST: {dir_raw}\nError: '{dir_raw}' is a file, not a " f"directory. Use READ: {dir_raw} instead."
     entries = sorted(p.iterdir(), key=lambda e: e.name)
     lines = [e.name + "/" if e.is_dir() else e.name for e in entries]
     body = "\n".join(lines) if lines else "(empty directory)"
@@ -245,10 +237,7 @@ def service_grep(root: Path, pattern: str, max_grep_matches: int) -> str:
             break
     if not matches:
         return f"GREP: {pattern}\nNo matches found."
-    header = (
-        f'GREP results for pattern "{pattern}" '
-        f"(showing up to {max_grep_matches} matches):"
-    )
+    header = f'GREP results for pattern "{pattern}" ' f"(showing up to {max_grep_matches} matches):"
     return header + "\n\n" + "\n".join(matches)
 
 
@@ -489,9 +478,7 @@ class RelayDriver:
                 # Load-bearing: a guest fabricated never-relayed file content
                 # after a stubbed tool-call turn in live runs — the stub text
                 # is the hardening layer, do not "improve" it away.
-                stub = "\n".join(
-                    f"Tool call {nm} is not available in this environment." for nm in payload
-                )
+                stub = "\n".join(f"Tool call {nm} is not available in this environment." for nm in payload)
                 self._msg_append(msgs_file, "user", stub, tmpdir)
                 continue
 
@@ -531,10 +518,7 @@ class RelayDriver:
                     f"request-reply. Your next reply must be {FINAL_MARKER}.]"
                 )
             elif remaining == cfg.warn_at:
-                parts.append(
-                    f"[Liaison: {remaining} request-replies remain out of "
-                    f"your budget of {cfg.budget}.]"
-                )
+                parts.append(f"[Liaison: {remaining} request-replies remain out of " f"your budget of {cfg.budget}.]")
             self._msg_append(msgs_file, "user", "\n\n---\n\n".join(parts), tmpdir)
 
         return QuestionResult(
@@ -579,9 +563,7 @@ class RelayDriver:
                 res = self.run_question(qtag, question_text)
                 anomalies.extend(res.anomalies)
 
-                prompt_total, completion_total = aggregate_usage(
-                    self.session_dir / qtag / "usage.jsonl"
-                )
+                prompt_total, completion_total = aggregate_usage(self.session_dir / qtag / "usage.jsonl")
 
                 report_path = self.answers_dir / f"{qtag}.md"
                 if res.final_text is not None:
@@ -679,9 +661,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--warn-at", type=int, default=3, help="warn when this many request-replies remain (default 3)")
     p.add_argument("--max-read-bytes", type=int, default=40960, help="READ truncation threshold (default 40960)")
     p.add_argument("--max-grep-matches", type=int, default=50, help="GREP match cap (default 50)")
-    p.add_argument("--max-round-trips", type=int, default=40, help="hard cap on transport round trips per question (default 40)")
+    p.add_argument(
+        "--max-round-trips", type=int, default=40, help="hard cap on transport round trips per question (default 40)"
+    )
     p.add_argument("--retries", type=int, default=3, help="transport retries with exponential backoff (default 3)")
-    p.add_argument("--pace", type=float, default=0.0, metavar="SECONDS", help="minimum delay between transport calls (default 0)")
+    p.add_argument(
+        "--pace", type=float, default=0.0, metavar="SECONDS", help="minimum delay between transport calls (default 0)"
+    )
     p.add_argument(
         "--env-file",
         type=Path,

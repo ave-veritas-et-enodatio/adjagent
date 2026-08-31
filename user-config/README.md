@@ -13,17 +13,22 @@ home config. This directory publishes that baseline so it travels too.
 
 ## Install
 
-Adopt-don't-overwrite — this repo never clobbers an existing config:
+Adopt-don't-clobber — this repo never overwrites an existing config silently. The
+supported path is the recipe, run from this repo's root:
 
 ```sh
-cp -n user-config/CLAUDE.md ~/.claude/CLAUDE.md
+just install-user-config
 ```
 
-If you already have a `~/.claude/CLAUDE.md`, diff and merge deliberately:
+It installs `~/.claude/CLAUDE.md` from `user-config/CLAUDE.md`, mechanizing that same
+adopt-don't-clobber judgment call:
 
-```sh
-diff ~/.claude/CLAUDE.md user-config/CLAUDE.md
-```
+- **No `~/.claude/CLAUDE.md` yet**: installs it fresh.
+- **Live file matches the published one**: no-op.
+- **Live file differs**: shows the diff, saves the live file beside itself as a
+  numbered `CLAUDE.md.NN.bak`, then installs the published version.
+
+The recipe only ever installs repo → home; it never reads live changes back.
 
 ## Keeping in sync
 

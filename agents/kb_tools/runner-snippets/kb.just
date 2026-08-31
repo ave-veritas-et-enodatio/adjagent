@@ -1,5 +1,7 @@
-# KB maintenance targets — IMPORTED live from the consuming project's
-# justfile via one installed line (never copied into it):
+# KB maintenance recipes. This file is installed at
+# .claude/agents/kb_tools/runner-snippets/ by `just install-defs`, and is
+# imported from the consuming project's justfile by one installed line
+# (never copied into it):
 #
 #     import? '.claude/agents/kb_tools/runner-snippets/kb.just'
 #
@@ -15,24 +17,24 @@
 # justfile_directory() resolves to the ROOT justfile's directory — the
 # consumer root — so KB_PYTHONPATH lands on the consumer's .claude/agents.
 # (source_directory() would instead resolve to this fragment's own directory
-# inside the installed tree — the wrong path.) The tools are stdlib-only
-# and run under the system python3; PYTHONDONTWRITEBYTECODE=1 keeps bytecode
-# out of the installed tree.
+# inside the installed tree — the wrong path.) The tools are stdlib-only and
+# run under the system python3.
 #
-# All variables are KB_-prefixed to avoid collisions. Plain recipe lines, no
+# Recipe names carry a `kb-` prefix and variables a `KB_` prefix, so neither
+# collides with a project's own verify/refresh/stats. Plain recipe lines, no
 # `set shell` — nothing here needs bash.
 
 KB_PYTHONPATH := justfile_directory() / ".claude" / "agents"
 
 [doc("verify KB link integrity and claim-graph metadata")]
-verify:
-    PYTHONPATH="{{ KB_PYTHONPATH }}" PYTHONDONTWRITEBYTECODE=1 python3 -m kb_tools.verify_md_links
-    PYTHONPATH="{{ KB_PYTHONPATH }}" PYTHONDONTWRITEBYTECODE=1 python3 -m kb_tools.verify_kb_metadata
+kb-verify:
+    PYTHONPATH="{{ KB_PYTHONPATH }}" python3 -m kb_tools.verify_md_links
+    PYTHONPATH="{{ KB_PYTHONPATH }}" python3 -m kb_tools.verify_kb_metadata
 
 [doc("refresh mechanically maintained KB metadata")]
-refresh:
-    PYTHONPATH="{{ KB_PYTHONPATH }}" PYTHONDONTWRITEBYTECODE=1 python3 -m kb_tools.refresh_kb_metadata
+kb-refresh:
+    PYTHONPATH="{{ KB_PYTHONPATH }}" python3 -m kb_tools.refresh_kb_metadata
 
 [doc("print KB claim-graph stats")]
-stats:
-    PYTHONPATH="{{ KB_PYTHONPATH }}" PYTHONDONTWRITEBYTECODE=1 python3 -m kb_tools.kb_cmd stats
+kb-stats:
+    PYTHONPATH="{{ KB_PYTHONPATH }}" python3 -m kb_tools.kb_cmd stats

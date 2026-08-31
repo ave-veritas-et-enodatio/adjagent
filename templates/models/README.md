@@ -4,7 +4,8 @@ Maintainer documentation for the model-tuning mechanism (`gen-defs.py`'s
 docstring is the definitive mechanism description; this is the authoring
 guide for the files that live here). One TOML file per model family; a file
 is loaded with `--model-family FILE`, and `--model NAME` activates that
-model's overrides within it. `--model-family` also takes a bare family name,
+model's overrides for the definitions that carry no frontmatter pin of their
+own (see "One NB per anchor" below). `--model-family` also takes a bare family name,
 resolved here as `<name>-addenda.toml` or `<name>.toml` (both matching or
 neither is an error), and a bare `--model` without `--model-family` implies
 the unique family whose `[nb.*.models.*]` tables mention that model — a
@@ -32,9 +33,14 @@ anchor cannot leave a family file silently filling nothing.
 
 ## One NB per anchor — most specific wins
 
-Resolution, not accumulation: at most one NB renders per anchor. With
-`--model NAME`, a matching `models.<NAME>` entry wins outright; otherwise the
-family `text` renders; otherwise the anchor renders as nothing. Family and
+Resolution, not accumulation: at most one NB renders per anchor. A matching
+`models.<NAME>` entry wins outright; otherwise the family `text` renders;
+otherwise the anchor renders as nothing. Which `<NAME>` applies is the
+definition's own business: each output resolves model scope against its own
+frontmatter `model:` pin, so a definition pinned to `opus` takes
+`models.opus` whatever `--model` says, and a pin no table matches quietly
+takes the family text instead — `--model NAME` is the export flavor for the
+definitions that carry no pin at all. Family and
 model texts are never concatenated. The rendered form is `**NB**: <text>` —
 no family or model name appears in rendered output; this file is the
 provenance record.

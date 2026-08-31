@@ -103,7 +103,7 @@ Every leaf participates in the claim DAG as well as the topography (INVARIANT-S5
 
 Ids are assigned in Phase 2.5 (you receive them) — never invent ids.
 
-**Sidecar authoring (Phase 2.5).** You also author the `claim-quality.md` entries for assigned claims: the `<!-- id: clm-… -->` marker, the _Specific Claims_ / _Specific Non-Claims_ text (faithful to the leaf, no new framing), the **Leaf references** footer, and the hand-authored `depends-on:` membership (which entries/axioms the claim rests on — from the latex-specialist's dependency map). You do NOT author `confidence` (the `applied-mathematician` scorer sets it, on local rigor) and you do NOT author `solidity` / build-status / `(solidity X)` annotations (tool-derived by the project's `refresh` target — `just refresh` or `make refresh`, whichever runner the project uses; hand-editing them is a verifier failure).
+**Sidecar authoring (Phase 2.5).** You also author the `claim-quality.md` entries for assigned claims: the `<!-- id: clm-… -->` marker, the _Specific Claims_ / _Specific Non-Claims_ text (faithful to the leaf, no new framing), the **Leaf references** footer, and the hand-authored `depends-on:` membership (which entries/axioms the claim rests on — from the latex-specialist's dependency map). You do NOT author `confidence` (the `applied-mathematician` scorer sets it, on local rigor) and you do NOT author `solidity` / build-status / `(solidity X)` annotations (tool-derived by the project's `kb-refresh` target — `just kb-refresh` or `make kb-refresh`, whichever runner the project uses; hand-editing them is a verifier failure).
 
 ## Summary Mode
 

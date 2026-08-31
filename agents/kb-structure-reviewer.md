@@ -1,7 +1,7 @@
 ---
 #
 # !GENERATED! from templates/agents/kb-structure-reviewer.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
-# !BODY-SHA256! 473d7f6ff7e52826ae8ffa592203fd817cf1630777a24f936e796c29f19feb89
+# !BODY-SHA256! 95a5d9a0fa0f98d2e918c16c5a7daf940e9d9860bbfe69b8b13af07a47b568e4
 #
 name: kb-structure-reviewer
 description: "Adversarial review of KB structure: navigability, link integrity, level coherence, invariant placement, and entry-point density. Think like an agent that got lost. Never modifies files."
@@ -75,7 +75,7 @@ Findings produced from these simulations catch real failures; findings produced 
 - Any file in the `kb-root/` tree not reachable via down-links from entry-point?
 - Any file created but not listed in its parent's contents table?
 
-**Claim-graph structural integrity** (the second graph — INVARIANT-S5/S8/S9/S10/S11). The coordinator runs the project's `verify` target (`just verify` or `make verify`, whichever runner the project uses; claim-graph + link integrity) as the Phase 3a machine gate (id coverage, link integrity, acyclicity, `.index/` consistency). Your adversarial role is to catch what *passes* the verifier yet is still wrong, via grep/inspection (you have Grep/Glob, not Bash):
+**Claim-graph structural integrity** (the second graph — INVARIANT-S5/S8/S9/S10/S11). The coordinator runs the project's `kb-verify` target (`just kb-verify` or `make kb-verify`, whichever runner the project uses; claim-graph + link integrity) as the Phase 3a machine gate (id coverage, link integrity, acyclicity, `.index/` consistency). Your adversarial role is to catch what *passes* the verifier yet is still wrong, via grep/inspection (you have Grep/Glob, not Bash):
 - **Bidirectional id coverage** (rely on the S8 grep-guarantee): for `clm-`/`exp-`/`sup-` ids — every sidecar entry cited by ≥1 leaf's `claims:`, and every leaf claim has a sidecar entry. An id that *resolves to the wrong claim* (passes the existence check but is semantically miscovered) is exactly the failure the tool can't catch — flag it.
 - **Frontmatter presence**: every content leaf carries an S5 kb-frontmatter block (`kind:` + ≥1 of `claims:` / `no-claim:` / `exp-id:` / `sup-id:`). A leaf with no frontmatter is dropped from the claim graph — Critical.
 - **Single id system (S11)**: no parallel/local id scheme has crept in alongside `clm-`/`exp-`/`sup-`.

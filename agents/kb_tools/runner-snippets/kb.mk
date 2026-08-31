@@ -1,5 +1,7 @@
-# KB maintenance targets — INCLUDED live from the consuming project's
-# Makefile via one installed line (never copied into it):
+# KB maintenance targets. This file is installed at
+# .claude/agents/kb_tools/runner-snippets/ by `just install-defs`, and is
+# included from the consuming project's Makefile by one installed line
+# (never copied into it):
 #
 #     -include .claude/agents/kb_tools/runner-snippets/kb.mk
 #
@@ -12,22 +14,22 @@
 # Assumed consumer layout: the repo root (where make runs) contains kb-root/
 # and .claude/agents — the agent-definition repo's agents/ surface as
 # installed by `just install-defs`, which holds the kb_tools package. The
-# tools are stdlib-only and run under the system python3;
-# PYTHONDONTWRITEBYTECODE=1 keeps bytecode out of the installed tree.
+# tools are stdlib-only and run under the system python3.
 #
-# All variables are KB_-prefixed to avoid collisions. Plain POSIX recipe
+# Target names carry a `kb-` prefix and variables a `KB_` prefix, so neither
+# collides with a project's own verify/refresh/stats. Plain POSIX recipe
 # lines — no SHELL override; existing recipes keep their own shell.
 
-KB_PY_ENV := PYTHONPATH=$(CURDIR)/.claude/agents PYTHONDONTWRITEBYTECODE=1
+KB_PY_ENV := PYTHONPATH=$(CURDIR)/.claude/agents
 
-.PHONY: verify refresh stats
+.PHONY: kb-verify kb-refresh kb-stats
 
-verify:
+kb-verify:
 	$(KB_PY_ENV) python3 -m kb_tools.verify_md_links
 	$(KB_PY_ENV) python3 -m kb_tools.verify_kb_metadata
 
-refresh:
+kb-refresh:
 	$(KB_PY_ENV) python3 -m kb_tools.refresh_kb_metadata
 
-stats:
+kb-stats:
 	$(KB_PY_ENV) python3 -m kb_tools.kb_cmd stats

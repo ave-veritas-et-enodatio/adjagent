@@ -3,8 +3,8 @@
 Root discovery is cwd-anchored: walk up to the first directory containing a
 ``.git`` entry (dir, or the file a linked worktree carries), then require the
 ``kb-root/`` content tree beside it. Nothing may derive the root from
-``__file__`` — the toolchain is consumed through a symlink, so ``__file__``
-resolves into the tools repo, not the consuming repo.
+``__file__`` — the toolchain is an installed copy under ``.claude/agents/``,
+so ``__file__`` describes the install location, not the consuming repo.
 
 Runner hints are detected from the discovered root's runner file (justfile
 wins over Makefile; raw ``python3 -m kb_tools....`` when neither exists).
@@ -121,23 +121,23 @@ def test_path_helpers_accept_explicit_root(tmp_path: Path) -> None:
 def test_hint_prefers_just_when_only_justfile_exists(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path / "consumer")
     (repo / "justfile").write_text("refresh:\n", encoding="utf-8")
-    assert kb_util.refresh_cmd(repo) == "just refresh"
-    assert kb_util.verify_cmd(repo) == "just verify"
+    assert kb_util.refresh_cmd(repo) == "just kb-refresh"
+    assert kb_util.verify_cmd(repo) == "just kb-verify"
 
 
 def test_hint_uses_make_when_only_makefile_exists(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path / "consumer")
     (repo / "Makefile").write_text("refresh:\n", encoding="utf-8")
-    assert kb_util.refresh_cmd(repo) == "make refresh"
-    assert kb_util.verify_cmd(repo) == "make verify"
+    assert kb_util.refresh_cmd(repo) == "make kb-refresh"
+    assert kb_util.verify_cmd(repo) == "make kb-verify"
 
 
 def test_hint_justfile_wins_over_makefile(tmp_path: Path) -> None:
     repo = _make_repo(tmp_path / "consumer")
     (repo / "justfile").write_text("refresh:\n", encoding="utf-8")
     (repo / "Makefile").write_text("refresh:\n", encoding="utf-8")
-    assert kb_util.refresh_cmd(repo) == "just refresh"
-    assert kb_util.verify_cmd(repo) == "just verify"
+    assert kb_util.refresh_cmd(repo) == "just kb-refresh"
+    assert kb_util.verify_cmd(repo) == "just kb-verify"
 
 
 def test_hint_falls_back_to_raw_invocation_with_no_runner_file(tmp_path: Path) -> None:
@@ -149,11 +149,11 @@ def test_hint_falls_back_to_raw_invocation_with_no_runner_file(tmp_path: Path) -
 def test_hint_recognizes_runner_file_name_variants(tmp_path: Path) -> None:
     dot_just = _make_repo(tmp_path / "dotjust")
     (dot_just / ".justfile").write_text("refresh:\n", encoding="utf-8")
-    assert kb_util.refresh_cmd(dot_just) == "just refresh"
+    assert kb_util.refresh_cmd(dot_just) == "just kb-refresh"
 
     gnu = _make_repo(tmp_path / "gnu")
     (gnu / "GNUmakefile").write_text("refresh:\n", encoding="utf-8")
-    assert kb_util.refresh_cmd(gnu) == "make refresh"
+    assert kb_util.refresh_cmd(gnu) == "make kb-refresh"
 
 
 def test_hint_never_raises_without_a_discoverable_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

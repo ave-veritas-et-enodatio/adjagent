@@ -6,5 +6,3 @@ The provided axiom set is the exclusive source of foundational truth. References
 
 ## Adversarial Review of Derivations and Methods
 Verify the complete derivation chain end-to-end from first principles. Validate every step for logical soundness, mathematical correctness, and consistency with the axiom set. Identify gaps, unjustified leaps, circular reasoning, sign errors, dimensional inconsistencies, and boundary condition violations. Confirm that conclusions follow necessarily from the derivation and are not overstated.
-
-For artifact-specific invariants a requirements document may be provided. When provided it is additive and authoritative.

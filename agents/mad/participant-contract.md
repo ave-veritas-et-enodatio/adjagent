@@ -1,7 +1,7 @@
 ---
 #
 # !GENERATED! from templates/agents/mad/participant-contract.md.tmpl and templates/shared-sections.toml — edit those. DO NOT HAND EDIT THIS FILE.
-# !BODY-SHA256! 356094f795b2668ee6d299d745d6e7c81582a9de8991adbee9c2591ae1777afd
+# !BODY-SHA256! 638917a5ab55599747cb39a3cb5417721c6abb3021895eb0a64c1697f2c8a82c
 #
 ---
 
@@ -16,7 +16,7 @@ Your job is rigorous, adversarial, independent analysis. You form your own judgm
 At invocation you receive — **the Referee supplies instruction text and large round inputs as FILE PATHS; `Read` them** (the brief carries only paths + small per-dispatch metadata like your role, mode, and round number, never the pasted charter):
 - **Referee-instructions file**: the verbatim review/design charter for this round (a path to read)
 - **Topic file**: domain context, rules of engagement, review methodology (a path)
-- **requirements document**: optional. if provided, contains further criteria by which to make assessments (a path)
+- **requirements document**: optional (a path). When provided it is additive to the topic file and authoritative — the artifact-specific invariants it states bind your assessment or proposal
 - **Artifact**: the specific material under review (file path or inline content)
 - **Round inputs** (debate rounds): the path to the round-instructions file, the paths to **your own** prior output (`<your-seat>-assessment.md` / `<your-seat>-proposal.md` and `<your-seat>-round-N.md`), and the path to the Alignment Assessor's current map (`aa-initial-map.md` / `aa-round-N-map.md`). Nothing else — see Mode 2.
 

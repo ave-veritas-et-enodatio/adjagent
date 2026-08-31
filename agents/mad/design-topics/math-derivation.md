@@ -23,12 +23,8 @@ A successful debate terminates in one of these states:
 - **(c) Under-determination**: all active participants converge on the same statement of why the problem cannot be closed from the supplied axioms, and identify the specific additional axiom, principle, boundary condition, or empirical input required. The diagnostic statement is the deliverable.
 - **(d) Unresolved divergence**: participants remain at distinct derivations producing different numerical predictions after the round cap. All candidates are documented and preserved for human arbitration.
 
-States (a), (b), and (c) all retire the debate as productive. State (d) escalates to human arbitration with the candidate space preserved.
-
 ## Numerical Validation
 
 Where the open problem has a known reference value (e.g., a CODATA quantity, an engine fit value, an experimental measurement), participants may compute their derivation's prediction and compare. A derivation that disagrees with the reference value is not automatically wrong — the reference may itself be empirical and the derivation may be predictive — but the disagreement must be acknowledged and explained.
 
 A reference value MUST NOT be used as a load-bearing input to the derivation itself. It may be used only at the end for validation, and its role must be explicitly stated.
-
-For artifact-specific invariants a requirements document may be provided. When provided it is additive and authoritative.

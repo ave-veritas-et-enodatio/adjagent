@@ -11,9 +11,9 @@ Root discovery is lazy and cwd-anchored: the consuming repo's root is found
 by :func:`find_repo_root`, which walks up from the current working directory
 to the first directory containing a ``.git`` entry (a directory, or the file
 a linked git worktree carries) and requires the ``kb-root/`` content tree
-beside it. Nothing is ever derived from ``__file__``: the toolchain is
-consumed through a symlink (``.claude/agents -> <tools repo>/agents``), so
-``__file__`` resolves into the tools repo — the wrong repo.
+beside it. Nothing is ever derived from ``__file__``: the toolchain is an
+installed copy under ``.claude/agents/``, so ``__file__`` only ever describes
+where the tools were installed, not the repo being worked on.
 
 Maintenance-command hints (:func:`refresh_cmd` / :func:`verify_cmd`) are
 detected, not configured: a ``justfile`` at the detected root selects
@@ -26,8 +26,8 @@ The module doubles as the runner-integration installer. Run as a CLI —
 [--runner just|make]`` — it manages the single include line through which a
 consuming repo's runner (justfile or Makefile) gains the KB maintenance
 targets. The target definitions themselves ship in ``runner-snippets/``
-(``kb.just`` / ``kb.mk``) and are included live through the consumption
-symlink, never copied into the consumer's file.
+(``kb.just`` / ``kb.mk``) and are included from the installed tree, never
+copied into the consumer's file.
 
 Stdlib only.
 """
@@ -47,8 +47,8 @@ INVARIANTS_FILENAME = "CLAUDE.md"
 # Maintenance-target vocabulary. The consuming project's runner (justfile or
 # Makefile) owns the target definitions; these mirror the target names so
 # emitted remediation hints stay single-sourced.
-TARGET_REFRESH = "refresh"
-TARGET_VERIFY = "verify"
+TARGET_REFRESH = "kb-refresh"
+TARGET_VERIFY = "kb-verify"
 
 # Runner files probed at the repo root, in priority order: any justfile
 # variant selects `just`, else any make variant selects `make`.
@@ -56,15 +56,15 @@ _JUSTFILE_NAMES = ("justfile", "Justfile", ".justfile")
 _MAKEFILE_NAMES = ("Makefile", "makefile", "GNUmakefile")
 
 # The always-works raw invocation, written repo-root-relative (a consuming
-# repo links the toolchain in at `.claude/agents`).
+# repo has the toolchain installed at `.claude/agents`).
 _RAW_CMD = "PYTHONPATH=.claude/agents python3 -m kb_tools.{module}"
 
 # Canonical installed lines — the one line the installer manages in a
-# consuming repo's runner file; the target definitions live in this repo's
-# runner-snippets/ and are included live through the consumption symlink.
-# The non-fatal include forms (`-include` / `import?`, just >= 1.33) are
-# deliberate: a broken symlink must degrade to missing KB targets, never
-# break the consumer's whole runner.
+# consuming repo's runner file; the target definitions live in the installed
+# tree's runner-snippets/ and are included from there. The non-fatal include
+# forms (`-include` / `import?`, just >= 1.33) are deliberate: an absent
+# .claude/agents must degrade to missing KB targets, never break the
+# consumer's whole runner.
 INSTALL_LINE_MAKE = "-include .claude/agents/kb_tools/runner-snippets/kb.mk"
 INSTALL_LINE_JUST = "import? '.claude/agents/kb_tools/runner-snippets/kb.just'"
 
@@ -219,8 +219,8 @@ def install_targets(repo_root: Path, runner: str | None = None) -> str:
         path = repo_root / _RUNNER_CREATE_NAMES[runner]
         path.write_text(
             f"# {_RUNNER_CREATE_NAMES[runner]} — created by the kb_tools installer.\n"
-            f"# The line below pulls the KB maintenance targets in live through\n"
-            f"# the .claude/agents symlink; add project recipes below it.\n"
+            f"# The line below pulls in the KB maintenance targets from the\n"
+            f"# installed tree at .claude/agents; add project recipes below it.\n"
             f"\n"
             f"{_INSTALL_LINES[runner]}\n",
             encoding="utf-8",

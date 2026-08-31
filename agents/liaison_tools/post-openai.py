@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""1:1 port of post-openai.sh — POST a messages array to an OpenAI-compatible
+"""POST a messages array to an OpenAI-compatible
 chat completions endpoint using SSE streaming, reassemble delta content /
 tool_calls, and emit the canonical stdout contract (text body, or
 "TOOL_CALLS\\n<json>"). See ../../tools/test_inference.py for the urllib+SSE
@@ -61,8 +61,7 @@ _TEMPERATURE_RE = re.compile(r"^[0-9]+(\.[0-9]+)?$")
 _MODEL_ERROR_CODE_RE = re.compile(r"model_not_found|invalid_model|model_not_allowed", re.I)
 _MODEL_ERROR_MSG_RE = re.compile(r"does not exist|not available|no such model", re.I)
 _MODEL_ERROR_FALLBACK_RE = re.compile(
-    r"model_not_found|invalid_model|model_not_allowed|"
-    r"does not exist|not available|no such model",
+    r"model_not_found|invalid_model|model_not_allowed|" r"does not exist|not available|no such model",
     re.I,
 )
 
@@ -72,16 +71,12 @@ def _usage(msg: str = "") -> None:
     if msg:
         sys.stderr.write(f"error: {msg}\n")
     sys.stderr.write(
-        f"usage: API_BASE_URL=<url> API_KEY_FILE=<api-key-file> "
-        f"MODEL=<model> {script} <messages.json>\n"
+        f"usage: API_BASE_URL=<url> API_KEY_FILE=<api-key-file> " f"MODEL=<model> {script} <messages.json>\n"
     )
     sys.stderr.write(
-        f"optional envar param MAX_TOKENS=<max-response-token-count> "
-        f"(default: {DEFAULT_MAX_TOKENS})\n"
+        f"optional envar param MAX_TOKENS=<max-response-token-count> " f"(default: {DEFAULT_MAX_TOKENS})\n"
     )
-    sys.stderr.write(
-        "optional envar param TEMPERATURE=<float in [0.0, 2.0]> (default: 0.0)\n"
-    )
+    sys.stderr.write("optional envar param TEMPERATURE=<float in [0.0, 2.0]> (default: 0.0)\n")
     sys.stderr.write(
         "API_KEY_FILE file format: the file contains only the API key "
         "(leading/trailing whitespace trimmed; no internal whitespace).\n"
@@ -91,9 +86,7 @@ def _usage(msg: str = "") -> None:
 
 def _parse_temperature(raw: str) -> float:
     if not _TEMPERATURE_RE.match(raw):
-        sys.stderr.write(
-            f"error: TEMPERATURE must be a non-negative number (got '{raw}')\n"
-        )
+        sys.stderr.write(f"error: TEMPERATURE must be a non-negative number (got '{raw}')\n")
         sys.exit(1)
     v = float(raw)
     if v > 2.0:
@@ -261,9 +254,7 @@ def write_usage_stats(stats_path: str, stats: dict) -> None:
         with open(stats_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(stats) + "\n")
     except OSError as e:
-        sys.stderr.write(
-            f"warning: could not write USAGE_STATS_FILE '{stats_path}': {e}\n"
-        )
+        sys.stderr.write(f"warning: could not write USAGE_STATS_FILE '{stats_path}': {e}\n")
 
 
 def list_models(base_url: str, token: str) -> list[str]:
@@ -352,7 +343,7 @@ def do_post_streaming(
         "messages": messages,
     }
     if enable_thinking is not None:
-      payload["chat_template_kwargs"] = {"enable_thinking": enable_thinking}
+        payload["chat_template_kwargs"] = {"enable_thinking": enable_thinking}
     payload_str = json.dumps(payload)
 
     if debug_post:
@@ -438,7 +429,7 @@ def main() -> int:
     token = _read_api_key(key_path)
     if token is None:
         _usage(f"API_KEY_FILE has invalid format: {api_key_file}")
-        token = "" # shut the linter up. it's not catching that _usage exits.
+        token = ""  # shut the linter up. it's not catching that _usage exits.
 
     if not model:
         _usage("MODEL must be set")
@@ -482,17 +473,12 @@ def main() -> int:
     )
 
     if rc == 1 and raw_text and is_model_error_text(raw_text):
-        sys.stderr.write(
-            f"warning: model '{model}' not found — attempting substring resolution\n"
-        )
+        sys.stderr.write(f"warning: model '{model}' not found — attempting substring resolution\n")
         resolved = resolve_model(model, api_base_url, token)
         if resolved is None:
             sys.stderr.write("error: update MODEL to a valid model name\n")
             return 1
-        sys.stderr.write(
-            f"warning: resolved '{model}' → '{resolved}' — "
-            "update MODEL to avoid this fallback\n"
-        )
+        sys.stderr.write(f"warning: resolved '{model}' → '{resolved}' — " "update MODEL to avoid this fallback\n")
         chunks, chunk_payloads, raw_text, rc = do_post_streaming(
             model=resolved,
             base_url=api_base_url,
@@ -519,9 +505,7 @@ def main() -> int:
 
     if debug_response:
         sys.stderr.write("--- reassembled ---\n")
-        sys.stderr.write(
-            reassembled if reassembled.endswith("\n") else reassembled + "\n"
-        )
+        sys.stderr.write(reassembled if reassembled.endswith("\n") else reassembled + "\n")
 
     if not reassembled:
         sys.stderr.write("error: no content in stream — raw response follows\n")
