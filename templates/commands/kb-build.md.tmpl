@@ -1,0 +1,43 @@
++++
+# Nothing is composed ahead of the driver — no config file, no charter, no scope
+# pin: a setup act added back here recreates the second entry state the driver
+# exists to remove.
+# Nothing is @-loaded: kb-root/ may not exist yet on a fresh build.
+# No stages, no procedure, no exit codes: kb_driver/cli.py prints a relay card
+# (kb_driver/baton.py) on every terminating path, and prose here restating one
+# drifts from it.
+# No permission-mode ask: kb_driver/config.py defaults permission_mode to
+# bypassPermissions and the driver names its effective mode at startup; printing
+# the flag would make an override read as a required field again.
+# Trailing text is named as not-an-input because the surface before this one took
+# a charter there, and the argument rule turns every path into --source.
+# The raw `python3 -m kb_tools.kb_driver` line stands in for a runner target that
+# does not exist: runner-snippets/kb.{just,mk} front kb-verify, kb-refresh and
+# kb-stats only. When a kb- target fronts the driver, this line becomes its name.
+# No hand-authored frontmatter: Claude Code lists the command by its first body
+# line, so that line is written to read as the description.
+[outputs.kb-build]
++++
+Print the shell command that runs a KB build over the named LaTeX sources. This session prints it and stops: it runs nothing, writes nothing, dispatches nothing, and waits for nothing.
+
+## Arguments
+
+```
+/kb-build <source>[,source...]
+```
+
+The first token is the LaTeX source root, or a comma-separated list of volume paths. Each path becomes one `--source` on the line below, in the order given and spelled relative to the repository root. Nothing else is an argument: the KB root is always `kb-root/`, a name the tools hard-code and take no override for. Anything the user typed after the source list is not an input — not a further source, and nothing this command carries into the build; say so rather than folding it into the line.
+
+## What you print
+
+```
+PYTHONPATH=.claude/agents python3 -m kb_tools.kb_driver run --source <path> [--source <path> ...]
+```
+
+Print it filled in — one `--source` per source — with what the user needs to run it and nothing else:
+
+- run it from the repository root;
+- it stops at every decision the build reaches, printing there what to answer and the line that carries the answer back;
+- running the line a stop printed is how the build goes on.
+
+That is the whole of your work. Everything from there is the driver's: it opens the build, seeds the spine, sequences the stages, and holds the user through its own output, in a process this session never sees.

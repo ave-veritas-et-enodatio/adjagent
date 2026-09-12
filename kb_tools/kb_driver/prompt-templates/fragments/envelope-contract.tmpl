@@ -1,0 +1,34 @@
+## Your structured return
+
+The envelope block. Its two marker lines stand alone, and between them is one JSON object. Structure travels in that JSON; every value you compose in your own words travels in a numbered block beside it — one block per value, each with its own number — and the JSON carries that number where the words would have gone:
+
+```
+<<<KB-DRIVER-ENVELOPE
+{"step": "@!dyn.step-id!@",
+ "members": [
+   {"name": "<the member's name, exactly as your assignment table spells it>",
+    "status": "ok"},
+   {"name": "<another member's name>",
+    "status": 1}
+ ],
+ "gaps": [2],
+ "deviations": []}
+KB-DRIVER-ENVELOPE
+<<<KB-DRIVER-PROSE 1
+<your own short phrase for what happened to that member>
+KB-DRIVER-PROSE 1
+<<<KB-DRIVER-PROSE 2
+<something the assigned material could not cover>
+KB-DRIVER-PROSE 2
+```
+
+- `step` is the value shown above, unchanged.
+- `members` carries one entry per member — every one of them, including any that failed. A member holds every row of the assignment table bearing its name, so the entries count members and never rows. `status` is the literal `ok` when that member met its assignment; otherwise it is the number of the block holding your own short phrase for what happened. Where the work was yours to carry out directly rather than to dispatch, you are the one member and yours is the one entry.
+- `gaps` is a list of block numbers: things the assigned material could not cover, which someone outside this wave has to decide about. Empty is the ordinary answer.
+- `deviations` is described below; a deviation's `what` and `why` are block numbers too.
+
+A block's content is taken exactly as it stands between its two marker lines. Escape nothing — backslashes, quotes, mathematics and line breaks all reach the driver as you wrote them.
+
+Every block you return is named by a number in the JSON, and every number in the JSON names a block you returned.
+
+The block carries exactly the fields this brief names, and nothing added. Your deliverables are files at the paths your assignment names; a block holds a phrase, never a document.

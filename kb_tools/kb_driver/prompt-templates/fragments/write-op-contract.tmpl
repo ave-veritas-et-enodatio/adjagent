@@ -1,0 +1,16 @@
+## Calling a write op
+
+You supply values; the tool renders every byte it writes. Never hand it a marker, a heading, a bullet, or any other preformatted fragment.
+
+Write the values file with your Write tool, outside `kb-root/`: TOML, one `[[entry]]` table per entry, every prose value in a `'''` literal block. One file may carry a batch. Then run the invocation this brief names with `@!values-flag!@ <that file>`.
+
+Each op's key vocabulary is closed: supply the keys this brief names for it, and no others.
+
+Read the exit code of every call.
+
+- **0** — written. An insert prints the id it minted; record it against the material it covers.
+- **7** — refused, nothing written. The report names the field. Correct that field in the values file and call again.
+- **8** — the file was contended. Re-run the identical invocation on the identical file, up to three times; if it still returns 8, report it. Never re-author the values.
+- Anything else — stop and report it rather than retrying.
+
+Nothing is written on 7 or 8: there is nothing to undo and nothing to clean up.

@@ -1,0 +1,7 @@
+## Dispatching this wave
+
+Every member call passes `run_in_background: false`. The parameter defaults to background, so omitting it is itself the failure — intending to wait does not make a call synchronous.
+
+Launch the whole wave in one message — every member call in that single message, each carrying the parameter — and hold the turn until every member has returned. Ending your turn with a member in flight abandons it.
+
+A member lost to transport or API failure — terminated early, no usable result — is re-dispatched with the same brief, at most twice. A member that comes back reporting something it could not do has not failed this way: that is a result, and it belongs in your return rather than in a retry.

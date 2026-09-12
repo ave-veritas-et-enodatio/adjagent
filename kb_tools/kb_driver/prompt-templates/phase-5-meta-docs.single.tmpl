@@ -1,0 +1,19 @@
+# Write the knowledge base's own documentation
+
+Knowledge base root: `@!dyn.kb-root!@`
+Overview document: `@!dyn.readme-path!@`
+Conventions document: `@!dyn.conventions-path!@`
+Findings to answer: `@!dyn.remediation-source-path!@`
+
+Where that last line carries no path, no review has run and both documents are being written for the first time. Where it names a file, both documents already exist: read it and them, answer every item where it stands, and change nothing an item did not ask for.
+
+## What the two documents are
+
+- The overview document states what this knowledge base holds, how it is organized, and how a reader navigates it.
+- The conventions document states the document formats in use, the link conventions, and what someone adding material to this corpus later has to follow.
+
+Neither is a software project's README. The fixed structure your definition carries — requirements, installation, quick start, third-party acknowledgements — describes a repository that ships code; this corpus ships documents, has no build, and consumes no dependencies to acknowledge. Take the standards from that definition and drop the anchors: a heading kept for the shape of it, standing over an explanation that the section does not apply, is worse than its absence.
+
+## Where the content comes from
+
+The tree under the root is the corpus as actually built, and it is ground truth — derive nothing about this knowledge base independently. Read it to write both documents: what it holds, how it is organized, and the conventions its documents already follow.

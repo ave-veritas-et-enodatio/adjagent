@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-24 -200 2048 444" font-family="DejaVu Sans Mono, Menlo, Consolas, monospace" font-size="12">
+  <rect class="sheet" x="-24" y="-200" width="2048" height="444" fill="#ffffff" />
+  <g class="edges">
+    <polyline class="edge" points="448,0 496,-44" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>clm-cc3333 → clm-aa1111 — builds directly on the anchor claim</title>
+    </polyline>
+    <polyline class="edge" points="448,0 640,-44" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>clm-dd4444 → clm-aa1111</title>
+    </polyline>
+    <polyline class="edge" points="640,0 640,-44" fill="none" stroke="#e69f00" stroke-width="2">
+      <title>clm-dd4444 → clm-bb2222</title>
+    </polyline>
+    <polyline class="edge" points="160,0 352,-44" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>clm-ee5555 → INVARIANT-S2 — axiom-numbering scaffold — used for the labelling convention</title>
+    </polyline>
+    <polyline class="edge" points="304,0 352,-44" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>clm-ee5555 → axiom-4 — saturation kernel — framework input to the bound</title>
+    </polyline>
+    <polyline class="edge" points="856,0 928,-44" fill="none" stroke="#9e9e9e" stroke-width="2">
+      <title>clm-gg7777 → clm-ff6666 — poisoned by the pending upstream</title>
+    </polyline>
+    <polyline class="edge" points="160,0 64,-44" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>clm-hh8888 → INVARIANT-S2 — context A — labelling convention for the d-axis treatment · context B — labelling convention for the q-axis treatment</title>
+    </polyline>
+    <polyline class="edge" points="1000,0 928,-44" fill="none" stroke="#7fc4eb" stroke-width="2">
+      <title>exp-bench1 → clm-gg7777</title>
+    </polyline>
+    <polyline class="edge" points="1144,0 1072,-44" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>exp-cohst1 → clm-co1111</title>
+    </polyline>
+    <polyline class="edge" points="1288,0 1216,-44" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>sup-coh001 → clm-sb5555</title>
+    </polyline>
+    <polyline class="edge" points="448,0 208,-44" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>sup-dep001 → clm-aa1111 — the support builds on the anchor claim</title>
+    </polyline>
+    <polyline class="edge" points="208,-88 208,-132" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>sup-dep001 → clm-sb3333</title>
+    </polyline>
+    <polyline class="edge" points="1432,0 1360,-44" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>sup-free01 → clm-sb1111</title>
+    </polyline>
+    <polyline class="edge" points="1432,0 1504,-44" fill="none" stroke="#e69f00" stroke-width="2">
+      <title>sup-free01 → clm-sb2222</title>
+    </polyline>
+    <polyline class="edge" points="1576,0 1648,-44" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>sup-mlt001 → clm-sb6666</title>
+    </polyline>
+    <polyline class="edge" points="1720,0 1648,-44" fill="none" stroke="#9e9e9e" stroke-width="2">
+      <title>sup-mlt002 → clm-sb6666</title>
+    </polyline>
+    <polyline class="edge" points="1720,0 1792,-44" fill="none" stroke="#e69f00" stroke-width="2">
+      <title>sup-mlt002 → clm-sb7777</title>
+    </polyline>
+    <polyline class="edge" points="1936,0 1936,-44" fill="none" stroke="#bfe3f5" stroke-width="2">
+      <title>sup-pend01 → clm-sb4444</title>
+    </polyline>
+  </g>
+  <g class="hops">
+    <path class="hop" d="M 280.131 -30.776 A 8.000 8.000 0 0 1 295.869 -27.891" fill="none" stroke="#bfe3f5" stroke-width="2" />
+    <path class="hop" d="M 320.131 -23.443 A 8.000 8.000 0 0 1 335.869 -20.557" fill="none" stroke="#bfe3f5" stroke-width="2" />
+  </g>
+  <g class="nodes">
+    <a href="../mini-kb/CLAUDE.md#invariant-s2-core-axiom-numbering">
+      <g class="node">
+        <title>axiom-2 — Topo-Kinematic Isomorphism</title>
+        <rect x="0" y="176" width="128" height="44" fill="#e3d3ec" stroke="#333333" stroke-width="1" />
+        <text x="8" y="194" fill="#111111">axiom-2</text>
+        <text x="8" y="210" fill="#111111">Topo-Kinemati…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/CLAUDE.md#invariant-s2-core-axiom-numbering">
+      <g class="node">
+        <title>axiom-3 — Minimum Reflection Principle</title>
+        <rect x="144" y="176" width="128" height="44" fill="#e3d3ec" stroke="#333333" stroke-width="1" />
+        <text x="152" y="194" fill="#111111">axiom-3</text>
+        <text x="152" y="210" fill="#111111">Minimum Refle…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/CLAUDE.md#invariant-s1-synthetic-structural-rule">
+      <g class="node">
+        <title>INVARIANT-S1 — Synthetic structural rule</title>
+        <rect x="0" y="88" width="128" height="44" fill="#e3d3ec" stroke="#333333" stroke-width="1" />
+        <text x="8" y="106" fill="#111111">INVARIANT-S1</text>
+        <text x="8" y="122" fill="#111111">Synthetic str…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/CLAUDE.md#invariant-s3-another-synthetic-structural-rule">
+      <g class="node">
+        <title>INVARIANT-S3 — Another synthetic structural rule</title>
+        <rect x="144" y="88" width="128" height="44" fill="#e3d3ec" stroke="#333333" stroke-width="1" />
+        <text x="152" y="106" fill="#111111">INVARIANT-S3</text>
+        <text x="152" y="122" fill="#111111">Another synth…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/CLAUDE.md#invariant-s6-subsumed-into-s2-numbering">
+      <g class="node">
+        <title>INVARIANT-S6 — (subsumed into S2 numbering)</title>
+        <rect x="288" y="88" width="128" height="44" fill="#e3d3ec" stroke="#333333" stroke-width="1" />
+        <text x="296" y="106" fill="#111111">INVARIANT-S6</text>
+        <text x="296" y="122" fill="#111111">(subsumed int…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/CLAUDE.md#invariant-s2-core-axiom-numbering">
+      <g class="node">
+        <title>axiom-1 — Substrate Topology</title>
+        <rect x="432" y="88" width="128" height="44" fill="#e3d3ec" stroke="#333333" stroke-width="1" />
+        <text x="440" y="106" fill="#111111">axiom-1</text>
+        <text x="440" y="122" fill="#111111">Substrate Top…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/CLAUDE.md#invariant-s2-core-axiom-numbering">
+      <g class="node">
+        <title>INVARIANT-S2 — Core Axiom numbering</title>
+        <rect x="96" y="0" width="128" height="44" fill="#e3d3ec" stroke="#333333" stroke-width="1" />
+        <text x="104" y="18" fill="#111111">INVARIANT-S2</text>
+        <text x="104" y="34" fill="#111111">Core Axiom nu…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/CLAUDE.md#invariant-s2-core-axiom-numbering">
+      <g class="node">
+        <title>axiom-4 — Universal Saturation Kernel</title>
+        <rect x="240" y="0" width="128" height="44" fill="#e3d3ec" stroke="#333333" stroke-width="1" />
+        <text x="248" y="18" fill="#111111">axiom-4</text>
+        <text x="248" y="34" fill="#111111">Universal Sat…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/claim-quality.md#foundation-claim-a--no-dependencies">
+      <g class="node">
+        <title>clm-aa1111 — Foundation Claim A — No Dependencies</title>
+        <rect x="384" y="0" width="128" height="44" fill="#bfe3f5" stroke="#333333" stroke-width="1" />
+        <text x="392" y="18" fill="#111111">clm-aa1111</text>
+        <text x="392" y="34" fill="#111111">Foundation Cl…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/claim-quality.md#foundation-claim-b--input-only-band">
+      <g class="node">
+        <title>clm-bb2222 — Foundation Claim B — Input-Only Band</title>
+        <rect x="576" y="0" width="128" height="44" fill="#e69f00" stroke="#333333" stroke-width="1" />
+        <text x="584" y="18" fill="#111111">clm-bb2222</text>
+        <text x="584" y="34" fill="#111111">Foundation Cl…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/claim-quality.md#pending-upstream-claim-f">
+      <g class="node">
+        <title>clm-ff6666 — Pending Upstream Claim F</title>
+        <rect x="792" y="0" width="128" height="44" fill="#9e9e9e" stroke="#333333" stroke-width="1" />
+        <text x="800" y="18" fill="#111111">clm-ff6666</text>
+        <text x="800" y="34" fill="#111111">Pending Upstr…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/exp-bench.md#synthetic-bench-experiment">
+      <g class="node">
+        <title>exp-bench1 · run — Synthetic Bench Experiment</title>
+        <rect x="936" y="0" width="128" height="44" fill="#9e9e9e" stroke="#333333" stroke-width="1" />
+        <text x="944" y="18" fill="#111111">exp-bench1</text>
+        <text x="944" y="34" fill="#111111">Synthetic Ben…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/leaf-cohost.md#co-hosted-prediction-and-its-bench-test">
+      <g class="node">
+        <title>exp-cohst1 · run — Co-Hosted Prediction And Its Bench Test</title>
+        <rect x="1080" y="0" width="128" height="44" fill="#9e9e9e" stroke="#333333" stroke-width="1" />
+        <text x="1088" y="18" fill="#111111">exp-cohst1</text>
+        <text x="1088" y="34" fill="#111111">Co-Hosted Pre…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/leaf-sup-cohost.md#co-hosted-claim-and-its-analytical-support">
+      <g class="node">
+        <title>sup-coh001 — Co-Hosted Claim And Its Analytical Support</title>
+        <rect x="1224" y="0" width="128" height="44" fill="#bfe3f5" stroke="#333333" stroke-width="1" />
+        <text x="1232" y="18" fill="#111111">sup-coh001</text>
+        <text x="1232" y="34" fill="#111111">Co-Hosted Cla…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/sup-free.md#free-standing-analytical-support">
+      <g class="node">
+        <title>sup-free01 — Free-Standing Analytical Support</title>
+        <rect x="1368" y="0" width="128" height="44" fill="#bfe3f5" stroke="#333333" stroke-width="1" />
+        <text x="1376" y="18" fill="#111111">sup-free01</text>
+        <text x="1376" y="34" fill="#111111">Free-Standing…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/leaf-multi-sup.md#a-container-hosting-multiple-analytical-supports">
+      <g class="node">
+        <title>sup-mlt001 — A Container Hosting Multiple Analytical Supports</title>
+        <rect x="1512" y="0" width="128" height="44" fill="#7fc4eb" stroke="#333333" stroke-width="1" />
+        <text x="1520" y="18" fill="#111111">sup-mlt001</text>
+        <text x="1520" y="34" fill="#111111">A Container H…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/leaf-multi-sup.md#a-container-hosting-multiple-analytical-supports">
+      <g class="node">
+        <title>sup-mlt002 — A Container Hosting Multiple Analytical Supports</title>
+        <rect x="1656" y="0" width="128" height="44" fill="#7fc4eb" stroke="#333333" stroke-width="1" />
+        <text x="1664" y="18" fill="#111111">sup-mlt002</text>
+        <text x="1664" y="34" fill="#111111">A Container H…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/sup-pend.md#pending-quality-analytical-support">
+      <g class="node">
+        <title>sup-pend01 — Pending-Quality Analytical Support</title>
+        <rect x="1872" y="0" width="128" height="44" fill="#9e9e9e" stroke="#333333" stroke-width="1" />
+        <text x="1880" y="18" fill="#111111">sup-pend01</text>
+        <text x="1880" y="34" fill="#111111">Pending-Quali…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/claim-quality.md#double-framework-edge-claim-h">
+      <g class="node">
+        <title>clm-hh8888 — Double-Framework-Edge Claim H</title>
+        <rect x="0" y="-88" width="128" height="44" fill="#7fc4eb" stroke="#333333" stroke-width="1" />
+        <text x="8" y="-70" fill="#111111">clm-hh8888</text>
+        <text x="8" y="-54" fill="#111111">Double-Framew…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/sup-dep.md#dep-gated-analytical-support">
+      <g class="node">
+        <title>sup-dep001 — Dep-Gated Analytical Support</title>
+        <rect x="144" y="-88" width="128" height="44" fill="#bfe3f5" stroke="#333333" stroke-width="1" />
+        <text x="152" y="-70" fill="#111111">sup-dep001</text>
+        <text x="152" y="-54" fill="#111111">Dep-Gated Ana…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/claim-quality.md#framework-dependency-claim-e">
+      <g class="node">
+        <title>clm-ee5555 — Framework-Dependency Claim E</title>
+        <rect x="288" y="-88" width="128" height="44" fill="#7fc4eb" stroke="#333333" stroke-width="1" />
+        <text x="296" y="-70" fill="#111111">clm-ee5555</text>
+        <text x="296" y="-54" fill="#111111">Framework-Dep…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/claim-quality.md#single-dependency-claim-c">
+      <g class="node">
+        <title>clm-cc3333 — Single-Dependency Claim C</title>
+        <rect x="432" y="-88" width="128" height="44" fill="#7fc4eb" stroke="#333333" stroke-width="1" />
+        <text x="440" y="-70" fill="#111111">clm-cc3333</text>
+        <text x="440" y="-54" fill="#111111">Single-Depend…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/claim-quality.md#multi-dependency-claim-d">
+      <g class="node">
+        <title>clm-dd4444 — Multi-Dependency Claim D</title>
+        <rect x="576" y="-88" width="128" height="44" fill="#e69f00" stroke="#333333" stroke-width="1" />
+        <text x="584" y="-70" fill="#111111">clm-dd4444</text>
+        <text x="584" y="-54" fill="#111111">Multi-Depende…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/claim-quality.md#numeric-claim-g-blocked-by-a-pending-dependency">
+      <g class="node">
+        <title>clm-gg7777 — Numeric Claim G Blocked By A Pending Dependency</title>
+        <rect x="864" y="-88" width="128" height="44" fill="#7fc4eb" stroke="#333333" stroke-width="1" />
+        <text x="872" y="-70" fill="#111111">clm-gg7777</text>
+        <text x="872" y="-54" fill="#111111">Numeric Claim…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/claim-quality.md#co-hosted-prediction-claim-i">
+      <g class="node">
+        <title>clm-co1111 — Co-Hosted Prediction Claim I</title>
+        <rect x="1008" y="-88" width="128" height="44" fill="#bfe3f5" stroke="#333333" stroke-width="1" />
+        <text x="1016" y="-70" fill="#111111">clm-co1111</text>
+        <text x="1016" y="-54" fill="#111111">Co-Hosted Pre…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/claim-quality.md#support-beneficiary-n--lifted-by-a-co-hosted-support">
+      <g class="node">
+        <title>clm-sb5555 — Support Beneficiary N — Lifted By A Co-Hosted Support</title>
+        <rect x="1152" y="-88" width="128" height="44" fill="#bfe3f5" stroke="#333333" stroke-width="1" />
+        <text x="1160" y="-70" fill="#111111">clm-sb5555</text>
+        <text x="1160" y="-54" fill="#111111">Support Benef…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/claim-quality.md#support-beneficiary-j--lifted-to-090">
+      <g class="node">
+        <title>clm-sb1111 — Support Beneficiary J — Lifted To 0.90</title>
+        <rect x="1296" y="-88" width="128" height="44" fill="#bfe3f5" stroke="#333333" stroke-width="1" />
+        <text x="1304" y="-70" fill="#111111">clm-sb1111</text>
+        <text x="1304" y="-54" fill="#111111">Support Benef…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/claim-quality.md#support-beneficiary-k--fractional-lift-to-045">
+      <g class="node">
+        <title>clm-sb2222 — Support Beneficiary K — Fractional Lift To 0.45</title>
+        <rect x="1440" y="-88" width="128" height="44" fill="#e69f00" stroke="#333333" stroke-width="1" />
+        <text x="1448" y="-70" fill="#111111">clm-sb2222</text>
+        <text x="1448" y="-54" fill="#111111">Support Benef…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/claim-quality.md#support-beneficiary-o--lifted-by-one-of-two-co-hosted-supports">
+      <g class="node">
+        <title>clm-sb6666 — Support Beneficiary O — Lifted By One Of Two Co-Hosted Supports</title>
+        <rect x="1584" y="-88" width="128" height="44" fill="#7fc4eb" stroke="#333333" stroke-width="1" />
+        <text x="1592" y="-70" fill="#111111">clm-sb6666</text>
+        <text x="1592" y="-54" fill="#111111">Support Benef…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/claim-quality.md#support-beneficiary-p--fractional-lift-from-a-second-co-hosted-support">
+      <g class="node">
+        <title>clm-sb7777 — Support Beneficiary P — Fractional Lift From A Second Co-Hosted Support</title>
+        <rect x="1728" y="-88" width="128" height="44" fill="#d55e00" stroke="#333333" stroke-width="1" />
+        <text x="1736" y="-70" fill="#111111">clm-sb7777</text>
+        <text x="1736" y="-54" fill="#111111">Support Benef…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/claim-quality.md#support-beneficiary-m--not-poisoned-by-a-pending-support">
+      <g class="node">
+        <title>clm-sb4444 — Support Beneficiary M — Not Poisoned By A Pending Support</title>
+        <rect x="1872" y="-88" width="128" height="44" fill="#e69f00" stroke="#333333" stroke-width="1" />
+        <text x="1880" y="-70" fill="#111111">clm-sb4444</text>
+        <text x="1880" y="-54" fill="#111111">Support Benef…</text>
+      </g>
+    </a>
+    <a href="../mini-kb/common/claim-quality.md#support-beneficiary-l--lifted-by-a-dep-gated-support">
+      <g class="node">
+        <title>clm-sb3333 — Support Beneficiary L — Lifted By A Dep-Gated Support</title>
+        <rect x="144" y="-176" width="128" height="44" fill="#bfe3f5" stroke="#333333" stroke-width="1" />
+        <text x="152" y="-158" fill="#111111">clm-sb3333</text>
+        <text x="152" y="-142" fill="#111111">Support Benef…</text>
+      </g>
+    </a>
+  </g>
+</svg>

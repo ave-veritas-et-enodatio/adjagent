@@ -1,42 +1,30 @@
 +++
-# One template, four model-pinned participants. The bodies are identical BY
-# GENERATION — there is no lockstep-maintenance obligation to honour any more,
-# and no per-file maintainer note is needed to state one.
-#
-# Interface parity (why these are separate definitions at all): the referee
-# dispatches participants by `subagent_type`, so each model pin needs its own
-# definition file presenting the identical contract. The value MAD provides is
-# independent blind spots — participants pinned to the SAME model would converge
-# on shared training-derived errors — so a run should draw its participants from
-# different pins here. Which pins a given run uses is the referee's business,
-# not this file's.
-#
-# Model values are harness aliases, not dated model IDs: they resolve to the
-# current model of that class, so they do not go stale the way pinned IDs did.
+# One template, four model-pinned participants. They are separate definitions
+# because the referee dispatches by `subagent_type`, so each pin needs its own
+# file presenting the identical contract.
+# The four `model` values are tier tokens, resolved through the run's pin map
+# at render time — the rendered pin follows the map, not this table.
 [outputs.mad-participant-fable]
-model = "fable"
+model = "@!dyn.tier-highest!@"
 color = "#7C3AED"
 
 [outputs.mad-participant-opus]
-model = "opus"
+model = "@!dyn.tier-high!@"
 color = "#6D28D9"
 
 [outputs.mad-participant-sonnet]
-model = "sonnet"
+model = "@!dyn.tier-medium!@"
 color = "#5B21B6"
 
 [outputs.mad-participant-haiku]
-model = "haiku"
+model = "@!dyn.tier-low!@"
 color = "#4C1D95"
 +++
 ---
-name: @@name@@
+name: @!arg.name!@
 description: "Independent technical participant for multi-model debate process. Produces structured initial assessments (review mode) or proposals (design mode), and responds to debate rounds. Sees only the Alignment Assessor's structured map, never another participant's full output."
-model: @@model@@
-color: "@@color@@"
-memory: user
+model: @!arg.model!@
+color: "@!arg.color!@"
 ---
 
-@@mad-participant-contract@@
-
-**Memory** (@@memory-note@@): `./.claude/agent-memory/@@name@@/` — record domain-specific patterns, recurring error types in this review domain, and findings that have survived prior debate rounds.
+@!mad-participant-contract!@

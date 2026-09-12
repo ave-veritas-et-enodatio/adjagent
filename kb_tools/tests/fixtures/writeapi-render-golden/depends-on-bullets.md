@@ -1,0 +1,5 @@
+  - clm-bb2222 — Foundation Claim B (solidity *pending*) [the anchor dependency]
+  - clm-bb2222 — Foundation Claim B (solidity *pending*)
+  - clm-bb2222 (solidity *pending*)
+  - INVARIANT-S2 (labelling convention)
+  - Axiom 4

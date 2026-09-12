@@ -2,14 +2,21 @@
 
 Recommended user-level configuration for working with this agent set. Agent
 definitions travel with this repo; the operator-level working rules they
-assume — sandbox discipline, scratch policy, the authorization gate, task
-automation, dispatch preferences — normally live invisibly in each user's
-home config. This directory publishes that baseline so it travels too.
+assume — scratch policy, the authorization gate, task automation, dispatch
+preferences — normally live invisibly in each user's home config. This
+directory publishes that baseline so it travels too.
+
+Machine-local setup is deliberately NOT published. Anything describing one
+machine's environment (an auth sandbox, local users/groups, host paths)
+belongs in the live `~/.claude/CLAUDE.md` and nowhere else. A publish
+(home → repo) leaves such sections behind; an install (repo → home) leaves
+them where they are — a section of yours the baseline knows nothing about is
+not something an install has an opinion about.
 
 ## Contents
 
-- `CLAUDE.md` — recommended `~/.claude/CLAUDE.md`: cross-project working
-  preferences loaded by Claude Code at the user level in every project.
+- `INSTALLED_CLAUDE.md` — recommended `~/.claude/CLAUDE.md`: cross-project
+  working preferences loaded by Claude Code at the user level in every project.
 
 ## Install
 
@@ -17,16 +24,34 @@ Adopt-don't-clobber — this repo never overwrites an existing config silently. 
 supported path is the recipe, run from this repo's root:
 
 ```sh
-just install-user-config
+just install-claude-md
 ```
 
-It installs `~/.claude/CLAUDE.md` from `user-config/CLAUDE.md`, mechanizing that same
-adopt-don't-clobber judgment call:
+It **merges** `user-config/INSTALLED_CLAUDE.md` into `~/.claude/CLAUDE.md`
+rather than replacing it. The merge base — the published revision your live
+file was last integrated from — is recovered from this repository's git
+history, so nothing is kept beside your file and nothing is ever written into
+it to mark a region. Which case you are in is classified and reported, section
+by section, before the first byte is written:
 
-- **No `~/.claude/CLAUDE.md` yet**: installs it fresh.
-- **Live file matches the published one**: no-op.
-- **Live file differs**: shows the diff, saves the live file beside itself as a
-  numbered `CLAUDE.md.NN.bak`, then installs the published version.
+- **No `~/.claude/CLAUDE.md` yet**: installed fresh.
+- **Your file already matches the published baseline**: nothing to do.
+- **Your file is an unmodified published revision**: it carried no local edits,
+  so the update applies whole.
+- **Your file has local edits over a recoverable base**: merged — your own
+  sections and your edits stay, the published changes land around them.
+- **No shared ancestry** (hand-written, never installed from here): there is
+  nothing to align, so your file is kept entire and the baseline is appended
+  below it. Hand-edit out the duplication, and anything of ours that
+  contradicts what you wrote.
+- **Anything else** — no recovered base merges cleanly: your file is left
+  untouched, the baseline is written beside it as `incoming.CLAUDE.md`, and the
+  recipe exits nonzero. Integrate by hand from that copy, then delete it.
+
+A write that changes your file's bytes keeps one rolling backup beside it —
+`backup.CLAUDE.md`, yours to delete — overwritten by the next such write and
+left alone by one that changes nothing. What the merge did not write into
+still comes back byte-identical, your spacing included.
 
 The recipe only ever installs repo → home; it never reads live changes back.
 
@@ -36,10 +61,14 @@ The live file at `~/.claude/CLAUDE.md` is a real file, deliberately NOT a
 symlink into this repo — a symlink would let anything that writes this repo
 (including dispatched agents) silently rewrite live operator config, and
 would force every future personal addition to be published. Updates flow by
-explicit act in either direction:
+explicit act in either direction, and the two directions are not the same
+mechanism:
 
-- **repo → home**: adopt a baseline update after reading the diff.
-- **home → repo**: publish an improvement by copying it here and committing.
+- **repo → home**: `just install-claude-md`, above. It reports the case before
+  it writes, and it never replaces your edits.
+- **home → repo**: still a manual diff-and-adopt. Read the live file against
+  `INSTALLED_CLAUDE.md`, copy the improvement here, commit it — leaving your
+  machine-local sections behind.
 
 Asking an agent to "diff my ~/.claude/CLAUDE.md against user-config/ and
-show me what changed" is the whole sync procedure.
+show me what changed" is the whole of that second procedure.

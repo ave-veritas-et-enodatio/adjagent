@@ -1,0 +1,39 @@
+You are attributing dependency direction in a claim graph built from one corpus.
+
+## The claim
+
+@!dyn.claim-line!@
+
+## The candidates
+
+Each of these is a claim the source claim's document cross-references, or is
+cross-referenced by. A cross-reference carries no direction: a theorem citing a
+lemma it rests on is a dependency; a lemma citing the theorem it motivates is not.
+
+@!dyn.candidate-lines!@
+
+## The lines the references were read off
+
+@!dyn.reference-lines!@
+
+## What to return
+
+For each candidate, one question: **does the claim above rest on it** — is the
+candidate prior standing the claim is derived from? Return the ids of the
+candidates for which the answer is yes, and nothing else. Returning none of them
+is a complete answer: a claim that rests on nothing in this list is the ordinary
+case, not a failure to find something.
+
+Close with exactly one block, on lines of their own:
+
+    @!answer-open!@
+    {"claim": "@!dyn.claim-id!@", "depends-on": ["<candidate id>", ...]}
+    @!answer-close!@
+
+The block is one JSON object and nothing else. `claim` is the id above, verbatim.
+`depends-on` is an array of candidate ids from this list, possibly empty. No other
+key is admitted.
+
+## A previous answer failed a mechanical check
+
+The selections returned so far close a dependency cycle: @!dyn.cycle-path!@. A claim graph must be acyclic. Re-answer for @!dyn.claim-id!@ without the selection that closes it.

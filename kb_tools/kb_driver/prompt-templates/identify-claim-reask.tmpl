@@ -1,0 +1,43 @@
+You are placing one result you have already identified in a document of a knowledge base.
+
+## The document — `@!dyn.document!@`
+
+This is the document your answer was about. It is not shown again: the question here is narrower
+than the one you have already answered, and everything it turns on is below.
+
+## The quote — `@!dyn.quote!@`
+
+You returned those words as the opening of the sentence one result begins at, named that sentence
+`@!dyn.label!@`, and titled the result:
+
+@!dyn.title!@
+
+## What the tool found
+
+@!claim-evidence!@
+
+## What to return
+
+One block, and it is one of two.
+
+Where one of the sentences above is the sentence this result begins at, return it as a claim
+block. Quote its opening in the document's own words — what follows the label and the colon, not
+the label itself — name that label, and title the result. The title above is yours to keep or to
+rewrite: a result beginning at a different sentence may be a different result.
+
+    @!claim-open!@
+    quote: <the opening of that sentence, copied from its line above>
+    label: <that sentence's label>
+    title: <one line naming the result>
+    @!claim-close!@
+
+Where none of them is the sentence this result begins at, return this block, which is empty:
+
+    @!none-of-these-open!@
+    @!none-of-these-close!@
+
+**Declining costs this one result and nothing else, and it is the right answer whenever the list
+above does not carry the sentence you meant.** The list is what the tool found, not what the
+document holds; a sentence picked off it because it was the nearest one is a record anchored at
+the wrong span, which reads exactly like a record anchored at the right one and which no later
+check can tell apart.

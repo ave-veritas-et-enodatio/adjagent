@@ -4,26 +4,29 @@ Generator and consistency checker for the generated definitions in this
 repository — agent definitions and slash-command definitions alike.
 
 Templates live in two sibling trees under templates/, and a template's surface
-tree routes its output into the matching deployed surface:
+tree routes its output into the matching deployed surface beneath the output
+root the invocation names (ROOT below; every verb takes it as its positional
+argument, and none of them defaults — this repository keeps no rendered tree
+of its own for a render to default into):
 
-    templates/agents/<name>.md.tmpl    + templates/shared-sections.toml -> agents/<name>.md
-    templates/commands/<name>.md.tmpl  + templates/shared-sections.toml -> commands/<name>.md
+    templates/agents/<name>.md.tmpl    + templates/shared-chunks.toml -> ROOT/agents/<name>.md
+    templates/commands/<name>.md.tmpl  + templates/shared-chunks.toml -> ROOT/commands/<name>.md
 
 Discovery is RECURSIVE within each surface tree, and a template's path is
 MIRRORED into its surface — the relative subpath of the template is the
 relative subpath of its output. The filesystem is the whole declaration;
 there is no metadata key for placement:
 
-    templates/agents/mad/participant-contract.md.tmpl -> agents/mad/participant-contract.md
+    templates/agents/mad/participant-contract.md.tmpl -> ROOT/agents/mad/participant-contract.md
 
-Every other mechanism — chunks, variants, markers, NB anchors, multi-output
-fences, banners, write safety, numbered backups, and both checks — applies
-unchanged at a nested path. Check 2 walks *.md RECURSIVELY under each checked
-surface, so a banner stranded at a nested path is caught exactly as a
-top-level one is. Mirrored subdirectories beneath a surface are created as
-needed (see the output-directory guard below).
+Every other mechanism — chunks, variants, markers, overlay anchors,
+multi-output fences, banners, write safety, numbered backups, and both checks
+— applies unchanged at a nested path. Check 2 walks *.md RECURSIVELY under each
+checked surface, so a banner stranded at a nested path is caught exactly as a
+top-level one is. The surface directories under ROOT, and the mirrored
+subdirectories beneath them, are created as needed.
 
-templates/shared-sections.toml is the single chunk source for both template
+templates/shared-chunks.toml is the single chunk source for both template
 types. A template holds everything unique to its definition; every span of
 text shared with other definitions is a marker referencing a chunk, so shared
 text lives in exactly one place. templates/commands/ may be absent or empty
@@ -48,34 +51,52 @@ fenced TOML block declares them, along with the parameters that differ:
     color = "#5B21B6"
     +++
     ---
-    name: @@name@@
-    model: @@model@@
+    name: @!arg.name!@
+    model: @!arg.model!@
     ---
     <one body, rendered identically into every output>
 
-Each declared key becomes an @@placeholder@@ in the body, plus @@name@@ bound
-to the output's own name. Bodies are therefore identical by construction
-rather than by maintenance discipline. A template with no such block renders a
-single definition named after the template, at the template's mirrored path.
-Chunks,
+Each declared key is readable in the body as @!arg.<key>!@, plus @!arg.name!@
+bound to the output's own name. The fence is where those values are BOUND, so
+its keys are bare; the prefix goes where one is CONSUMED (Marker syntax,
+below). Bodies are therefore identical by construction rather than by
+maintenance discipline. A template with no such block renders a single
+definition named after the template, at the template's mirrored path. Chunks,
 variants, markers, wrapping, multi-output declarations, write safety, backups,
 and the render-identity check apply identically to both template types.
 
-Usage — `just generate` and `just check` are the sole sanctioned entry points
-(see ARCHITECTURE.md); they wrap:
+Usage — four verbs, one required, no default mode. `just generate`,
+`just check`, `just install` and `just install-claude-md` are the sole
+sanctioned entry points (see ARCHITECTURE.md); they wrap:
 
-    python3 gen-defs.py              # check (default)
-    python3 gen-defs.py --generate   # render templates into agents/ and commands/
-    python3 gen-defs.py --install R  # full-product install into R (see below)
-    python3 gen-defs.py --verbose    # list passing files too
-    python3 gen-defs.py --no-diff    # report drift without the diff
+    python3 gen-defs.py check R              # check the tree under R
+    python3 gen-defs.py generate R           # render templates into R
+    python3 gen-defs.py install R            # full-product install into R
+    python3 gen-defs.py install-claude-md D  # merge the operator baseline into D
 
-Render-to-order flags, accepted by both modes:
+The first three name their output root positionally, and none of them
+defaults, because there is no in-repository tree left to default to; the
+fourth names the operator's own CLAUDE.md and is described under
+"Operator-config integration" below. Each verb declares only the flags it can
+act on: what a verb cannot do is unrepresentable on its command line rather
+than refused after the fact.
 
-    --output-dir ROOT       render/check agents/ and commands/ subtrees under
-                            ROOT instead of the repo's deployed surfaces. ROOT
-                            must already exist (error otherwise); the surface
-                            subdirectories are created under it as needed.
+Flags common to generate, check and install:
+
+    --family NAME           the model family whose tuning applies: a bare
+                            family name resolved against templates/family/
+                            (default: claude), or a path to a family file.
+                            Bare MODEL names are not valid values.
+    --model-tier-map SPEC   override the tier -> family member map the family
+                            declares: comma-separated tier=member pairs, or
+                            all=member. Named tiers mask only themselves.
+    --model-pin-map SPEC    override the tier -> rendered pin map: same syntax,
+                            over DEFAULT_PIN_MAP below. Pin text is always in
+                            the claude model namespace.
+    --verbose, -v           list every file, not just the exceptions.
+
+`generate` and `check` additionally take:
+
     --surfaces WHICH        agents | commands | both (default both): which
                             surface to render or check. Cannot be combined
                             with the selection globs below, which imply it.
@@ -83,21 +104,19 @@ Render-to-order flags, accepted by both modes:
                             PATTERNS: one or more fnmatch patterns joined by
                             "|" ("*app-expert*|*-coder*"). See below.
     --command-glob PATTERNS the same, over the commands surface.
-    --model-family SPEC     the one model-tuning flag. SPEC names a family
-                            file OR a model inside one, and resolution decides
-                            which (Flavor resolution, below). A family SPEC
-                            loads that family and asks for no model scope; a
-                            model SPEC loads the family declaring that model
-                            and makes it the EXPORT FLAVOR for the outputs
-                            carrying no frontmatter `model:` pin. A pinned
-                            output resolves its own model scope either way
-                            (see per-pin resolution below).
 
-The strictly-inside-this-repository output guard applies only to the implicit
-default output location; an explicit --output-dir is exempt from the
-inside-repo constraint but is still asserted to be an existing directory. The
-full per-target safety table below (banner detection, numbered backups,
-refusal of bannerless files) applies identically to out-of-repo targets.
+and `check` alone takes:
+
+    --no-diff               report drift without printing the diff.
+
+`install` takes none of those four: it delivers the product entire, and a
+partial install is a future feature.
+
+ROOT is asserted to be an existing directory and is otherwise unconstrained —
+inside this repository or anywhere else; the surface subdirectories are created
+under it as needed. The full per-target safety table below (banner detection,
+numbered backups, refusal of bannerless files) applies identically wherever it
+lands.
 
 Definition selection — --agent-glob and --command-glob:
 
@@ -113,9 +132,9 @@ Presence of either glob IMPLIES the surface(s) the run covers: --agent-glob
 alone renders/checks the agents surface only, filtered; --command-glob alone
 the commands surface only; both, both surfaces, each filtered by its own
 patterns; neither, every output, as always. --surfaces is therefore redundant
-with a glob and combining them is an argparse error. So is combining a glob
-with --install: an install delivers the whole product, and a partial install
-is a future feature, not this flag.
+with a glob and combining them is an argparse error. Narrowing an install is
+not an error but an impossibility: `install` declares neither the globs nor
+--surfaces, so an install always delivers the whole product.
 
 Selection filters PER OUTPUT, not per template: a glob matching one output of
 a multi-output template renders or checks exactly that one, and the template's
@@ -128,99 +147,171 @@ a clean run. What was selected is stated in the run report, per surface:
 
     agents: 12 of 24 outputs selected by --agent-glob
 
-Selection composes orthogonally with everything else: NB anchors and per-pin
-model resolution, banners and tuning claims, the write-safety table, and both
-checks all apply to the selected outputs exactly as they do to a full run.
+Selection composes orthogonally with everything else: overlay anchors and tier
+resolution, banners and tuning claims, the write-safety table, and both checks
+all apply to the selected outputs exactly as they do to a full run.
 
-Model tuning — NB anchors and family files:
+Tier tokens and the two maps:
 
-    @@nb name="<anchor-name>"@@
+A definition declares its capability TIER at its pin site, as one of five
+markers in the `dyn.` namespace — the invocation's own parameters:
 
-is a marker usable in template bodies and chunk bodies. With no family file
-loaded, or a loaded family file with no entry for that anchor, it expands to
+    model: @!dyn.tier-highest!@ | @!dyn.tier-high!@ | @!dyn.tier-medium!@ |
+           @!dyn.tier-low!@     | @!dyn.tier-lowest!@
+
+They are bound at load time to `pin_map[<tier>]`, in a dynamic table threaded
+through every expansion, so they expand wherever a marker does — template
+bodies, chunk bodies, variants, defaults, and overlay text alike. Nothing is
+reserved against the chunk table for them: a [chunks.tier-low] table is an
+ordinary chunk, reachable as the bare @!tier-low!@, because the namespace is
+what separates the two.
+
+Two independent maps, each TOTAL over the five tiers on every render:
+
+    tier map   tier -> FAMILY MEMBER. Declared by the family file's required
+               [tiers] table; --model-tier-map masks the tiers it names. It
+               selects whose [family.*.models.<member>] overrides a definition
+               is tuned against, and never reaches rendered text.
+    pin map    tier -> RENDERED PIN TEXT, always a claude-legal model name.
+               Defaults to DEFAULT_PIN_MAP below; --model-pin-map masks the
+               tiers it names. It is the SOLE source of the @!dyn.tier-*!@
+               tokens.
+
+The two are independent on purpose: what a definition is TUNED for and what it
+DISPATCHES on are separately chosen, so their divergence is disclosed rather
+than prevented. A tier-map value is NOT validated against the family's overlay
+tables — naming a member the family declares no override for is the legal
+STOCK state below, never an error. A pin-map value is not validated at all:
+nothing in this repository owns the set of legal claude aliases, so the report
+echo and the banner are the whole safety story there. That is an accepted risk,
+stated so it does not get "fixed" into a gate.
+
+Merge semantics, identical for both flags: start from the defaults; `all=V`
+overwrites all five; then each named tier is applied. So `all=haiku,high=opus`
+is haiku everywhere but high, whichever order the two appear in, and a named
+tier masks ONLY itself — unnamed tiers keep their default. A key that is
+neither one of the five tiers nor `all`, a duplicate key, and a malformed pair
+are each hard errors. Both merged maps are total by construction: a tier
+holding no member, or no pin, is unrepresentable rather than an error branch.
+
+Per-output tier discovery renders a template's body TWICE. The first pass binds
+the tier tokens to a marker-free sentinel (`tier:high`), so reading the pin out
+of that render's frontmatter yields the output's own tier; the second renders
+for real, under the overlay set that tier resolves. The second pass is
+UNCONDITIONAL — a tier token in a body or a chunk would otherwise ship sentinel
+text into a system prompt. An output with no pin site at all (the participant
+contract, the generated commands) declares no tier and takes family-wide
+overlay text only.
+
+A pin site that resolves NO tier — a literal `model: opus` where a token
+belongs — is a hard error naming the output and its pin. It is the one failure
+the render path cannot afford to tolerate quietly: a literal pin renders the
+same bytes as the token that replaced it and silently loses the definition's
+model scope, so a template landing with one would be tuned against nothing and
+nothing would say so.
+
+Model tuning — overlay anchors and family files:
+
+    @!fam.<key>!@
+
+is a marker usable in template bodies and chunk bodies: text layered over base
+text, present or absent depending on which source file is loaded. `fam` is an
+OVERLAY NAMESPACE — a prefix naming the source that fills the anchor, filled by
+a family file's [family.<key>] tables, and the only one registered
+(OVERLAY_NAMESPACES). Registering a second — a harness file, say — is a name in
+that tuple plus the loader that reads it; resolution keys on the marker's full
+spelling, so nothing downstream learns the new name. A marker whose namespace
+is not registered is a hard error wherever it is read: an anchor no loaded
+source fills renders as NOTHING by design, so a typo'd namespace has no other
+way to announce itself.
+
+With a loaded family file carrying no entry for an anchor, it expands to
 nothing at all — a base render is byte-identical whether or not the anchor
-exists. A family file (templates/models/<family>.toml) fills anchors:
+exists. A family file (templates/family/<family>.toml) declares its tier map
+and fills `fam.*` anchors:
 
-    [nb.<anchor-name>]
-    text = "..."                          # fills the anchor family-wide
+    [tiers]
+    highest = "fable"                     # all five tiers, or the file does
+    high    = "opus"                      # not load — see below
+    medium  = "sonnet"
+    low     = "haiku"
+    lowest  = "haiku"
 
-    [nb.<anchor-name>.models.<model-name>]
-    text = "..."                          # overrides the family text for
-                                          # that model
+    [family.<key>]
+    text = "..."                          # fills fam.<key> family-wide
 
-Resolution, not accumulation: AT MOST ONE NB renders per anchor — the model
-scope wins over the family scope.
+    [family.<key>.models.<member>]
+    text = "..."                          # overrides the family text for that
+                                          # family member
 
-Flavor resolution — what one --model-family SPEC means:
+The table's key IS the anchor key: [family.gap-aversion] fills
+@!fam.gap-aversion!@. The table name stays `family` — it is where the text is
+AUTHORED, and SPEC.md names it — while `fam` is the namespace a template
+CONSUMES it through.
 
-There is exactly ONE tuning flag, because family and model are not independent
-choices: a model is only ever reachable through the family that declares it,
-and naming both invited combinations that contradict each other. SPEC is
-resolved in this order, against templates/models/:
+Resolution, not accumulation: AT MOST ONE overlay renders per anchor — the
+model scope wins over the family scope.
+
+Family selection — what one --family NAME means:
 
     1. path-shaped   — contains a path separator or ends in .toml: taken as a
                        path to a family file, unresolved and unvalidated here
                        (load_family owns the existence error).
-    2. family name   — matches <SPEC>-addenda.toml or <SPEC>.toml: that family
-                       is loaded, and NO model scope is asked for. Both files
-                       existing is an ambiguity error naming the candidates.
-    3. model name    — found in exactly one family's [nb.*.models.<SPEC>]
-                       tables: that family is loaded AND <SPEC> becomes the
-                       export flavor for unpinned outputs. A model mentioned
-                       only in comments is NOT known.
+    2. family name   — <NAME>.toml under templates/family/.
 
-A bare name matching BOTH a family file and a model is an ambiguity error
-naming both readings; matching a model in SEVERAL families is an error naming
-them and demanding the family file path instead; matching NEITHER is an error
-listing the available family files and each one's known models.
+Anything else is an error listing the available families. A bare MODEL name is
+not a family name, and there is no third resolution step behind it.
 
-Model scope resolves PER OUTPUT, against that output's own frontmatter
-`model:` pin — the value in its RENDERED frontmatter, whether that comes from
-an outputs-table parameter (@@model@@, as the mad-participant template
-declares) or a literal frontmatter line. An output pinned to X resolves X's
-overrides: within the family file a family SPEC named, or, when the SPEC named
-a model (or nothing at all), within the one family whose [nb.*.models.X]
-tables mention X. A pin matching no family — or matching several — resolves to
-NO model scope at all, SILENTLY: a pin is routine metadata saying which model
-the definition dispatches on, not a request for tuning. A model SPEC keeps the
-opposite semantics, because it IS a request: one that matches nothing is still
-an error.
+The [tiers] table is REQUIRED and TOTAL. A family file that omits it, drops a
+tier, or names a key outside the five fails to LOAD rather than falling back to
+a partial map, to another family's members, or to the pin map: there is no
+fallback anywhere in this resolution, and the default FAMILY is a selection,
+not a fallback value. A family file may still carry zero [family.*] tables — a
+family name is reservable before an observed failure motivates an entry — but
+it needs its five-line [tiers] table to do so.
+
+Two render states, plus one config error:
+
+    Tuned    the tier's member has [family.<key>.models.<member>] tables: model
+             scope wins over family-wide scope, per anchor. Named once per run,
+             in the run's one notice about member scope.
+    Stock    the tier's member has ZERO such tables anywhere in the family.
+             Legal and unreported — silence is the stock state — and recorded
+             in the banner's `stock=` field. A member with a table for one
+             anchor and not another is NOT stock — that anchor simply falls
+             back to family-wide text.
+    (error)  [tiers] absent, incomplete, or carrying an unknown key.
+
+A member named by a [family.*.models.<member>] table that no tier reaches — in
+neither the family's own [tiers] nor the effective tier map — is a hard error:
+the table could never render, which is exactly the class
+validate_family_anchors already rejects for anchor names. Checking the UNION is
+what lets a table be authored for a member reachable only via
+--model-tier-map without failing a default run.
 
 Family scope is unchanged by any of that: a loaded family file's family-wide
-text fills its anchors render-wide, for pinned and unpinned outputs alike. A
-family a PIN implies contributes only its model-scope entry for that pin,
-never its family-wide text — that text belongs to the family the invocation
-actually loaded. The banner records the invocation's tuning; per-pin
-resolution is a deterministic function of that invocation, the templates, and
-templates/models/, so check reproduces it exactly.
+text fills its anchors render-wide, for outputs with a tier and outputs with no
+pin site alike. Only MODEL-scoped entries require a tier. The banner records
+the invocation's whole triple, and tier resolution is a deterministic function
+of that triple and the templates, so check reproduces it exactly.
 
-A model SPEC is therefore the EXPORT FLAVOR: it tunes the outputs carrying no
-pin (today the generated commands and the participant contract) and is ignored
-by the pinned ones. That is accounted for out loud rather than silently, in the
-generate/check/install report:
-
-    --model-family haiku (model in family templates/models/claude-addenda.toml):
-    applied to 5 unpinned output(s); skipped 23 pinned output(s) (pins own
-    their tuning)
-
-A family SPEC prints no such line: nothing model-scoped was asked for the
-unpinned outputs, so there is no reach to account for.
-
-The rendered form is `**NB**: <text>`; neither the family nor the model name
+A filled anchor renders its family text VERBATIM in place — no lead-in, no
+wrapper, no marker of its own around it, so a family file can restore a passage
+of contract prose as readily as it can add a corrective note; an author wanting
+a lead-in writes one into their text. Neither the family nor the member name
 appears in rendered output — the family file is the provenance record. The
 filled text is itself marker-expanded, so a typo'd chunk reference inside it
 fails loudly. A family-file entry naming an anchor that exists in no template
-or chunk is a hard error, and generation reports which anchors were filled and
-from which scope (family vs model). A family file with zero [nb.<anchor>]
-tables (comments only) loads cleanly and fills nothing — a family name may be
-reserved before any observed failure motivates an entry. `nb` is a reserved
-marker name: no chunk or placeholder may claim it.
+or chunk is a hard error, and a family declaring anchors reports which of them
+were filled and from which scope (family vs model). NO name is reserved
+anywhere in this: the namespace is what separates an anchor from a chunk, so
+`overlay` and `tier-low` are ordinary chunk names now.
 
 Structural invariant: a family file can never replace, suppress, or modify
 BASE text — it can only fill anchors that base templates and chunks
 deliberately expose. Anchors are authored on demand, when an observed failure
 motivates one; they are never pre-sprinkled speculatively. See
-templates/models/README.md and README.md ("Variants and platform
+templates/family/README.md and README.md ("Variants and platform
 compatibility") for the provenance discipline.
 
 Per-target safety — a target is only ever written when it is provably ours,
@@ -239,8 +330,8 @@ and an overwrite never destroys content this tool did not itself write:
                                        written in place
     target exists without a banner  -> REFUSED, never written, reported, nonzero
 
-The hash-verified branch is what keeps routine regeneration — and the flavored
-install's render pass over a freshly copied tree — from churning out backups
+The hash-verified branch is what keeps routine regeneration — and an install's
+render pass over a freshly copied tree — from churning out backups
 nobody reads. A backup sits beside the file it backs up —
 agents/go-coder.md.00.bak next to agents/go-coder.md — and the repo's root
 *.bak gitignore rule keeps it out of git. Serials are per-target, zero-padded
@@ -261,38 +352,56 @@ alone: a file the tool has just created takes the source's executable bit (a
 chmod on a file it owns by construction, always legal), so an installed shell
 tool stays runnable.
 
-As a guard against a wrong output-directory constant — which would otherwise
-exit 0 while writing to the wrong place — default-location generation first
-asserts that every SURFACE directory receiving output is an existing directory
-inside this repository, and the generation report states where the files
-landed (--output-dir generation instead asserts ROOT exists, as described
-above). Mirrored subdirectories beneath a surface are not part of that guard:
-they come from the template tree rather than from a constant, and are created
-as needed under either mode.
+There is no wrong-output-directory-constant guard, because there is no
+constant: every run names its ROOT, ROOT is asserted to exist, and the report
+states where the files landed. The surface directories under ROOT and the
+mirrored subdirectories beneath them come from the template tree rather than
+from a constant, and are created as needed.
 
-Full-product install — `--install ROOT`:
+Full-product install — `install ROOT`:
 
-    python3 gen-defs.py --install <project>/.claude [--model-family SPEC]
+    python3 gen-defs.py install <project>/.claude [--family NAME]
+        [--model-tier-map SPEC] [--model-pin-map SPEC]
 
-An install delivers the whole deployed product, and it is a PLAIN RECURSIVE
-COPY of both surfaces into ROOT — hand-maintained definitions, the checked-in
-generated definitions, agents/mad/ topic sets, kb_tools/, liaison_tools/, the
-guest commands: everything, minus one explicit exclusion list
+An install delivers the whole deployed product in two halves. The shipped
+packages (kb_tools/, liaison_tools/) are a RECURSIVE COPY
+into the destinations the table below names, minus one explicit exclusion list
 (INSTALL_EXCLUDED_*) — test suites and their fixtures, python/pytest caches,
-the generator's *.bak safety copies, .DS_Store. There is no inclusion list and
-no complement computation: a new hand-maintained definition or tool file ships
-with no enrollment step. `--install ROOT` implies `--output-dir ROOT` and
-cannot be combined with it or with --generate; `--surfaces` still selects which
-surface(s) to install.
+*.bak safety copies, .DS_Store, and this repository's own project
+documentation, which is code's provenance rather than part of it. There is no
+inclusion list and no complement computation: a new tool file ships with no
+enrollment step. The definitions are RENDERED into ROOT's two surfaces by the
+ordinary generation pass — there is no checked-in render to copy, so the copy
+half never had them to deliver, and the (family, tier-map, pin-map) triple an
+install was given is just the triple that render runs under. `install` declares
+neither `--surfaces` nor the selection globs, which would narrow the product to
+a partial install.
 
-A checked-in surface already holds each definition's BASE render, so a plain
-install needs no render pass at all — the copy is the install. It is followed
-by a check of the installed set, reported but not gating (the target may hold
-material this tool did not put there). Only a FLAVORED install renders: after
-the copy, the ordinary generation pass runs against ROOT under the requested
-family/model, rewriting the definitions the flavor changes. Freshly copied
-definitions are provably untouched tool output (see the banner's body hash
-below), so that pass leaves no numbered backups behind.
+Where a copied file LANDS is not, however, read off where its source sits. A
+file walked from a source-root surface mirrors its surface-relative subpath,
+but the shipped code packages travel by an explicit source -> destination table
+(SHIPPED_PACKAGES): each row pairs a source directory in this repository with
+the ROOT-relative destination it must arrive at. The destination is a CONSUMER
+contract — runner snippets already installed in consuming projects name
+.claude/agents/kb_tools/..., and every definition body writes its paths
+against .claude/agents/... — so the source may be relocated within this
+repository and the destination may not follow it. Stating the pairing as data
+is what keeps those two facts independent; deriving the destination from
+directory placement is what made them the same fact. A row whose source lies
+inside a deployed surface is carved out of that surface's own walk and
+delivered by its row instead, so every file is emitted exactly once whichever
+side of a relocation its source currently sits on.
+
+EVERY install renders, whatever triple it was given: a default-triple install
+is one triple among the possible ones, not a special case with a copy behind
+it, which is what makes a default install and a tuned one the same code path
+and the same guarantee. The render pass receives the effective triple and the
+tier resolver the invocation built, so an install can never deliver
+definitions tuned differently from what its own banners claim. Every target
+that pass meets is freshly copied or provably untouched tool output (see the
+banner's body hash below), so it leaves no numbered backups behind. Only a
+NON-DEFAULT triple earns a clause on the summary line — a default render is
+the non-event report-by-exception exists for.
 
 The installed tree is an ARTIFACT, not a working copy: this repository is the
 source of truth and a re-install always overwrites. Local edits to installed
@@ -314,20 +423,29 @@ Every COPIED file is stamped with an !INSTALLED! banner carrying the same
 its filetype admits:
 
     *.md with frontmatter    comment lines inside the frontmatter block —
-                             dropped by every frontmatter reader, including
-                             liaison_tools/extract-agent-body.sh
+                             dropped by every frontmatter reader, the body
+                             extraction the liaisons run included
     *.md without, commands/  a minimal frontmatter block holding only the
                              banner, as render_template already does for a
                              frontmatter-less command template: a command's
                              first BODY line is the description Claude Code
                              lists it by, and nothing may displace it
-    *.md without, agents/    an HTML comment block above the content —
-                             supporting material must not gain frontmatter,
-                             which would make a methodology topic look
-                             extractable as a definition body
+    *.md without, agents/    an HTML comment block above the content — a
+                             shipped package's own documentation must not gain
+                             frontmatter, which would present it as a
+                             definition
     .py .sh .toml .mk .just  `#` comment lines at the top, below a shebang
     any other suffix         no comment syntax to carry a banner: the file is
-                             copied verbatim and the install reports it
+                             copied verbatim, and --verbose names it (which
+                             files those are follows from their suffix alone,
+                             so a clean install does not report it)
+
+Third-party source vendored into a shipped package under a `_vendor/`
+directory is exempt whatever its suffix: the banner would assert adjagent
+provenance over code we did not write, and tell its reader to edit a source
+repository that is not the file's. It is copied verbatim and --verbose names
+it as unstamped. A STAMPING carve-out only — vendored code ships like any
+other package file, and the exclusion list above is untouched.
 
 A generated definition is exempt: it arrives carrying its own !GENERATED!
 banner, which already forbids in-place edits and names the real edit path.
@@ -338,15 +456,32 @@ overwritten silently, while a mismatched or unbannered target is backed up
 first. Re-installing an untouched tree is therefore byte-stable: no content
 changes and no backups.
 
-The banner is a four-line YAML-comment block naming the source template
-(`# !GENERATED! from templates/agents/<name>.md.tmpl ...`). When rendered with
-a family file, the banner line additionally names the family file, and the
-model too when the SPEC named a model — the minimal claim that separates two
-renders: family and model SPECs resolving to the same file still render
-unpinned outputs differently, so the model half is recorded exactly when it
-was asked for. The banner is a tuned set's claim to its tuning, just as it is
-a definition's claim to being generated. The banner
-always lives inside YAML frontmatter, never in the body that becomes a prompt:
+The banner is a five-line YAML-comment block naming the source template
+(`# !GENERATED! from templates/agents/<name>.md.tmpl ...`) above a `!TUNING!`
+line and the body hash:
+
+    #
+    # !GENERATED! from <tmpl> and <chunks> — edit those. DO NOT HAND EDIT ...
+    # !TUNING! family=<file> seat=<tier|none> member=<member|none>
+              tier=<tier map> pin=<pin map> stock=<tiers|none>
+    # !BODY-SHA256! <hex>
+    #
+
+(one physical line for `!TUNING!`; wrapped here only to fit). `family=` and
+the two maps are the render's whole triple, both maps EFFECTIVE — post-merge —
+and serialized in TIERS order rather than sorted, so the claim is deterministic
+and reads highest-to-lowest. `seat=` and `member=` are this definition's OWN
+resolution: the tier its pin site declared and the family member its overlays
+resolved against, `none` for an output with no pin site. They are carried
+because the pin map is not injective (`low` and `lowest` both default to
+haiku), so a definition's tier cannot be recovered by inverting it — recording
+the answer is what keeps a definition's tuning readable from the definition
+alone. `member=` is redundant with tier[seat] in a well-formed banner, and that
+is the point: it is the cheap cross-check catching a banner written under one
+tier map and read under another. `stock=` lists the tiers whose mapped member
+declares zero [family.*.models.<member>] tables in the loaded family, or `none`.
+The banner always lives inside YAML frontmatter, never in the body that becomes
+a prompt:
 
   - An agent template must open with a frontmatter block; the banner is
     injected at its top.
@@ -356,7 +491,7 @@ always lives inside YAML frontmatter, never in the body that becomes a prompt:
     banner comment lines, so the banner never lands in the literal prompt
     text.
 
-Its third line, `# !BODY-SHA256! <hex>`, is the sha256 of everything the file
+Its `# !BODY-SHA256! <hex>` line is the sha256 of everything the file
 holds AFTER the banner block, exactly as written — the one line both banner
 kinds share. It lets any later reader answer a question the banner alone
 cannot: is this file still the bytes the tool wrote, or has someone edited it
@@ -368,7 +503,88 @@ and proves nothing, so it is treated as possibly hand-edited.
 A definition without a banner is presumed hand-maintained and outside this
 tool's remit; if it should be generated, delete it and re-run.
 
-Check mode runs two checks, each failing nonzero:
+Operator-config integration — `install-claude-md DEST`:
+
+    python3 gen-defs.py install-claude-md ~/.claude/CLAUDE.md
+        [--source user-config/INSTALLED_CLAUDE.md]
+
+DEST is a file its operator owns and edits, so this verb MERGES rather than
+overwrites, and it never marks the file it writes: CLAUDE.md has no comment
+syntax a reading model would not also read, so a region marker would ship into
+every session that loads it. Nothing is stored beside the live file either —
+the merge base is recovered from git.
+
+The base is the published revision the operator most likely last integrated:
+`git log --follow` over the published baseline (the path has been renamed, and
+a revision from before the rename is exactly the era a live file may date
+from), each revision diffed against the live file, and the candidates ordered
+by how many lines differ. The MERGE VALIDATES THE PICK — a base that produces a
+clean whole-block merge corroborates itself, and one that conflicts sends the
+next candidate forward — so a near-miss in the ordering costs a retry rather
+than a wrong merge. A revision equal to the published text is not a candidate:
+one side of that merge has no changes at all, so it succeeds against anything
+and yields the live file unchanged — an update deciding by itself that it had
+nothing to deliver.
+
+A MERGE NEVER INSERTS WHAT IS ALREADY THERE: an insertion whose paragraphs
+already sit where it would land says the same thing twice, so it is dropped and
+the copy in place — the operator's own bytes — is the one that survives. That is
+what makes a second run over a file the first one merged a no-op. The base still
+on offer then predates the update the live file now carries, and against it the
+operator's edit and the applied insertion beside it read as one changed span, so
+the insertion is no longer recognisable as already present by position alone.
+
+Four cases, classified and REPORTED before anything is written:
+
+    no shared        the live file was hand-written and never integrated from
+    ancestry         ours: there is nothing to align, so everything below our
+                     H1 is APPENDED to theirs and the report says to hand-edit
+                     out the duplication and whatever contradicts.
+    exact match      the live file IS some published revision, so it carries no
+                     local edits and the update applies whole. (A live file
+                     matching the CURRENT baseline is the no-op.)
+    a clear base     merged. Both sides' changes are taken at PARAGRAPH
+    plus local       granularity — a paragraph being a run of non-blank lines —
+    edits            so every hunk is bounded by blank lines and adds, drops or
+                     replaces whole blocks rather than editing inside one. Two
+                     sides changing one paragraph differently is a conflict,
+                     and a conflict is the next case.
+    anything else    BAIL. The baseline is written beside the live file as
+                     incoming.CLAUDE.md — extension LAST, so an editor still
+                     reads it as Markdown — and nothing else is touched: no
+                     partial merge, no backup, no write to the live file. The
+                     exit is nonzero, because the integration did not happen.
+
+WRITE AUTHORITY ENDS AT THE SEAM, and that is what the paragraph unit carries
+bytes for. Content this verb did not merge into comes back byte-identical —
+their paragraphs, their separators, their whitespace-only lines, their doubled
+blanks — because a block is emitted from the document it came from rather than
+reconstituted from its text, and an untouched region is copied out of the
+operator's file rather than out of the base. Normalizing is right in exactly
+two places: the published baseline, which this repository authors, and the
+joint where our content meets theirs, where a missing blank line is topped up
+and nothing already written is trimmed. A tool that tidies a config it was
+asked only to update is a tool people stop trusting.
+
+The report is SECTION-granular rather than a diff: which `##` sections the
+update adds, which exist in both and differ, which are the operator's own, and
+which already match, each as a list of names, under the base revision and its
+date. A line diff is the classification's own evidence, not its output —
+nobody hand-integrates from a unified diff.
+
+One rolling backup, not the old recipe's numbered `.bak` files. A write that
+changes the live file's bytes — the whole-update, unrelated-append, and merge
+cases alike — copies what the file held before the write to a single
+`backup.CLAUDE.md` beside it: extension last, the same shape as
+`incoming.CLAUDE.md`, so an editor still reads it as Markdown. It is
+overwritten on the next such write and left alone by one that changes nothing
+— the exact-match no-op keeps none because there is none to keep, and the bail
+path never touches the live file at all. The numbered `.bak` files the old
+recipe left behind accumulated in a directory the operator owns and bought
+nothing; a single rolling file that only appears when there is something to
+recover is the fix, not a return to it.
+
+`check` runs two checks, each failing nonzero:
 
   1. Render-identity: every target is byte-identical to its rendered template
      (REFUSED targets are reported as such instead — they are not compared,
@@ -382,85 +598,97 @@ Check mode runs two checks, each failing nonzero:
      templates and so is blind to a definition claiming generation with no
      template behind it; this walks the claims back the other way.
 
-Check accepts the same --output-dir / --surfaces / --model-family flags, so a
-tuned out-of-repo set gets the identical render-identity and
-banner-claims validation. Tuning claims are part of both checks: check runs
-under exactly one tuning configuration (the one it was invoked with), renders
-with it, and requires every target's banner to claim exactly that
-configuration. A banner naming a family file (or model) that check was not
-invoked with — or omitting one it was — is reported MISTUNED, naming both
+Check takes the same ROOT and the same --surfaces / --family /
+--model-tier-map / --model-pin-map flags as generate, so a tuned out-of-repo
+set gets the identical render-identity and banner-claims validation. The
+tuning claim is part of both
+checks: check runs under exactly one triple (the one it was invoked with),
+renders with it, and requires every target's !TUNING! line to match the one its
+own render produces — `seat=` and `member=` included. A target whose recorded
+family, either map, seat or member differs is reported MISTUNED naming both
 sides, instead of an opaque byte diff; a target whose tuning claim matches but
 whose bytes differ is ordinary DRIFT. Validating a tuned set therefore means
-invoking check with that set's --output-dir and its --model-family SPEC;
-checking the same directory under a different tuning is expected to fail —
-that is the mismatch the banner exists to catch.
+invoking check with that set's ROOT and its tuning flags; checking the same
+directory under a different triple is expected to fail — that is the mismatch
+the banner exists to catch.
 
 Generation is deterministic and idempotent: output depends only on the
-template, the shared sections, and the template's path.
+template, the shared chunks, and the template's path.
 
-Marker syntax — usable in templates and inside chunk bodies:
+Marker syntax — usable in templates and inside chunk bodies.
 
-    @@name@@                     expand chunk "name"
-    @@name variant="platform"@@  expand that variant of a multi-variant chunk
-    @@name key="value"@@         bind @@key@@ inside the chunk body
-    @@name wrap="70"@@           greedy-wrap the expansion to 70 columns
-    @@nb name="anchor"@@         model-tuning NB anchor — expands to nothing
-                                 unless a loaded family file fills it
+A MARKER'S NAMESPACE NAMES THE SOURCE ITS VALUE COMES FROM, and a marker
+without one is a chunk. Four sources, four spellings, no precedence between
+them: render dispatches on the prefix alone, so a chunk and an argument
+sharing a name are two different markers rather than a collision some rule has
+to arbitrate.
 
-"variant" and "wrap" are reserved; any other key binds a placeholder in the
-chunk body, defaulting to [chunks.<name>.defaults] when the marker omits it.
-Argument values cannot contain a double quote. An unknown marker name is an
-error, so a typo fails loudly rather than shipping into a system prompt.
+    @!name!@                     expand chunk "name" — ALWAYS a chunk, and
+                                 nothing else
+    @!name variant="platform"!@  expand that variant of a multi-variant chunk
+    @!name key="value"!@         bind @!arg.key!@ inside the chunk body
+    @!name wrap="70"!@           greedy-wrap the expansion to 70 columns
+    @!arg.key!@                  the value the call site bound for `key`, or
+                                 [chunks.<name>.defaults] where it omitted one
+    @!dyn.tier-high!@ …          an invocation parameter — the five tier
+                                 tokens, from the PIN map alone (Tier tokens,
+                                 above)
+    @!fam.gap-aversion!@         model-tuning overlay anchor — expands to
+                                 nothing unless the loaded family fills it
+                                 (Model tuning, above)
+
+THE PREFIX GOES WHERE A VALUE IS CONSUMED, NEVER WHERE IT IS BOUND. A chunk
+marker's `key="value"` argument, a [chunks.<name>.defaults] key, and an
+[outputs.<name>] fence key all stay bare: position already says what they are.
+It is the marker READING one, inside a body, that carries `arg.`, because
+nothing there would otherwise say where the value comes from.
+
+"variant" and "wrap" are reserved argument keys; any other key binds a value
+the chunk body reads as @!arg.<key>!@, defaulting to [chunks.<name>.defaults]
+when the marker omits it. Argument values cannot contain a double quote. Only
+a bare marker takes arguments at all. An unknown chunk name, an unbound
+argument, an unknown invocation parameter, and an unregistered namespace are
+each errors, so a typo fails loudly rather than shipping into a system prompt
+— while an anchor whose namespace IS registered and whose key no loaded source
+fills is silence by design, which is exactly why the namespace itself is
+policed.
+
+A marker name, a namespace, a family anchor key, and an argument key are one
+identifier class — a kebab-case identifier, IDENTIFIER below — built once and
+shared by every regex site so they cannot spell it differently and drift apart.
+The `.` joining a namespace to a name is deliberately outside that class: it is
+the whole of what keeps a namespace from ever being read as a name. A malformed
+name fails loudly: `@!write-op-!@` raises "unknown chunk 'write-op-'", naming
+the exact string. A malformed argument key, or a malformed namespaced marker
+(`@!fam.Gap!@`, `@!fam.a.b!@`), does not parse as a marker at all and ships as
+literal text, which the residual-marker guard below refuses at generation
+rather than letting it work by accident.
 """
 
 import argparse
+import contextlib
 import difflib
 import fnmatch
 import hashlib
+import io
 import re
 import stat
+import subprocess
 import sys
 import tomllib
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
-# Bumped per semver on mechanism changes (1.0.0 marks the two-surface
-# machinery stabilization; 1.1.0 adds render-to-order — --output-dir /
-# --surfaces — and NB model-tuning anchors with family files; 1.2.0 accepts
-# zero-entry family files, so a family name can be reserved comments-only;
-# 1.3.0 adds flavor resolution — bare family names for --model-family, and
-# model -> family implication for a bare --model; 1.4.0 makes template
-# discovery recursive within each surface tree and mirrors a template's
-# relative subpath into its surface, so placement is declared by the
-# filesystem alone; 1.5.0 adds --install, the full-product install — a plain
-# recursive copy of both surfaces plus a provenance stamp, with a render pass
-# only when a flavor is requested — and stamps each banner with the sha256 of
-# the body below it, which lets an overwrite of provably untouched output skip
-# the numbered backup; 1.6.0 drops the write-only install manifest and instead
-# stamps every COPIED file with an !INSTALLED! banner in its filetype's comment
-# syntax, extending the hash-gated write-safety table to the install; 1.7.0
-# resolves model-scope NBs per output, against that output's own frontmatter
-# model: pin, which makes a CLI model ask the export flavor for unpinned
-# outputs alone — loudly accounted for, silent for a pin matching nothing; 1.8.0
-# adds definition-selection globs — --agent-glob / --command-glob, matched
-# per output against the surface-relative output path, implying the surfaces
-# they cover and hard-erroring on a pattern that matches nothing; 1.8.1 makes
-# every write a pure content write — in-place into the extant inode, backups
-# as plain content copies, and no utime/chmod on a file the runner may not
-# own, which is what made an install over another user's tree fail; 2.0.0
-# collapses --model-family and --model into ONE flag — --model-family SPEC,
-# whose bare name resolves to a family file OR to a model inside one — because
-# the pair let an operator name a family and a model that contradicted each
-# other; --model is REMOVED rather than deprecated, this tool having one
-# operator, so the old flag is an unknown-flag error).
-# Deliberately NOT embedded in rendered banners — that would churn every
-# generated file on every bump.
-__version__ = "2.0.0"
+# Semver, bumped on mechanism changes; history: git log. Not embedded in
+# rendered banners — that would churn every generated file on every bump.
+__version__ = "5.0.0"
 
 REPO_ROOT = Path(__file__).parent
 TEMPLATES_DIR = REPO_ROOT / "templates"
-SHARED_SECTIONS = TEMPLATES_DIR / "shared-sections.toml"
-MODELS_DIR = TEMPLATES_DIR / "models"
+SHARED_CHUNKS = TEMPLATES_DIR / "shared-chunks.toml"
+FAMILY_DIR = TEMPLATES_DIR / "family"
 TEMPLATE_SUFFIX = ".md.tmpl"
 FAMILY_SUFFIX = ".toml"
 MAX_EXPANSION_DEPTH = 10
@@ -472,10 +700,53 @@ OUTPUTS_FENCE = "+++"
 # separator joining several patterns into one flag value.
 SURFACE_GLOB_FLAG = {"agents": "--agent-glob", "commands": "--command-glob"}
 GLOB_SEPARATOR = "|"
-# The NB model-tuning marker's reserved name; no chunk or placeholder may
-# claim it. Anchor names share the marker-name charset.
-NB_MARKER = "nb"
-ANCHOR_NAME = re.compile(r"[a-z0-9-]+")
+# The namespace vocabulary: a marker's prefix names the SOURCE its value comes
+# from, and a bare marker is a chunk and nothing else. Registering a further
+# overlay source — a harness file, say — is a name here plus the loader that
+# reads it; render dispatches on the prefix and keys overlays by the marker's
+# full spelling, so nothing else has to learn the new name.
+ARG_NAMESPACE = "arg"
+DYNAMIC_NAMESPACE = "dyn"
+FAMILY_NAMESPACE = "fam"
+OVERLAY_NAMESPACES = (FAMILY_NAMESPACE,)
+NAMESPACES = (ARG_NAMESPACE, DYNAMIC_NAMESPACE, *OVERLAY_NAMESPACES)
+# The one identifier class shared by marker names, namespace prefixes, family
+# anchor keys, and chunk-argument keys: strict kebab-case — a letter-led
+# segment, optionally followed by more letter/digit segments joined by single
+# hyphens. No leading digit or hyphen, no trailing or doubled hyphen, no
+# underscore. Tight rather than merely typo-proof because these templates are
+# increasingly authored by models: a trailing or doubled hyphen is exactly what
+# a generator emits without noticing. The `.` a namespace is joined on is
+# deliberately NOT in the class — that is what keeps a namespace and a name
+# unmistakable for one another.
+IDENTIFIER = r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*"
+# A family file's anchor key, held to the same class as the marker half that
+# consumes it: [family.<key>] fills @!fam.<key>!@.
+ANCHOR_KEY = re.compile(IDENTIFIER)
+
+# The five capability tiers, in canonical order — the order every serialization
+# of either map uses, so a banner claim is deterministic and reads
+# highest-to-lowest rather than alphabetically.
+TIERS = ("highest", "high", "medium", "low", "lowest")
+DEFAULT_FAMILY = "claude"
+# The family file's two top-level tables — its overlay entries and its tier
+# table — and the literal a map flag spells "every tier". [family.<key>] is the
+# authoring spelling; fam.<key> is the marker that consumes it.
+FAMILY_TABLE = "family"
+TIERS_TABLE = "tiers"
+MAP_ALL = "all"
+# The five dynamic names a tier token is spelled with: @!dyn.tier-<tier>!@.
+# A chunk named tier-anything is unaffected — the namespace is what separates
+# them, so nothing here is reserved against the chunk table.
+TIER_TOKEN_PREFIX = "tier-"
+# What the discovery pass binds the tier tokens to. Marker-free and
+# whitespace-free, so FRONTMATTER_PIN reads `model: tier:high` unchanged.
+TIER_SENTINEL = "tier:"
+# Tier -> rendered pin text. This default lives here and is changed only by
+# --model-pin-map; no family owns it, and it is always claude-legal names.
+# Deliberately NOT injective — low and lowest both ship haiku — which is why a
+# definition's own tier is recorded in its banner rather than derived.
+DEFAULT_PIN_MAP = {"highest": "fable", "high": "opus", "medium": "sonnet", "low": "haiku", "lowest": "haiku"}
 # An output's own model pin, read out of its RENDERED frontmatter: the value
 # of a `model:` key, however it got there — an outputs-table parameter or a
 # literal line. Quotes are optional in YAML and stripped here.
@@ -484,14 +755,28 @@ FRONTMATTER_PIN = re.compile(r"""^model:[ \t]*["']?([^"'\s#]+)["']?[ \t]*$""", r
 # Surface -> the fnmatch patterns selecting that surface's outputs. A surface
 # absent from the map is unfiltered, so None and {} both mean "everything".
 GlobMap = dict[str, list[str]]
-# anchor name -> (NB text, the scope it resolved from: "family" or "model").
-NBMap = dict[str, tuple[str, str]]
-# What the render path accepts for `nb`: a per-pin resolver (pin -> map), or a
-# plain map applied render-wide, or nothing at all.
-NBSource = NBMap | Callable[[str | None], NBMap | None] | None
+# Marker spelling (fam.<key>) -> (overlay text, the scope it resolved from:
+# "family"/"model").
+OverlayMap = dict[str, tuple[str, str]]
+# What the render path accepts for `overlays`: a per-tier resolver (tier ->
+# map), or a plain map applied render-wide, or nothing at all.
+OverlaySource = OverlayMap | Callable[[str | None], OverlayMap | None] | None
+# Tier -> family member, or tier -> rendered pin text. Total over TIERS in
+# every instance the render path ever sees (see effective_map).
+TierMap = dict[str, str]
+# Invocation-parameter name -> its value: what @!dyn.<name>!@ resolves from.
+# Keyed by parameter name (tier-high), not by tier — one table for everything
+# the invocation supplies, of which the five tier tokens are today's whole set.
+DynamicMap = dict[str, str]
 
-MARKER = re.compile(r'@@([a-z0-9-]+)((?:\s+[a-z_]+="[^"]*")*)\s*@@')
-ARG = re.compile(r'([a-z_]+)="([^"]*)"')
+# One marker, whole: an optional namespace prefix, the name, and the quoted
+# arguments a bare (chunk) marker may carry. The prefix is a separate group
+# because it ROUTES — render dispatches on it and never on the name — and it is
+# matched as an IDENTIFIER rather than as an alternation of the registered
+# names so that an unregistered one reaches that dispatch and is refused by
+# name, instead of failing to parse as a marker at all.
+MARKER = re.compile(rf'@!(?:({IDENTIFIER})\.)?({IDENTIFIER})((?:\s+{IDENTIFIER}="[^"]*")*)\s*!@')
+ARG = re.compile(rf'({IDENTIFIER})="([^"]*)"')
 # The banner, read back out of a definition as its claim to being generated.
 # Deliberately path-agnostic: any *.md.tmpl claim marks the file as generated
 # (gating write safety); whether the claimed template exists and declares the
@@ -503,21 +788,26 @@ BANNER_CLAIM = re.compile(r"^# !GENERATED! from (\S+\.md\.tmpl)\b", re.MULTILINE
 # bytes it covers — for either banner kind, since an !INSTALLED! banner in an
 # HTML comment closes with "-->" where the others close with "#".
 BODY_HASH_CLAIM = re.compile(r"^# !BODY-SHA256! ([0-9a-f]{64})\n(?:#|-->)\n", re.MULTILINE)
-# A tuned banner's second claim: which family file (and model) rendered it.
+# The banner's tuning claim: the whole triple this definition was rendered
+# under, plus its own seat and member. A MACHINE claim — check parses it back
+# and compares it field for field, so it is bracket-free, one token per field,
+# and must stay stable across versions or every rendered definition reports
+# MISTUNED. The run-report echo (report_tuning) is the display form and is
+# deliberately a separate serialization.
 TUNING_CLAIM = re.compile(
-    r"^# !GENERATED! from \S+\.md\.tmpl and \S+" r" with model family (\S+)(?:, model (\S+))? — edit",
+    r"^# !TUNING! family=(\S+) seat=(\S+) member=(\S+) tier=(\S+) pin=(\S+) stock=(\S+)$",
     re.MULTILINE,
 )
 
 
 class TemplateError(Exception):
-    """A template or shared-section definition is malformed."""
+    """A template or shared-chunks definition is malformed."""
 
 
 def rel(path: Path) -> str:
     """A path as printed and matched everywhere: relative to the repo root
-    when it lies inside it, resolved-absolute otherwise (--output-dir and
-    --model-family may point anywhere)."""
+    when it lies inside it, resolved-absolute otherwise (ROOT and --family may
+    point anywhere)."""
     try:
         return path.relative_to(REPO_ROOT).as_posix()
     except ValueError:
@@ -528,25 +818,22 @@ def rel(path: Path) -> str:
 
 
 def surface_map(
+    output_root: Path,
+    *,
     templates_root: Path = TEMPLATES_DIR,
-    output_root: Path | None = None,
     surfaces: str = "both",
 ) -> dict[str, tuple[Path, Path]]:
     """Surface name -> (template source dir, output dir).
 
     A template's parent directory routes its output; a surface's template dir
-    may be absent or empty. With `output_root` None the deployed surfaces
-    beside this script are the targets (implicit default, guarded by
-    assert_output_dirs); an explicit root must already exist and its surface
-    subdirectories are created at generation time as needed. `surfaces`
-    filters to one surface, or "both".
+    may be absent or empty. `output_root` is required and must already exist —
+    this repository holds no rendered tree for it to default to — and its
+    surface subdirectories are created at generation time as needed.
+    `surfaces` filters to one surface, or "both".
     """
-    if output_root is not None and not output_root.is_dir():
-        raise TemplateError(
-            f"output root '{output_root}' is not an existing directory "
-            f"(--output-dir and --install both require one)"
-        )
-    root = REPO_ROOT if output_root is None else output_root
+    if not output_root.is_dir():
+        raise TemplateError(f"output root '{output_root}' is not an existing directory — every verb requires one")
+    root = output_root
     names = SURFACE_NAMES if surfaces == "both" else (surfaces,)
     if not set(names) <= set(SURFACE_NAMES):
         raise TemplateError(f"unknown surface '{surfaces}'")
@@ -613,14 +900,18 @@ def report_selection(keys: dict[str, list[str]], globs: GlobMap) -> None:
 
 
 def load_chunks() -> dict[str, dict]:
-    """Load shared-sections.toml. Chunk bodies are stripped of edge newlines."""
-    data = tomllib.loads(SHARED_SECTIONS.read_text(encoding="utf-8"))
+    """Load shared-chunks.toml. Chunk bodies are stripped of edge newlines.
+
+    No name is reserved here. A bare marker resolves from this table and from
+    nothing else, so no other source has a name to collide with: the overlay
+    marker and the five tier tokens carry namespaces of their own, and a chunk
+    called `overlay` or `tier-high` is now an ordinary chunk.
+    """
+    data = tomllib.loads(SHARED_CHUNKS.read_text(encoding="utf-8"))
     chunks = data.get("chunks", {})
     if not chunks:
-        raise TemplateError(f"no [chunks.*] tables in {SHARED_SECTIONS.name}")
+        raise TemplateError(f"no [chunks.*] tables in {SHARED_CHUNKS.name}")
     for name, chunk in chunks.items():
-        if name == NB_MARKER:
-            raise TemplateError(f"'{NB_MARKER}' is a reserved marker name")
         if "text" in chunk:
             chunk["text"] = chunk["text"].strip("\n")
         for variant, text in chunk.get("variants", {}).items():
@@ -630,43 +921,120 @@ def load_chunks() -> dict[str, dict]:
     return chunks
 
 
-# ─── NB anchors and family files ─────────────────────────────────────────────
+class TierBinding(NamedTuple):
+    """The three tables one render needs, built from ONE load_chunks().
+
+    `chunks` is what a bare marker resolves from. `real` and `probe` are the
+    two dynamic tables the @!dyn.…!@ namespace resolves from, differing in
+    exactly the five tier entries: `real` binds them to the effective pin map's
+    text — what ships — and `probe` to a marker-free sentinel the discovery
+    pass reads an output's own tier back out of. Threaded as one parameter so
+    no call site can pair a stale table with a fresh one.
+    """
+
+    chunks: dict[str, dict]
+    real: DynamicMap
+    probe: DynamicMap
 
 
-def anchors_in(text: str) -> set[str]:
-    """Every anchor name that @@nb name="..."@@ markers in `text` declare."""
+def tier_binding(chunks: dict[str, dict], *, pin_map: TierMap) -> TierBinding:
+    """Bind the five tier tokens as dynamic parameters, twice over.
+
+    A dynamic table rather than the chunk table or `scope`: the tokens are the
+    invocation's parameters, not shared text and not arguments anything bound
+    at a call site, and the table is threaded through every recursive expansion
+    unchanged — so a token expands in template bodies, chunk bodies, variants,
+    defaults, and overlay text alike, exactly as it did as a chunk.
+    """
+    return TierBinding(
+        chunks=chunks,
+        real={f"{TIER_TOKEN_PREFIX}{tier}": pin_map[tier] for tier in TIERS},
+        probe={f"{TIER_TOKEN_PREFIX}{tier}": f"{TIER_SENTINEL}{tier}" for tier in TIERS},
+    )
+
+
+# ─── Overlay anchors and family files ────────────────────────────────────────
+
+
+def assert_namespace(namespace: str, name: str, *, where: str) -> None:
+    """Refuse a marker whose namespace names no source.
+
+    The prefix is what routes, so an unregistered one has no resolution at all
+    — and for an overlay namespace it could not announce itself any other way,
+    silence being the LEGAL outcome for an anchor no loaded source fills.
+    `where` labels the text the marker was read from.
+    """
+    if namespace not in NAMESPACES:
+        raise TemplateError(
+            f"{where}: @!{namespace}.{name}!@ names no source — namespaces are "
+            f"{', '.join(NAMESPACES)}, and a marker with none is a chunk"
+        )
+
+
+def anchors_in(text: str, *, where: str) -> set[str]:
+    """Every overlay anchor `text` declares — a marker's full spelling,
+    `fam.<key>` — with every namespaced marker's namespace validated as it is
+    read, overlay or not.
+
+    The sweep is what catches a typo'd namespace in a chunk body this render
+    never expands: render's own dispatch only sees what it reaches.
+    """
     found = set()
     for match in MARKER.finditer(text):
-        if match.group(1) == NB_MARKER:
-            name = dict(ARG.findall(match.group(2))).get("name")
-            if name:
-                found.add(name)
+        namespace, name = match.group(1), match.group(2)
+        if namespace is None:
+            continue
+        assert_namespace(namespace, name, where=where)
+        if namespace in OVERLAY_NAMESPACES:
+            found.add(f"{namespace}.{name}")
     return found
 
 
 def collect_anchors(chunks: dict[str, dict], template_paths: list[Path]) -> set[str]:
-    """Every NB anchor authored anywhere — template bodies and chunk bodies
-    (text, variants, and defaults values) alike."""
+    """Every overlay anchor authored anywhere — template bodies and chunk
+    bodies (text, variants, and defaults values) alike."""
     found: set[str] = set()
     for path in template_paths:
-        found |= anchors_in(path.read_text(encoding="utf-8"))
-    for chunk in chunks.values():
+        found |= anchors_in(path.read_text(encoding="utf-8"), where=rel(path))
+    for name, chunk in chunks.items():
         for value in (
             chunk.get("text", ""),
             *chunk.get("variants", {}).values(),
             *chunk.get("defaults", {}).values(),
         ):
-            found |= anchors_in(value)
+            found |= anchors_in(value, where=f"chunk '{name}'")
     return found
 
 
-def load_family(path: Path) -> dict[str, dict]:
-    """Load and validate a model-family NB file.
+class Family(NamedTuple):
+    """A loaded family file: its overlay entries, and the tier map it declares.
 
-    Schema: [nb.<anchor>] tables, each with a family-wide `text` and/or
-    [nb.<anchor>.models.<model>] per-model override tables carrying `text`.
-    A family file only fills anchors — it has no vocabulary for replacing,
-    suppressing, or modifying base text.
+    `entries` is keyed by the MARKER SPELLING its table fills — fam.<key>, for
+    a [family.<key>] table — so it compares directly against the anchors
+    templates and chunks author, and a second overlay source's entries key
+    into the same map without collision.
+    """
+
+    entries: dict[str, dict]
+    tiers: TierMap
+
+
+def load_family(path: Path) -> Family:
+    """Load and validate a model-family file.
+
+    Schema: a required [tiers] table naming the member that staffs each of the
+    five tiers, plus [family.<key>] tables, each with a family-wide `text`
+    and/or [family.<key>.models.<member>] per-member override tables carrying
+    `text`. The table's key is the anchor it fills: [family.<key>] fills
+    @!fam.<key>!@. A family file only fills anchors — it has no vocabulary for
+    replacing, suppressing, or modifying base text.
+
+    [tiers] is required and TOTAL. A missing table, a missing tier, or a key
+    outside the five is a hard error rather than a fallback to a partial map,
+    to another family's members, or to the pin map: there is no fallback
+    anywhere in this resolution. A family may still declare zero [family.*]
+    tables — a name is reservable before an observed failure motivates an entry
+    — but it needs its five-line [tiers] table to do so.
     """
     if not path.is_file():
         raise TemplateError(f"model-family file '{path}' does not exist")
@@ -674,20 +1042,19 @@ def load_family(path: Path) -> dict[str, dict]:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as exc:
         raise TemplateError(f"{rel(path)}: invalid TOML — {exc}") from exc
-    entries = data.get(NB_MARKER, {})
-    stray = set(data) - {NB_MARKER}
+    stray = set(data) - {FAMILY_TABLE, TIERS_TABLE}
     if stray:
         raise TemplateError(
             f"{rel(path)}: unknown top-level table(s) {sorted(stray)} — a "
-            f"family file holds only [nb.<anchor>] tables"
+            f"family file holds only [{TIERS_TABLE}] and [{FAMILY_TABLE}.<key>] tables"
         )
-    # A family file with zero [nb.<anchor>] tables (comments only) loads
-    # cleanly and fills nothing — a family name may be reserved before any
-    # observed failure motivates an entry (see templates/models/README.md).
-    for anchor, entry in entries.items():
-        where = f"{rel(path)}: [nb.{anchor}]"
-        if not ANCHOR_NAME.fullmatch(anchor):
-            raise TemplateError(f"{where}: anchor names match [a-z0-9-]+")
+    tiers = load_tiers(data, path)
+    entries: dict[str, dict] = {}
+    for key, entry in data.get(FAMILY_TABLE, {}).items():
+        anchor = f"{FAMILY_NAMESPACE}.{key}"
+        where = f"{rel(path)}: [{FAMILY_TABLE}.{key}]"
+        if ANCHOR_KEY.fullmatch(key) is None:
+            raise TemplateError(f"{where}: '{key}' is not an anchor key — it must match {IDENTIFIER}")
         if not isinstance(entry, dict) or set(entry) - {"text", "models"}:
             raise TemplateError(f"{where}: only 'text' and 'models' allowed")
         if "text" in entry:
@@ -702,93 +1069,53 @@ def load_family(path: Path) -> dict[str, dict]:
             override["text"] = override["text"].strip("\n")
         if "text" not in entry and not models:
             raise TemplateError(f"{where}: fills nothing (no text, no models)")
-    return entries
+        entries[anchor] = entry
+    return Family(entries=entries, tiers=tiers)
 
 
-def family_models(models_dir: Path = MODELS_DIR) -> dict[Path, set[str]]:
-    """Family file -> the model names its [nb.*.models.*] tables mention.
+def load_tiers(data: dict, path: Path) -> TierMap:
+    """Validate and return a family file's required [tiers] table."""
+    where = f"{rel(path)}: [{TIERS_TABLE}]"
+    listed = ", ".join(TIERS)
+    if TIERS_TABLE not in data:
+        raise TemplateError(
+            f"{rel(path)}: no [{TIERS_TABLE}] table — every family file names "
+            f"the member staffing each of {listed}. There is no fallback: an "
+            f"incomplete family file does not load."
+        )
+    tiers = data[TIERS_TABLE]
+    if not isinstance(tiers, dict) or set(tiers) != set(TIERS):
+        raise TemplateError(
+            f"{where}: keys must be exactly {listed} — found "
+            + (", ".join(sorted(tiers)) if isinstance(tiers, dict) and tiers else "(none)")
+        )
+    for tier, member in tiers.items():
+        if not isinstance(member, str) or member.split() != [member]:
+            raise TemplateError(f"{where}: {tier} must be a non-empty member name with no whitespace")
+    # Duplicate members across tiers are legal: two tiers staffed by one member
+    # is a statement about that family's ladder, not a defect.
+    return {tier: tiers[tier] for tier in TIERS}
 
-    Loaded through load_family, so only real tables count — a model sketched
-    in comments (e.g. claude-addenda.toml's schema illustrations) is not
-    known to its family.
+
+def resolve_family(name: str, family_dir: Path = FAMILY_DIR) -> Path:
+    """Resolve --family NAME to a family file.
+
+    Two steps, and no third: path-shaped (a separator, or a .toml suffix) is
+    taken as given, and load_family owns the existence error; otherwise
+    <NAME>.toml under `family_dir`. A bare MODEL name is not a family name —
+    the tier map names members now, so there is nothing for a model SPEC to
+    have meant.
     """
-    return {
-        path: {model for entry in load_family(path).values() for model in entry.get("models", {})}
-        for path in sorted(models_dir.glob(f"*{FAMILY_SUFFIX}"))
-    }
-
-
-def resolve_flavor(spec: str, models_dir: Path = MODELS_DIR) -> tuple[Path, str | None]:
-    """Resolve the single --model-family SPEC to (family file, model or None).
-
-    Family and model are one flag because they are one choice: a model is only
-    reachable through the family declaring it. SPEC resolves in three steps —
-
-      1. path-shaped (a path separator, or a .toml suffix): a family file path,
-         taken as given. load_family owns the existence error.
-      2. a bare family name: <spec>-addenda.toml or <spec>.toml under
-         `models_dir`. That family, and no model scope.
-      3. a bare model name: found in exactly one family's [nb.*.models.<spec>]
-         tables. That family, with <spec> as the export flavor.
-
-    Matching a family AND a model is an ambiguity error naming both readings;
-    matching two family files is the same error over the two candidates;
-    matching a model in several families demands the family file path instead;
-    matching nothing lists the family files and each one's known models.
-
-    Every family file is loaded to decide steps 2 and 3 apart, so a malformed
-    sibling family file fails a bare SPEC that does not name it. That is
-    inherent to resolving one flag against both namespaces, and loud.
-    """
-    if "/" in spec or "\\" in spec or spec.endswith(FAMILY_SUFFIX):
-        return Path(spec), None
-    families = [
-        path
-        for path in (
-            models_dir / f"{spec}-addenda{FAMILY_SUFFIX}",
-            models_dir / f"{spec}{FAMILY_SUFFIX}",
-        )
-        if path.is_file()
-    ]
-    known = family_models(models_dir)
-    declaring = [path for path, models in known.items() if spec in models]
-
-    if families and declaring:
-        raise TemplateError(
-            f"--model-family '{spec}' is ambiguous: it names the family file(s) "
-            + ", ".join(rel(path) for path in families)
-            + " and a model declared in "
-            + ", ".join(rel(path) for path in declaring)
-            + " — pass the family file path to mean the family, or rename one of the two"
-        )
-    if len(families) > 1:
-        raise TemplateError(
-            f"--model-family '{spec}' is ambiguous — candidates: " + ", ".join(rel(path) for path in families)
-        )
-    if families:
-        return families[0], None
-    if len(declaring) == 1:
-        return declaring[0], spec
-    if declaring:
-        raise TemplateError(
-            f"--model-family '{spec}' is a model declared in more than one family file ("
-            + ", ".join(rel(path) for path in declaring)
-            + ") — pass the family file path instead"
-        )
-    listing = (
-        "; ".join(
-            f"{rel(path)}: " + (", ".join(sorted(models)) if models else "(no models)")
-            for path, models in known.items()
-        )
-        or "(no family files)"
-    )
+    if "/" in name or "\\" in name or name.endswith(FAMILY_SUFFIX):
+        return Path(name)
+    family = family_dir / f"{name}{FAMILY_SUFFIX}"
+    if family.is_file():
+        return family
+    available = ", ".join(sorted(path.stem for path in family_dir.glob(f"*{FAMILY_SUFFIX}"))) or "(none)"
     raise TemplateError(
-        f"--model-family '{spec}' names neither a family file nor a known "
-        f"model: no {spec}-addenda{FAMILY_SUFFIX} or {spec}{FAMILY_SUFFIX} "
-        f"under {rel(models_dir)}/, and no family's [nb.*.models.*] tables "
-        f"declare it. Available families and their known models: {listing}. A "
-        f"model mentioned only in comments is not declared; a family file "
-        f"named otherwise is reachable by its path."
+        f"--family '{name}' names no family file: no {rel(family)}. Bare "
+        f"model names are not family names — pass a family (available: "
+        f"{available}) or a family-file path."
     )
 
 
@@ -800,90 +1127,182 @@ def validate_family_anchors(entries: dict[str, dict], known: set[str]) -> None:
         raise TemplateError("family file names anchor(s) that exist in no template or chunk: " + ", ".join(unknown))
 
 
-def model_scope(entries: dict[str, dict], model: str) -> NBMap:
-    """Only the model-scope NBs `model` matches in `entries`.
+def validate_family_members(family: Family, tier_map: TierMap, path: Path) -> None:
+    """A member no tier reaches is a hard error — the mirror of
+    validate_family_anchors, for the other half of an overlay table's address.
 
-    The per-pin half of resolution, on its own: a pin pulls a family file's
-    override for its own model and nothing else — never that file's
-    family-wide text, which belongs to the family the invocation loaded.
+    With [tiers] values and [family.*.models.<member>] keys as two independent
+    strings, a mis-spelled member never fires and its tier reports as an
+    ordinary Stock one: an entry that can never render, silently. Reachability
+    is judged against the UNION of the family's own [tiers] and the EFFECTIVE
+    tier map, so a table authored for a member reachable only through
+    --model-tier-map does not fail a default run.
+    """
+    reachable = set(family.tiers.values()) | set(tier_map.values())
+    declared = {member for entry in family.entries.values() for member in entry.get("models", {})}
+    unreachable = sorted(declared - reachable)
+    if unreachable:
+        raise TemplateError(
+            f"{rel(path)}: [{FAMILY_TABLE}.*.models.*] names member(s) no tier reaches: "
+            + ", ".join(unreachable)
+            + " — reachable members are "
+            + ", ".join(sorted(reachable))
+            + ". Such a table can never render; fix the spelling, or map a tier to it."
+        )
+
+
+def model_scope(entries: dict[str, dict], member: str) -> OverlayMap:
+    """Only the model-scope overlays `member` matches in `entries`.
+
+    The per-tier half of resolution, on its own: a tier pulls the family file's
+    override for its own member and nothing else — never the file's family-wide
+    text, which family_scope owns.
     """
     return {
-        anchor: (entry["models"][model]["text"], "model")
+        anchor: (entry["models"][member]["text"], "model")
         for anchor, entry in entries.items()
-        if model in entry.get("models", {})
+        if member in entry.get("models", {})
     }
 
 
-def family_scope(entries: dict[str, dict]) -> NBMap:
-    """Only the family-wide NBs in `entries` — what a loaded family file fills
-    render-wide, for pinned and unpinned outputs alike."""
+def family_scope(entries: dict[str, dict]) -> OverlayMap:
+    """Only the family-wide overlays in `entries` — what a loaded family fills
+    render-wide, for outputs with a tier and outputs with no pin site alike."""
     return {anchor: (entry["text"], "family") for anchor, entry in entries.items() if "text" in entry}
 
 
-def resolve_nb(entries: dict[str, dict], model: str | None) -> NBMap:
+def stock_tiers(entries: dict[str, dict], tier_map: TierMap) -> tuple[str, ...]:
+    """The tiers whose mapped member declares ZERO [family.*.models.<member>]
+    tables anywhere in the family — the legal Stock state.
+
+    Zero, not "some anchors missing": a member with a table for one anchor and
+    not another is per-anchor fallback to family-wide text, which
+    resolve_overlays already handles, and is not stock.
+    """
+    declared = {member for entry in entries.values() for member in entry.get("models", {})}
+    return tuple(tier for tier in TIERS if tier_map[tier] not in declared)
+
+
+def resolve_overlays(entries: dict[str, dict], member: str | None) -> OverlayMap:
     """Resolve a loaded family file to anchor -> (text, scope).
 
-    Resolution, not accumulation: at most one NB per anchor, the model scope
-    ("model") winning over the family scope ("family"). An entry with only
-    model overrides, none matching, resolves to nothing.
+    Resolution, not accumulation: at most one overlay per anchor, the model
+    scope ("model") winning over the family scope ("family"). An entry with
+    only member overrides, none matching, resolves to nothing.
     """
-    return {**family_scope(entries), **(model_scope(entries, model) if model is not None else {})}
+    return {**family_scope(entries), **(model_scope(entries, member) if member is not None else {})}
 
 
-def per_pin_resolver(
-    entries: dict[str, dict] | None,
-    *,
-    cli_model: str | None,
-    family_given: bool,
-    models_dir: Path = MODELS_DIR,
-) -> Callable[[str | None], NBMap]:
-    """Build the per-output NB resolver: output's model pin -> resolved NBs.
+def tier_resolver(entries: dict[str, dict], tier_map: TierMap) -> Callable[[str | None], OverlayMap]:
+    """Build the per-output resolver: the output's own TIER -> its overlays.
 
-    Model scope belongs to the output, not to the render. An output pinned to
-    X resolves X's overrides — within the family file a family SPEC named, or
-    else within the one family whose [nb.*.models.X] tables mention X. A pin
-    matching no family, or several, resolves to no model scope at all and says
-    nothing about it: a pin is metadata about which model the definition
-    dispatches on, not a request for tuning (a CLI model SPEC, which IS a
-    request, still errors when it matches nothing — see resolve_flavor).
-
-    An output with no pin takes `cli_model` instead — the export flavor, set
-    only when the SPEC named a model. `family_given` says the SPEC named the
-    family directly, which confines pin resolution to it; a model SPEC implies
-    its family rather than naming it, and leaves pins free to imply their own.
-    The loaded family's family-wide text applies to every output either way.
+    The tier map is total, so there is no missing-member branch to write. A
+    tier of None means the output has no pin site — a property of its type, not
+    a failed resolution — and takes family-wide text only: only MODEL-scoped
+    entries require a tier.
     """
-    wide = family_scope(entries or {})
-    if family_given:
-        sources = [entries or {}]
-    else:
-        # A pin can imply its own family exactly as a model SPEC does, so
-        # every family file is a candidate. Loading them validates their
-        # schema as a side effect, which is why a malformed family file is an
-        # error even for a render that ends up using none of them.
-        sources = [load_family(path) for path in sorted(models_dir.glob(f"*{FAMILY_SUFFIX}"))]
-    owner: dict[str, dict[str, dict] | None] = {}
-    for source in sources:
-        for model in {model for entry in source.values() for model in entry.get("models", {})}:
-            # Mentioned by two families: ambiguous, and therefore nothing.
-            owner[model] = source if model not in owner else None
 
-    def resolve(pin: str | None) -> NBMap:
-        if pin is None:
-            return resolve_nb(entries or {}, cli_model)
-        source = owner.get(pin)
-        return dict(wide) if source is None else {**wide, **model_scope(source, pin)}
+    def resolve(tier: str | None) -> OverlayMap:
+        return resolve_overlays(entries, None if tier is None else tier_map[tier])
 
     return resolve
 
 
-def as_resolver(nb: NBSource) -> Callable[[str | None], NBMap | None]:
-    """Normalize a render call's `nb` argument to a per-pin resolver.
+def as_resolver(overlays: OverlaySource) -> Callable[[str | None], OverlayMap | None]:
+    """Normalize a render call's `overlays` argument to a per-tier resolver.
 
     A resolver passes through; a plain map (or None) is render-wide — every
-    output resolves to it, pinned or not.
+    output resolves to it, tiered or not.
     """
-    return nb if callable(nb) else lambda pin: nb
+    return overlays if callable(overlays) else lambda tier: overlays
+
+
+# ─── The tuning triple ───────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class Tuning:
+    """The effective (family, tier map, pin map) triple one render runs under.
+
+    Both maps are post-merge and total. `stock` is derived from the family and
+    the tier map together (stock_tiers) and `is_default` says the whole triple
+    is the default one — claude with neither map changed BY VALUE, so
+    `--family claude` and a no-op override are the default triple too. Only
+    `is_default` is provenance rather than substance, and it exists for one
+    caller: an install's summary line, where a default render is the non-event
+    report-by-exception is built around.
+    """
+
+    family: Path
+    tier_map: TierMap
+    pin_map: TierMap
+    stock: tuple[str, ...] = ()
+    is_default: bool = False
+
+
+def effective_map(defaults: TierMap, spec: str | None, *, flag: str) -> TierMap:
+    """Merge one map flag's `tier=value` pairs over `defaults`.
+
+    Positional-independent: `all=V` overwrites all five wherever it sits in the
+    string, and each named tier is applied after it — so `all=haiku,high=opus`
+    and `high=opus,all=haiku` both mean haiku everywhere but high. A named tier
+    masks ONLY itself; unnamed tiers keep their default, which is what makes a
+    partial override partial. Defaults are total and a merge only overwrites,
+    so the result is total too.
+
+    Values are not validated here, by design: a tier-map value naming a member
+    the family declares no override for is the legal Stock state, and nothing
+    in this repository owns the set of legal claude aliases a pin-map value is
+    drawn from (see the module docstring — accepted risk, not an oversight).
+    """
+    if spec is None:
+        return dict(defaults)
+    named: TierMap = {}
+    for pair in spec.split(","):
+        entry = pair.strip()
+        key, sep, value = entry.partition("=")
+        key, value = key.strip(), value.strip()
+        if not sep or not key or not value or "=" in value:
+            raise TemplateError(f"{flag}: '{entry}' is not a tier=value pair")
+        if any(part.split() != [part] for part in (key, value)):
+            raise TemplateError(f"{flag}: '{entry}' contains whitespace inside a tier or a value")
+        if key != MAP_ALL and key not in TIERS:
+            raise TemplateError(f"{flag}: '{entry}' names no tier — tiers are {', '.join(TIERS)}, or all.")
+        if key in named:
+            raise TemplateError(f"{flag}: duplicate key '{key}' — a map is 1:1.")
+        named[key] = value
+    merged = {tier: named[MAP_ALL] for tier in TIERS} if MAP_ALL in named else dict(defaults)
+    merged.update({tier: value for tier, value in named.items() if tier != MAP_ALL})
+    return merged
+
+
+def effective_tuning(
+    path: Path,
+    family: Family,
+    *,
+    tier_spec: str | None = None,
+    pin_spec: str | None = None,
+    family_dir: Path = FAMILY_DIR,
+) -> Tuning:
+    """Build the run's triple from the loaded family and the two map flags."""
+    tier_map = effective_map(family.tiers, tier_spec, flag="--model-tier-map")
+    pin_map = effective_map(DEFAULT_PIN_MAP, pin_spec, flag="--model-pin-map")
+    default_family = family_dir / f"{DEFAULT_FAMILY}{FAMILY_SUFFIX}"
+    return Tuning(
+        family=path,
+        tier_map=tier_map,
+        pin_map=pin_map,
+        stock=stock_tiers(family.entries, tier_map),
+        is_default=(
+            path.resolve() == default_family.resolve() and tier_map == family.tiers and pin_map == DEFAULT_PIN_MAP
+        ),
+    )
+
+
+def map_spec(mapping: TierMap) -> str:
+    """A map as the banner records it: TIERS order, never sorted — deterministic
+    by construction, and readable highest-to-lowest."""
+    return ",".join(f"{tier}={mapping[tier]}" for tier in TIERS)
 
 
 def wrap(text: str, width: int) -> str:
@@ -924,42 +1343,65 @@ def render(
     text: str,
     chunks: dict[str, dict],
     scope: dict[str, str],
-    nb: NBMap | None = None,
+    overlays: OverlayMap | None = None,
+    dynamic: DynamicMap | None = None,
     depth: int = 0,
 ) -> str:
-    """Expand every marker in `text`. `scope` binds placeholder arguments;
-    `nb` is one output's resolved anchor -> (text, scope-label) map (None or
-    missing anchor: the @@nb@@ marker expands to nothing). Per-output
-    resolution happens above this, in render_output."""
+    """Expand every marker in `text`, each from the source its namespace names.
+
+    Four sources, one dispatch, no precedence: a bare marker is a chunk;
+    `arg.<name>` is `scope`, the arguments bound at this body's call site;
+    `dyn.<name>` is `dynamic`, the invocation's own parameters; `fam.<key>` is
+    `overlays`, one output's resolved anchor -> (text, scope-label) map (None,
+    or a key no source filled: the marker expands to nothing). Per-output
+    overlay resolution happens above this, in render_output.
+
+    Because the namespace decides, a chunk and an argument that share a name
+    are two different markers rather than a collision to arbitrate — there is
+    no rule about which wins, and nothing for one to shadow.
+    """
     if depth > MAX_EXPANSION_DEPTH:
         raise TemplateError("marker expansion exceeded maximum depth (cycle?)")
 
     def expand(match: re.Match[str]) -> str:
-        name = match.group(1)
-        args = dict(ARG.findall(match.group(2)))
-        if name == NB_MARKER:
-            anchor = args.pop("name", None)
-            if not anchor or args:
-                raise TemplateError(f'@@{NB_MARKER}@@ takes exactly one argument: name="<anchor>"')
-            entry = None if nb is None else nb.get(anchor)
-            if entry is None:
-                return ""
-            # The filled text is marker-expanded like a chunk body, so a
-            # typo'd reference inside it fails loudly.
-            return render(f"**NB**: {entry[0]}", chunks, scope, nb, depth + 1)
-        if name in scope:
-            if args:
-                raise TemplateError(f"placeholder '{name}' takes no arguments")
-            return render(scope[name], chunks, scope, nb, depth + 1)
-        chunk = chunks.get(name)
-        if chunk is None:
-            raise TemplateError(f"unknown chunk or placeholder '{name}'")
-        width = args.pop("wrap", None)
-        body = chunk_body(name, chunk, args)
-        inner = {**chunk.get("defaults", {}), **args}
-        inner.pop("variant", None)
-        expanded = render(body, chunks, inner, nb, depth + 1)
-        return wrap(expanded, int(width)) if width else expanded
+        namespace, name, arg_text = match.groups()
+        args = dict(ARG.findall(arg_text))
+        if namespace is None:
+            chunk = chunks.get(name)
+            if chunk is None:
+                raise TemplateError(f"unknown chunk '{name}' — a bare marker names a chunk and nothing else")
+            width = args.pop("wrap", None)
+            body = chunk_body(name, chunk, args)
+            inner = {**chunk.get("defaults", {}), **args}
+            inner.pop("variant", None)
+            expanded = render(body, chunks, inner, overlays, dynamic, depth + 1)
+            return wrap(expanded, int(width)) if width else expanded
+        assert_namespace(namespace, name, where=f"@!{namespace}.{name}!@")
+        if args:
+            raise TemplateError(f"@!{namespace}.{name}!@ takes no arguments — only a chunk marker does")
+        if namespace == ARG_NAMESPACE:
+            if name not in scope:
+                raise TemplateError(
+                    f"no argument '{name}' is bound here — @!{ARG_NAMESPACE}.{name}!@ reads a value the "
+                    f"call site passes or [chunks.<name>.defaults] supplies"
+                )
+            return render(scope[name], chunks, scope, overlays, dynamic, depth + 1)
+        if namespace == DYNAMIC_NAMESPACE:
+            if dynamic is None or name not in dynamic:
+                known = ", ".join(sorted(dynamic or ())) or "(none)"
+                raise TemplateError(f"unknown invocation parameter '{name}' — @!{DYNAMIC_NAMESPACE}.…!@ names {known}")
+            # A parameter is a value, not a body: it renders as itself. Marker
+            # syntax reaching one from a map flag ships as literal text, which
+            # assert_no_residual_markers refuses.
+            return dynamic[name]
+        entry = None if overlays is None else overlays.get(f"{namespace}.{name}")
+        if entry is None:
+            return ""
+        # Verbatim in place, unwrapped: the anchor is a hole in the base text
+        # and the source's text is what fills it, so any lead-in an author
+        # wants is theirs to write. Marker-expanded like a chunk body, so a
+        # typo'd reference inside it fails loudly.
+        return render(entry[0], chunks, scope, overlays, dynamic, depth + 1)
 
     return MARKER.sub(expand, text)
 
@@ -972,27 +1414,38 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def banner(
-    template: Path,
-    *,
-    body_hash: str,
-    tuning: tuple[Path, str | None] | None = None,
-) -> str:
-    """The four-line YAML-comment block stamped into frontmatter. `body_hash`
-    is the sha256 of everything that will follow the block — the definition's
-    claim to being unmodified since it was written. `tuning` is (family file,
-    model or None) when rendering a tuned set; the banner then also claims the
-    tuning, so check can hold it to that claim."""
-    origin = f"{rel(template)} and {rel(SHARED_SECTIONS)}"
-    if tuning is not None:
-        family, model = tuning
-        origin += f" with model family {rel(family)}"
-        if model is not None:
-            origin += f", model {model}"
+def tuning_line(tuning: Tuning, *, seat: str | None) -> str:
+    """The banner's !TUNING! line: the run's whole triple, plus this
+    definition's own seat and the member it resolved against.
+
+    `seat`/`member` are deliberately not spelled `tier` — that key is already
+    spent on the tier MAP, and two different things named tier in one line is
+    how a parser and a human come to disagree. An output with no pin site
+    records `seat=none member=none`.
+    """
+    member = "none" if seat is None else tuning.tier_map[seat]
+    return (
+        f"# !TUNING! family={rel(tuning.family)}"
+        f" seat={seat or 'none'} member={member}"
+        f" tier={map_spec(tuning.tier_map)} pin={map_spec(tuning.pin_map)}"
+        f" stock={','.join(tuning.stock) or 'none'}"
+    )
+
+
+def banner(template: Path, *, body_hash: str, tuning: Tuning, seat: str | None = None) -> str:
+    """The five-line YAML-comment block stamped into frontmatter.
+
+    `body_hash` is the sha256 of everything that will follow the block — the
+    definition's claim to being unmodified since it was written. The !TUNING!
+    line sits ABOVE it, because BODY_HASH_CLAIM matches the hash line together
+    with the `#` closing the block around it. `tuning` is always present: with
+    --family defaulting to claude there is no untuned render left to represent.
+    """
     return (
         "#\n"
-        f"# !GENERATED! from {origin}"
+        f"# !GENERATED! from {rel(template)} and {rel(SHARED_CHUNKS)}"
         " — edit those. DO NOT HAND EDIT THIS FILE.\n"
+        f"{tuning_line(tuning, seat=seat)}\n"
         f"# !BODY-SHA256! {body_hash}\n"
         "#"
     )
@@ -1008,7 +1461,18 @@ def banner_body(text: str) -> str | None:
 def body_untouched(text: str) -> bool:
     """Is this file provably unmodified tool output, its post-banner bytes
     hashing to exactly what its own banner claims? A pre-1.5.0 banner carries
-    no hash line, proves nothing, and is treated as possibly hand-edited."""
+    no hash line, proves nothing, and is treated as possibly hand-edited.
+
+    Line endings are translated first, and that is what makes this the single
+    write-safety reading ARCHITECTURE.md promises rather than two. Generation
+    reads its targets through read_text, whose universal newlines hand this
+    function a CRLF target already translated; install reads raw bytes and hands
+    it the CRLF through. Without the translation here the same file is
+    unmodified output to one caller and hand-written content to the other, and a
+    consumer tree some tool normalized to CRLF backs every file up, on every
+    re-install, under a line accusing the operator of edits nobody made.
+    """
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     match = BODY_HASH_CLAIM.search(text)
     return match is not None and match.group(1) == sha256_text(text[match.end() :])
 
@@ -1043,6 +1507,21 @@ def frontmatter_pin(text: str) -> str | None:
     return match.group(1) if match else None
 
 
+def output_tier(probe_text: str) -> str | None:
+    """The output's own tier, read out of a DISCOVERY render's frontmatter pin.
+
+    Three legal readings, and only the first is a tier: the sentinel the probe
+    binding put there; a literal pin, which comes back as itself and declares
+    no tier; and no pin site at all. None is not a failed resolution — it is a
+    property of the output's type (or of a pin site not yet tokenized).
+    """
+    pin = frontmatter_pin(probe_text)
+    if pin is None or not pin.startswith(TIER_SENTINEL):
+        return None
+    tier = pin[len(TIER_SENTINEL) :]
+    return tier if tier in TIERS else None
+
+
 def banner_claim(text: str) -> str | None:
     """Return the template path a definition's banner claims, if it has one."""
     front = frontmatter_of(text)
@@ -1052,22 +1531,33 @@ def banner_claim(text: str) -> str | None:
     return match.group(1) if match else None
 
 
-def tuning_claim(text: str) -> tuple[str, str | None] | None:
-    """Return the (family file, model) a definition's banner claims it was
-    tuned with, or None for an untuned (or bannerless) definition."""
+class TuningClaim(NamedTuple):
+    """A banner's !TUNING! line, parsed back. Strings throughout: it is a claim
+    read off a file, compared against another claim, never re-resolved."""
+
+    family: str
+    seat: str
+    member: str
+    tier: str
+    pin: str
+    stock: str
+
+
+def tuning_claim(text: str) -> TuningClaim | None:
+    """Return the tuning a definition's banner claims, or None when it carries
+    no !TUNING! line (a bannerless file, or one written before 3.0.0)."""
     front = frontmatter_of(text)
     if front is None:
         return None
     match = TUNING_CLAIM.search(front)
-    return (match.group(1), match.group(2)) if match else None
+    return TuningClaim(*match.groups()) if match else None
 
 
-def describe_tuning(claim: tuple[str, str | None] | None) -> str:
-    """A tuning claim as printed in MISTUNED reports."""
+def describe_tuning(claim: TuningClaim | None) -> str:
+    """A tuning claim as MISTUNED prints it."""
     if claim is None:
-        return "no model family"
-    family, model = claim
-    return f"model family {family}" + (f", model {model}" if model else "")
+        return "no tuning claim"
+    return f"family {claim.family}, seat {claim.seat}, member {claim.member}, " f"tier[{claim.tier}] pin[{claim.pin}]"
 
 
 def split_outputs(path: Path) -> tuple[dict[str, dict[str, str]], str]:
@@ -1081,12 +1571,13 @@ def split_outputs(path: Path) -> tuple[dict[str, dict[str, str]], str]:
         model = "opus"
         +++
         ---
-        name: @@name@@
-        model: @@model@@
+        name: @!arg.name!@
+        model: @!arg.model!@
         ...
 
-    Each key becomes an @@placeholder@@ in the body, plus @@name@@ bound to the
-    output's own name. A template with no block renders one definition named
+    The fence BINDS, so its keys are bare; the body READS them as
+    @!arg.<key>!@, plus @!arg.name!@ bound to the output's own name. A template
+    with no block renders one definition named
     after the template.
     """
     text = path.read_text(encoding="utf-8")
@@ -1108,35 +1599,86 @@ def split_outputs(path: Path) -> tuple[dict[str, dict[str, str]], str]:
 
 def render_output(
     body: str,
-    chunks: dict[str, dict],
+    binding: TierBinding,
     params: dict[str, str],
-    resolve: Callable[[str | None], NBMap | None],
-) -> str:
-    """Render one declared output, its NBs resolved against its own model pin.
+    resolve: Callable[[str | None], OverlayMap | None],
+) -> tuple[str, str | None]:
+    """Render one declared output; return (text, the tier it declared).
 
-    The pin lives in the output's rendered frontmatter, so it can only be read
-    from a render: the body is rendered once under the unpinned resolution to
-    read it, and re-rendered only when the pin resolves to a different NB set.
-    NB anchors are authored in prompt bodies, never in frontmatter, so the pin
-    the first pass reads is the pin the second pass renders under.
+    Two passes, both over the raw body. Pass A renders under `binding.probe`,
+    whose tier tokens carry a marker-free sentinel, so reading the pin out of
+    that render's frontmatter yields the output's own tier — an outputs-table
+    `model` parameter and a literal frontmatter line are the same thing here,
+    exactly as they are to frontmatter_pin. Pass B renders under `binding.real`
+    and the overlay set the tier resolves.
+
+    Pass B is UNCONDITIONAL. Skipping it when the overlay set is unchanged — the
+    optimization this replaced — would ship pass A's sentinel text into a
+    system prompt wherever a tier token sits in a body or chunk. Pass A's
+    output is never written, never hashed, and never returned.
     """
-    unpinned = resolve(None)
-    text = render(body, chunks, params, unpinned)
+    tier = output_tier(render(body, binding.chunks, params, resolve(None), binding.probe))
+    return render(body, binding.chunks, params, resolve(tier), binding.real), tier
+
+
+def assert_tiered(text: str, tier: str | None, *, path: Path, name: str) -> None:
+    """Refuse a rendered output whose pin site resolved no tier.
+
+    A pin site declares its tier with one of the five tier tokens, and every
+    pin site does: the alternative — a literal pin — renders exactly the bytes
+    the token would have, so it costs the definition its model scope and
+    nothing else, which is a loss no diff and no check can show. Refusing here
+    is what keeps that from being how a new template arrives.
+
+    An output with NO pin site is untouched by this. It carries no `model:` key
+    at all, which is a property of its type, not a failed resolution.
+    """
     pin = frontmatter_pin(text)
-    if pin is None:
-        return text
-    nb = resolve(pin)
-    return text if nb == unpinned else render(body, chunks, params, nb)
+    if tier is not None or pin is None:
+        return
+    tokens = ", ".join(f"@!{DYNAMIC_NAMESPACE}.{TIER_TOKEN_PREFIX}{seat}!@" for seat in TIERS)
+    raise TemplateError(
+        f"{rel(path)}: output '{name}' pins 'model: {pin}' literally, which "
+        f"resolves no tier — declare the tier with one of {tokens}, whose "
+        f"rendered text the pin map supplies"
+    )
+
+
+RESIDUAL_MARKER = re.compile(r"@!|!@")
+
+
+def assert_no_residual_markers(text: str, *, path: Path, name: str) -> None:
+    """Refuse a rendered output that still carries a literal marker delimiter
+    — '@!' or '!@' — anywhere in it.
+
+    render() only ever consumes a span matching MARKER — a name and every
+    argument key drawn from IDENTIFIER, plus its quoted arguments. A marker
+    mistyped past that syntax (wrong case, an underscore, a stray character)
+    is therefore never a marker to render() at all: it is ordinary text that
+    happens to spell "@!...!@", passes through untouched, and ships verbatim
+    into what becomes an agent's system prompt — with no chunk, no overlay,
+    and no error to say so. A name inside valid syntax but unknown to
+    render() is already caught there, before this ever runs; what reaches
+    here is the harder case, a marker no regex recognized as an attempt in
+    the first place. Naming the line spares a maintainer a grep for it.
+    """
+    for lineno, line in enumerate(text.splitlines(), start=1):
+        if RESIDUAL_MARKER.search(line):
+            raise TemplateError(
+                f"{rel(path)}: output '{name}' renders a literal marker delimiter at line {lineno}: {line.strip()!r} "
+                f"— a marker mistyped past MARKER's syntax, or literal text that needs escaping; "
+                f"rendered output must hold no marker syntax at all"
+            )
 
 
 def render_template(
     path: Path,
-    chunks: dict[str, dict],
+    binding: TierBinding,
     out_dir: Path,
     *,
     surface: str,
-    nb: NBSource = None,
-    tuning: tuple[Path, str | None] | None = None,
+    overlays: OverlaySource = None,
+    tuning: Tuning,
 ) -> list[tuple[Path, str]]:
     """Render every definition a template declares, banner stamped into each.
 
@@ -1146,12 +1688,19 @@ def render_template(
     templates may open with one (banner injected identically) or with bare
     prompt text (a minimal banner-only frontmatter block is emitted above it).
     The banner is stamped last, since it carries the hash of what follows it.
+
+    This is where an output's pin site is held to declaring a tier
+    (assert_tiered) and where a rendered body is held to carrying no leftover
+    marker syntax (assert_no_residual_markers), because this is the first
+    point that knows both the render and the name of the output it came from.
     """
     outputs, body = split_outputs(path)
-    resolve = as_resolver(nb)
+    resolve = as_resolver(overlays)
     rendered = []
     for name, params in sorted(outputs.items()):
-        text = render_output(body, chunks, params, resolve)
+        text, tier = render_output(body, binding, params, resolve)
+        assert_tiered(text, tier, path=path, name=name)
+        assert_no_residual_markers(text, path=path, name=name)
         if text.startswith("---\n"):
             # YAML comments: valid frontmatter, dropped by every parser, and
             # outside the body that becomes the prompt.
@@ -1160,7 +1709,7 @@ def render_template(
             rest = "---\n" + text
         else:
             raise TemplateError(f"{rel(path)}: agent template must open with YAML frontmatter")
-        stamp = banner(path, body_hash=sha256_text(rest), tuning=tuning)
+        stamp = banner(path, body_hash=sha256_text(rest), tuning=tuning, seat=tier)
         rendered.append((out_dir / f"{name}.md", "---\n" + stamp + "\n" + rest))
     return rendered
 
@@ -1252,7 +1801,7 @@ def check_banner_claims(smap: dict[str, tuple[Path, Path]], globs: GlobMap | Non
 
 REFUSAL = (
     "exists without the generated banner — refusing to overwrite. If it should "
-    "be generated, delete it and re-run; otherwise remove its template."
+    "be generated, delete it and re-run; otherwise rename the colliding file."
 )
 
 # A backup sits beside the file it backs up. The repo's root *.bak gitignore
@@ -1290,91 +1839,105 @@ def back_up(target: Path) -> Path:
 
 
 def all_renders(
-    chunks: dict[str, dict],
+    binding: TierBinding,
     smap: dict[str, tuple[Path, Path]],
-    nb: NBSource = None,
-    tuning: tuple[Path, str | None] | None = None,
+    overlays: OverlaySource = None,
     globs: GlobMap | None = None,
+    *,
+    tuning: Tuning,
 ) -> list[tuple[Path, str]]:
     """Every (target, rendered text) pair across every template, sorted — the
-    ones `globs` selects, when a selection is in force."""
+    ones `globs` selects, when a selection is in force.
+
+    `tuning` is required rather than defaulted: every render runs under a
+    triple, so a None one has no reading — it would reach banner() as a
+    provenance claim with nothing to claim.
+    """
     pairs = []
     for surface, template, out_dir in template_targets(smap, globs):
         surface_root = smap[surface][1]
         pairs.extend(
             pair
-            for pair in render_template(template, chunks, out_dir, surface=surface, nb=nb, tuning=tuning)
+            for pair in render_template(template, binding, out_dir, surface=surface, overlays=overlays, tuning=tuning)
             if selected(surface, output_key(pair[0], surface_root), globs)
         )
     return sorted(pairs, key=lambda pair: rel(pair[0]))
 
 
-def assert_output_dirs(out_dirs: set[Path]) -> None:
-    """Guard against a wrong output-dir constant, which would otherwise exit 0
-    while writing to the wrong place: every surface directory receiving output
-    must be an existing directory strictly inside this repository. Mirrored
-    subdirectories beneath a surface are not covered — they are declared by the
-    template tree, not by a constant, and are created on demand."""
-    root = REPO_ROOT.resolve()
-    for out_dir in sorted(out_dirs):
-        resolved = out_dir.resolve()
-        if not (resolved.is_dir() and resolved != root and resolved.is_relative_to(root)):
-            raise TemplateError(
-                f"output directory '{out_dir}' is not an existing directory "
-                f"inside the repository — refusing to write"
-            )
-
-
-def report_nb(
-    entries: dict[str, dict],
-    nb: NBMap,
-    tuning: tuple[Path, str | None],
-) -> None:
-    """State which anchors the family file filled, and from which scope. Under
-    a model SPEC, that is the resolution the flavor gives an UNPINNED output; a
-    pinned one resolves its own model scope (report_model_flavor accounts for
-    which outputs are which)."""
-    family, model = tuning
+def report_overlays(entries: dict[str, dict], overlays: OverlayMap, tuning: Tuning) -> None:
+    """State which anchors the family file filled, and from which scope, for an
+    output with no tier — the family-wide resolution every output starts from.
+    Prints nothing for a family declaring no anchors, which is every default
+    run today."""
+    if not entries:
+        return
     print()
-    print(f"NB anchors from {rel(family)}" + (f" (model {model}, as unpinned outputs resolve it)" if model else ""))
+    print(f"overlay anchors from {rel(tuning.family)}")
     print("=" * 60)
     for anchor in sorted(entries):
-        scope = nb[anchor][1] if anchor in nb else "unfilled (no scope matched)"
+        scope = overlays[anchor][1] if anchor in overlays else "unfilled (no scope matched)"
         print(f"  {anchor:<28} {scope}")
 
 
-def report_model_flavor(model: str, family: Path, pairs: list[tuple[Path, str]]) -> None:
-    """Account for where a model SPEC landed. It is the export flavor: it tunes
-    the outputs carrying no frontmatter pin and is ignored by the rest. Said out
-    loud whenever the SPEC named a model — a flavored render that reached
-    nothing must not read like one that worked. A family SPEC asked for no model
-    scope on unpinned outputs, so it has no reach to account for and prints
-    nothing here."""
-    pinned = sum(1 for _, text in pairs if frontmatter_pin(text) is not None)
-    unpinned = len(pairs) - pinned
-    asked = f"--model-family {model} (model in family {rel(family)})"
-    print()
-    if unpinned:
-        print(
-            f"{asked}: applied to {unpinned} unpinned output(s); "
-            f"skipped {pinned} pinned output(s) (pins own their tuning)"
-        )
-    else:
-        print(
-            f"{asked}: applied to 0 unpinned output(s) — all "
-            f"{pinned} output(s) carry a frontmatter pin (pins own their tuning)"
-        )
+def report_tuning(tuning: Tuning) -> None:
+    """The run's triple, echoed once in generate, check and install alike.
+
+    A DISPLAY serialization, deliberately not the banner's: the banner is a
+    machine claim check parses back and must stay stable across versions, while
+    this brackets each map for a human scanning a terminal and is free to
+    change. One shared serializer would couple a display choice to a parsed
+    contract — a tree-wide MISTUNED sweep caused by adding a space.
+    """
+    print(f"tuning: family={rel(tuning.family)} " f"tier[{map_spec(tuning.tier_map)}] pin[{map_spec(tuning.pin_map)}]")
+
+
+def report_divergence(tuning: Tuning, *, family_dir: Path = FAMILY_DIR) -> None:
+    """Notice — never a gate, never an exit status — when the two maps disagree
+    within the claude family.
+
+    Gated on the effective family file BEING claude.toml, however it was
+    reached. For any other family the two maps diverge at every tier by
+    construction — the tier map holds family members and the pin map holds
+    claude aliases — so the notice would fire five times a run carrying no
+    information. Within claude the namespaces coincide, so a divergence is a
+    deliberate act worth naming: tuning against one member's overrides while
+    shipping another's capacity is the isolation this feature exists to allow.
+    """
+    if tuning.family.resolve() != (family_dir / f"{DEFAULT_FAMILY}{FAMILY_SUFFIX}").resolve():
+        return
+    diverging = [tier for tier in TIERS if tuning.tier_map[tier] != tuning.pin_map[tier]]
+    if not diverging:
+        return
+    where = ", ".join(f"{tier} (tier={tuning.tier_map[tier]}, pin={tuning.pin_map[tier]})" for tier in diverging)
+    print(f"notice: tier map and pin map diverge at {where} — tuning/capacity isolation, not an error")
+
+
+def report_tuned(tuning: Tuning) -> None:
+    """Notice — one summary line, never per-tier, never an error — naming the
+    tiers whose mapped member the family declares overrides for, and the member
+    each one resolved to.
+
+    Silence is the stock render: no mapped member carries a
+    [family.*.models.<member>] table, which is every run of both shipped families
+    today. The set is the complement of `tuning.stock` rather than a second
+    walk of the family entries, so this line and the banner's `stock=` field
+    answer out of one computation and cannot drift apart.
+    """
+    tuned = [tier for tier in TIERS if tier not in tuning.stock]
+    if not tuned:
+        return
+    where = ", ".join(f"{tier} ({tuning.tier_map[tier]})" for tier in tuned)
+    print(f"notice: member-scoped tuning is in force at {where} — {rel(tuning.family)} fills their anchors")
 
 
 def generate(
-    chunks: dict[str, dict],
+    binding: TierBinding,
     smap: dict[str, tuple[Path, Path]],
     *,
-    nb: NBSource = None,
-    tuning: tuple[Path, str | None] | None = None,
+    overlays: OverlaySource = None,
     globs: GlobMap | None = None,
-    explicit_root: bool = False,
     verbose: bool = False,
+    tuning: Tuning,
 ) -> bool:
     clean = True
     unchanged = 0
@@ -1385,15 +1948,10 @@ def generate(
         print(f"  ERROR      no templates found under {rel(TEMPLATES_DIR)}/")
         return False
 
-    pairs = all_renders(chunks, smap, nb, tuning, globs)
-    if not explicit_root:
-        # The wrong-constant guard covers the surface directories only; the
-        # mirrored subdirectories below them come from the template tree.
-        assert_output_dirs({smap[surface][1] for surface, _, _ in found})
-    # The --output-dir root itself was asserted to exist when the surface map
-    # was built. Everything below a surface — the surface directory under an
-    # explicit root, and mirrored subdirectories under either mode — is
-    # created as needed.
+    pairs = all_renders(binding, smap, overlays, globs, tuning=tuning)
+    # The output root itself was asserted to exist when the surface map was
+    # built. Everything below it — each surface directory, and the mirrored
+    # subdirectories under those — is created as needed.
     for out_dir in sorted({target.parent for target, _ in pairs}):
         out_dir.mkdir(parents=True, exist_ok=True)
     landed: dict[str, int] = {}
@@ -1440,14 +1998,14 @@ def generate(
 
 
 def check(
-    chunks: dict[str, dict],
+    binding: TierBinding,
     smap: dict[str, tuple[Path, Path]],
     *,
-    nb: NBSource = None,
-    tuning: tuple[Path, str | None] | None = None,
+    overlays: OverlaySource = None,
     globs: GlobMap | None = None,
     verbose: bool = False,
     show_diff: bool = True,
+    tuning: Tuning,
 ) -> bool:
     clean = True
     print()
@@ -1459,15 +2017,9 @@ def check(
         print(f"  ERROR    no templates found under {rel(TEMPLATES_DIR)}/")
         clean = False
 
-    # Check runs under exactly one tuning configuration — the one it was
-    # invoked with — and holds every target's banner to that claim.
-    expected_tuning = None
-    if tuning is not None:
-        expected_tuning = (rel(tuning[0]), tuning[1])
-
-    for target, rendered in all_renders(chunks, smap, nb, tuning, globs):
+    for target, rendered in all_renders(binding, smap, overlays, globs, tuning=tuning):
         if not target.exists():
-            print(f"  {'MISSING':<8} {rel(target)} — run --generate")
+            print(f"  {'MISSING':<8} {rel(target)} — run: just generate")
             clean = False
             continue
 
@@ -1483,14 +2035,17 @@ def check(
             continue
 
         clean = False
+        # The expected claim is this output's OWN render, not the run's triple:
+        # `seat` and `member` are per-output, so only the render knows them.
         claimed = tuning_claim(actual)
-        if claimed != expected_tuning:
+        expected = tuning_claim(rendered)
+        if claimed != expected:
             # A tuning mismatch would also show as a byte diff (the banner is
             # part of the render); name the mismatch instead of dumping it.
             print(
                 f"  {'MISTUNED':<8} {rel(target)} — banner claims "
                 f"{describe_tuning(claimed)}, but check ran with "
-                f"{describe_tuning(expected_tuning)}"
+                f"{describe_tuning(expected)}"
             )
             continue
         print(f"  {'DRIFT':<8} {rel(target)} — differs from rendered template")
@@ -1523,12 +2078,12 @@ def check(
     else:
         print(
             f"Drift detected. Edit the definition's template under "
-            f"{rel(TEMPLATES_DIR)}/ or {rel(SHARED_SECTIONS)},\n"
+            f"{rel(TEMPLATES_DIR)}/ or {rel(SHARED_CHUNKS)},\n"
             f"then run: just generate"
         )
         if claim_errors:
             print(
-                "ORPHAN/MISLABELED is not fixed by --generate: restore the named "
+                "ORPHAN/MISLABELED is not fixed by regenerating: restore the named "
                 "template, or delete the stale definition."
             )
     return clean
@@ -1544,15 +2099,62 @@ INSTALL_EXCLUDED_DIRS = frozenset({"tests", "__pycache__", ".pytest_cache"})
 INSTALL_EXCLUDED_NAMES = frozenset({".DS_Store"})
 INSTALL_EXCLUDED_SUFFIX = ".bak"
 
+# Project documentation: the closed vocabulary of filenames that document a
+# project TO ITS OWN DEVELOPERS. A consuming project installs the code, not the
+# project the code came from — a shipped package's SPEC and ARCHITECTURE state
+# its contract for someone changing it here, its CONVENTIONS carries house rules
+# for working inside this repository (kb_tools' names the tooling repo's own
+# justfile targets), and ROADMAP, AGENTS and CLAUDE are development apparatus by
+# definition. A rule and not a list: it is the same vocabulary the contract-doc
+# precedence chain is spelled in, so it is closed, and adding a package or a
+# docs/ directory below one needs no edit here.
+#
+# Matched by NAME at any depth, never by placement or suffix. `README.md` is
+# deliberately absent: it is the one name in that vocabulary a package writes
+# for its consumer rather than its maintainer, so a package that grows one is
+# shipping it on purpose. `.tmpl` files are payload rather than documentation —
+# kb_tools/installed/CONVENTIONS.md.tmpl is written into a consuming project's
+# own KB by a build — and match nothing here.
+INSTALL_EXCLUDED_DOCS = frozenset(
+    {"SPEC.md", "ARCHITECTURE.md", "CONVENTIONS.md", "ROADMAP.md", "AGENTS.md", "CLAUDE.md"}
+)
+
+# The shipped code packages: (source directory in this repository, destination
+# relative to the install ROOT). Both paths are POSIX-relative strings.
+#
+# The destination is a CONSUMER CONTRACT and is frozen. Runner snippets already
+# installed in consuming projects name `.claude/agents/kb_tools/…`, and every
+# definition body writes its paths against `.claude/agents/…` (SPEC.md,
+# Deployed Surfaces), so a consuming project cannot be asked to notice that
+# this repository rearranged itself. Stating the pairing as data is what lets
+# the source side move while the destination side does not — the two are one
+# fact only for as long as the destination is derived from directory
+# placement.
+#
+# Rows are read by install_pairs (which carves a row's files out of the
+# surface walk when its source lies inside a surface, so nothing is emitted
+# twice) and by assert_install_root (which must guard a package source
+# wherever it sits). Relocating a package is therefore an edit to this table
+# and to nothing else.
+SHIPPED_PACKAGES = (
+    ("kb_tools", "agents/kb_tools"),
+    ("liaison_tools", "agents/liaison_tools"),
+)
+
 # The !INSTALLED! banner: what a copied file says about itself. Deterministic
 # text — nothing dated, nothing per-run — so an unchanged source re-installs to
 # the identical bytes.
-INSTALLED_NOTICE = "!INSTALLED! from the agents repo — do not edit in place; " "edit the source repo and re-install."
+INSTALLED_NOTICE = "!INSTALLED! from the adjagent repo — do not edit in place; " "edit the source repo and re-install."
 # Filetypes whose comment syntax can carry the banner as `#` lines. A suffix
 # absent here and not .md admits no comment we can rely on (JSON is the case
 # in point), so its file is copied verbatim and the install reports it.
 HASH_COMMENT_SUFFIXES = frozenset({".py", ".sh", ".toml", ".mk", ".just"})
 MARKDOWN_SUFFIX = ".md"
+# Third-party source vendored into a shipped package lives under a directory of
+# this name. Its files ship — this is a STAMPING carve-out, never an exclusion —
+# but they are copied verbatim: the banner would claim adjagent provenance over
+# code we did not write and send its reader to the wrong source repository.
+VENDOR_DIR = "_vendor"
 # The only mode bits an install ever sets, and only on a file it just created:
 # an executable source (the liaison shell tools) must land runnable. An update
 # writes in place and inherits whatever mode the target already carries.
@@ -1563,6 +2165,17 @@ def bannerable(source: Path) -> bool:
     """Does this file's type admit a comment the !INSTALLED! banner can live
     in? (Whether it *needs* one is install_content's question.)"""
     return source.suffix == MARKDOWN_SUFFIX or source.suffix in HASH_COMMENT_SUFFIXES
+
+
+def vendored(key: Path) -> bool:
+    """Is this install key inside a shipped package's `_vendor/` tree?
+
+    Decided on the DESTINATION key, as every other piece of install accounting
+    is (install_pairs), and never on the source path: a source root that itself
+    sits somewhere under a `_vendor/` directory would otherwise carve out the
+    whole product. Directory names match at any depth; a file named `_vendor`
+    is not one."""
+    return VENDOR_DIR in key.parts[:-1]
 
 
 def stamp_installed(text: str, *, style: str) -> str:
@@ -1606,10 +2219,10 @@ def install_content(source: Path, *, surface: str) -> str | None:
     `surface` decides where a markdown file with no frontmatter of its own puts
     the banner, on the same split render_template already makes: a command is
     given a minimal frontmatter block (its first BODY line is the description
-    Claude Code lists it by, so nothing may displace it), while supporting
-    material under agents/ takes an HTML comment instead — frontmatter there
-    would make a methodology topic look extractable as a definition body, which
-    SPEC.md's Guest-Extraction Contract requires it not to be.
+    Claude Code lists it by, so nothing may displace it), while frontmatter-less
+    markdown under agents/ takes an HTML comment instead — frontmatter there
+    would present supporting material as a dispatchable definition, which it is
+    not.
     """
     if not bannerable(source):
         return None
@@ -1679,146 +2292,806 @@ def excluded_from_install(relpath: Path) -> bool:
     return (
         bool(INSTALL_EXCLUDED_DIRS.intersection(relpath.parts[:-1]))
         or relpath.name in INSTALL_EXCLUDED_NAMES
+        or relpath.name in INSTALL_EXCLUDED_DOCS
         or relpath.suffix == INSTALL_EXCLUDED_SUFFIX
     )
 
 
+def assert_install_root(root: Path, *, source_root: Path = REPO_ROOT) -> None:
+    """Guard against installing this repository into itself.
+
+    An install stamps an !INSTALLED! banner into every copied file and renders
+    definitions into ROOT's two surfaces, so a ROOT overlapping a package
+    source rewrites the source it is copying from; a second run — the content
+    now hashing to its own banner — nests a second banner inside the first
+    and, being unrecognizable as this tool's output, does so with no backup.
+
+    Both paths are resolved before comparison, so a symlink or a `..` segment
+    cannot route around the check, and containment is tested in both directions:
+    a ROOT *inside* a package source is as fatal as a ROOT *containing* one.
+
+    The guarded set is the shipped code packages, read from SHIPPED_PACKAGES
+    rather than assumed to sit under a deployed surface: a package source
+    outside every surface is still a source this install reads and must never
+    be written back into. Every row's source sits at the repository top level
+    today, so the row is the only thing guarding it — and `install .` from the
+    repo root is refused by those rows, since the repo root contains every one
+    of them.
+    """
+    target = root.resolve()
+    for source, _ in SHIPPED_PACKAGES:
+        source_dir = (source_root / source).resolve()
+        if target.is_relative_to(source_dir) or source_dir.is_relative_to(target):
+            raise TemplateError(
+                f"install ROOT '{rel(root)}' is, or contains, this repository's own "
+                f"{source}/ package source ({rel(source_dir)}) — installing there would "
+                f"stamp banners into the very files it copies from. Install into a consuming "
+                f"project's .claude directory instead"
+            )
+
+
+def package_sources(surface: str) -> tuple[Path, ...]:
+    """The surface-relative paths within `surface` that a SHIPPED_PACKAGES row
+    owns, and which that surface's own walk must therefore skip.
+
+    Empty for every surface now that the package sources sit at the repository
+    top level — which is what made that relocation a change to
+    SHIPPED_PACKAGES alone. It stays because the carve-out is a property of the
+    table, not of today's arrangement: a package moved back under a surface
+    must still be emitted once."""
+    return tuple(
+        Path(source).relative_to(surface) for source, _ in SHIPPED_PACKAGES if Path(source).is_relative_to(surface)
+    )
+
+
 def install_pairs(smap: dict[str, tuple[Path, Path]], *, source_root: Path = REPO_ROOT) -> list[tuple[str, Path, Path]]:
-    """(surface-relative key, source, target) for every file an install copies:
-    the deployed surfaces entire, minus the exclusion list. The generated
-    definitions are copied like everything else — a checked-in surface already
-    holds each one's base render."""
+    """(ROOT-relative key, source, target) for every file an install COPIES,
+    sorted by key: whatever the surfaces hold under `source_root`, plus the
+    shipped code packages at their frozen destinations, minus the exclusion
+    list. The definitions are not here — they are rendered, not copied, and
+    this repository has no surface directories for the walk to find. The walk
+    stays because `source_root` is a parameter: it is what makes the
+    source-to-destination mapping below testable against a source layout that
+    does have them.
+
+    The key is the file's destination, not its source. That is what keeps an
+    install's accounting — the per-surface counts, the report, a consuming
+    project's tree — invariant under a change to where a package's source
+    sits, which is the whole point of SHIPPED_PACKAGES.
+
+    A package row is delivered only when the surface owning its destination is
+    in `smap`, so `--surfaces commands` installs no agent-side package.
+    """
     found: list[tuple[str, Path, Path]] = []
-    for surface, (_, out_dir) in sorted(smap.items()):
-        surface_root = source_root / surface
-        if not surface_root.is_dir():
-            continue
-        for source in sorted(surface_root.rglob("*")):
+
+    def collect(walk_root: Path, key_root: Path, out_dir: Path, *, carved: tuple[Path, ...] = ()) -> None:
+        if not walk_root.is_dir():
+            return
+        for source in sorted(walk_root.rglob("*")):
             if not source.is_file():
                 continue
-            relpath = source.relative_to(surface_root)
-            if excluded_from_install(relpath):
+            relpath = source.relative_to(walk_root)
+            if excluded_from_install(relpath) or any(relpath.is_relative_to(owned) for owned in carved):
                 continue
-            found.append(((Path(surface) / relpath).as_posix(), source, out_dir / relpath))
-    return found
+            found.append(((key_root / relpath).as_posix(), source, out_dir / relpath))
+
+    for surface, (_, out_dir) in smap.items():
+        collect(source_root / surface, Path(surface), out_dir, carved=package_sources(surface))
+
+    for source_rel, dest_rel in SHIPPED_PACKAGES:
+        destination = Path(dest_rel)
+        surface, *below = destination.parts
+        if surface not in smap:
+            continue
+        collect(source_root / source_rel, destination, smap[surface][1].joinpath(*below))
+
+    return sorted(found, key=lambda pair: pair[0])
 
 
-def install(
-    chunks: dict[str, dict],
-    smap: dict[str, tuple[Path, Path]],
-    *,
-    root: Path,
-    nb: NBSource = None,
-    tuning: tuple[Path, str | None] | None = None,
-    source_root: Path = REPO_ROOT,
-    verbose: bool = False,
-) -> bool:
-    """Install the full product into `root` (a consuming project's .claude).
+def quiet_pass(run: Callable[[], bool], *, verbose: bool) -> bool:
+    """Run an install's integrity or render pass, holding its file-by-file
+    report back unless it has something to say.
 
-    A recursive copy of the deployed surfaces under `source_root` (this
-    repository, in every real invocation), minus the exclusion list, with an
-    !INSTALLED! banner stamped into every copied file whose type admits one.
-    The copied definitions are already their own base renders, so an untuned
-    install renders nothing and merely checks the result; a tuned install runs
-    the ordinary generation pass over the copy, which rewrites what the flavor
-    changes without leaving backups behind (freshly copied definitions are
-    provably untouched output).
+    An install reports by exception: a fresh install and a clean overwrite are
+    both non-events, so the pass prints only when it came back unclean — or when
+    --verbose asked for everything. The pass's own verdict is returned either
+    way, so what the install does with it never depends on what was printed.
+
+    A pass that raises has already printed the most useful part of its report —
+    how far it got before the template it could not render — and the buffer is
+    the only copy of it. Releasing the buffer in a finally is what keeps "held
+    back" from meaning "discarded on exactly the run that needed it".
     """
-    pairs = install_pairs(smap, source_root=source_root)
-    print("Installing deployed surfaces")
-    print("=" * 60)
-    landed: dict[str, int] = {}
-    outcomes: dict[str, int] = {}
-    skipped: list[str] = []
-    for key, source, target in pairs:
-        surface = key.split("/", 1)[0]
-        content = install_content(source, surface=surface)
-        if content is None and not bannerable(source):
-            skipped.append(key)
-        outcome = install_file(source, target, content)
-        outcomes[outcome] = outcomes.get(outcome, 0) + 1
-        landed[surface] = landed.get(surface, 0) + 1
-        if verbose:
-            print(f"  {outcome:<10} {key}")
-    for surface, count in sorted(landed.items()):
-        print(f"  {'copied':<10} {count} file(s) into {rel(root / surface)}/")
-    if not pairs:
-        print(f"  ERROR      no installable files under {rel(source_root)}/")
-        return False
-
-    print()
-    if tuning is None:
-        # The copy IS the install: what landed is already each definition's
-        # base render, so this pass reports on the result without gating it —
-        # a target may hold material this tool never put there.
-        integrity = check(chunks, smap, verbose=verbose, show_diff=False)
-        verdict = "rendered 0, integrity " + ("OK" if integrity else "REPORTED ABOVE")
-        ok = True
-    else:
-        ok = generate(chunks, smap, nb=nb, tuning=tuning, explicit_root=True, verbose=verbose)
-        verdict = f"rendered {len(all_renders(chunks, smap, nb, tuning))}"
-
-    claim = None if tuning is None else (rel(tuning[0]), tuning[1])
-    backups = outcomes.get("backed up", 0)
-    print()
-    print(
-        f"install: copied {len(pairs)} "
-        f"({outcomes.get('unchanged', 0)} already current), "
-        f"{verdict}; {describe_tuning(claim)}"
-    )
-    print(
-        f"backups: {backups} extant file(s) copied aside as *.bak before being "
-        f"overwritten — an installed tree is an artifact, so its *.bak files "
-        f"are yours to delete."
-    )
-    if skipped:
-        print(f"unbannered: {len(skipped)} file(s) whose type admits no comment — " + ", ".join(skipped))
-    print(
-        "the installed tree is an artifact — re-install to update it; local "
-        "edits to installed files are replaced, not preserved."
-    )
+    buffer = io.StringIO()
+    ok = False
+    try:
+        with contextlib.redirect_stdout(buffer):
+            ok = run()
+    finally:
+        if verbose or not ok:
+            print(buffer.getvalue(), end="")
     return ok
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Generate and check the generated agent/command definitions.",
-        # Exact flag names only. Prefix abbreviation would silently keep the
-        # retired --model alive as an alias for --model-family, whose SPEC
-        # means something else entirely — the one collapse 2.0.0 exists to make
-        # would land as a wrong-argument bug instead of an unknown-flag error.
-        allow_abbrev=False,
+def install(
+    binding: TierBinding,
+    smap: dict[str, tuple[Path, Path]],
+    *,
+    root: Path,
+    overlays: OverlaySource = None,
+    source_root: Path = REPO_ROOT,
+    verbose: bool = False,
+    tuning: Tuning,
+) -> bool:
+    """Install the full product into `root` (a consuming project's .claude).
+
+    Two halves, in order. First a recursive copy of everything install_pairs
+    names under `source_root` — for this repository, the shipped packages at
+    their frozen destinations — minus the exclusion list, with an !INSTALLED!
+    banner stamped into every copied file whose type admits one and whose
+    provenance is this repository's (so never under `_vendor/`). Then the
+    ordinary generation pass, which renders the definitions into the surfaces
+    under `root`.
+
+    The definitions are rendered, never copied: this repository keeps no
+    checked-in render for a copy to read. The (family, tier-map, pin-map)
+    triple the install was given is simply the triple that render runs under,
+    which is why a default install and a tuned one are one code path rather
+    than a copy and a special case. Every target the pass meets is absent or
+    provably untouched output, so it leaves no backups behind.
+
+    Reports by exception. A clean install — every target either fresh or
+    overwritten with output provably this tool's own — is one summary line and
+    nothing else: what landed where. The lines beyond it are problems only, and
+    each names its files: a pass that came back unclean, and a target whose
+    extant content no install of this repo wrote, whose prior bytes this run put
+    aside as a .bak. --verbose still lists every file and names the two verbatim
+    populations apart: the unbannered ones, whose filetype (never their state)
+    is the whole of what makes them so, and the vendored ones under `_vendor/`,
+    which a banner would misattribute to this repository. A re-vendor to a new
+    pin therefore leaves one numbered .bak per changed file in a consumer's
+    tree — an unstamped file can never be proved this tool's own — which is the
+    per-upgrade cost of not lying about provenance.
+
+    The copy finishes before the render begins, so a render that raises leaves
+    the packages complete and the definitions partial under ROOT. What landed
+    is printed on the way out too — an operator shown only the error would read
+    it as "nothing happened."
+    """
+    assert_install_root(root, source_root=source_root)
+    pairs = install_pairs(smap, source_root=source_root)
+    if not pairs:
+        print(f"ERROR: no installable files under {rel(source_root)}/")
+        return False
+
+    landed: dict[str, int] = {}
+    unbannered: list[str] = []
+    unstamped: list[str] = []
+    clobbered: list[str] = []
+    for key, source, target in pairs:
+        surface = key.split("/", 1)[0]
+        # Two ways a copied file goes out verbatim, reported apart because the
+        # reasons are: a filetype with no comment syntax, and foreign source
+        # under _vendor/ whose provenance is not ours to claim.
+        is_vendored = vendored(Path(key))
+        content = None if is_vendored else install_content(source, surface=surface)
+        if is_vendored and bannerable(source):
+            unstamped.append(key)
+        elif content is None and not bannerable(source):
+            unbannered.append(key)
+        outcome = install_file(source, target, content)
+        landed[surface] = landed.get(surface, 0) + 1
+        if outcome == "backed up":
+            clobbered.append(key)
+        if verbose:
+            print(f"  {outcome:<10} {key}")
+
+    def summary(counts: dict[str, int]) -> str:
+        return ", ".join(f"{n} under {surface}/" for surface, n in sorted(counts.items()))
+
+    copied = summary(landed)
+    try:
+        # One pass, one triple, whatever the triple is. Both the effective
+        # triple and the tier resolver reach it — arguments this function was
+        # itself handed, and which a call site that dropped them would turn
+        # into a tree of definitions tuned differently from what their own
+        # banners claim, or a whole-tree MISTUNED verdict on a correct install.
+        integrity = quiet_pass(
+            lambda: generate(binding, smap, overlays=overlays, tuning=tuning, verbose=verbose),
+            verbose=verbose,
+        )
+        renders = all_renders(binding, smap, overlays, tuning=tuning)
+        for target, _ in renders:
+            for surface, (_, out_dir) in smap.items():
+                if target.is_relative_to(out_dir):
+                    landed[surface] = landed.get(surface, 0) + 1
+                    break
+        rendered = len(renders)
+        ok = integrity
+    except TemplateError:
+        # The copy finishes before the render starts, so ROOT already holds the
+        # shipped packages entire, and however far the render got, neither of
+        # which the error on its way out says anything about. An operator told
+        # only "error: unknown chunk" reads it as "the install did not happen";
+        # this is the last point at which anything can tell them otherwise.
+        print(f"installed: {copied} → {rel(root)} — the packages are in place; the render after them failed")
+        raise
+
+    counts = summary(landed)
+
+    tuned = ""
+    if not tuning.is_default:
+        # Report by exception, and every install renders now: a DEFAULT-triple
+        # render is the non-event, so only a triple that differs from the
+        # default one earns a clause. Keying this on `rendered` instead would
+        # append a count and a restatement of the defaults to every ordinary
+        # install — nothing an operator needs, and a description of nothing.
+        tuned = (
+            f"; {rendered} rendered under family {rel(tuning.family)}, "
+            f"tier[{map_spec(tuning.tier_map)}] pin[{map_spec(tuning.pin_map)}]"
+        )
+    print(f"installed: {counts} → {rel(root)}{tuned}")
+    if verbose and unbannered:
+        print(f"unbannered (type admits no comment): {len(unbannered)} file(s) — " + ", ".join(unbannered))
+    if verbose and unstamped:
+        print(f"unstamped (vendored third-party source): {len(unstamped)} file(s) — " + ", ".join(unstamped))
+    if not integrity:
+        print("integrity: NOT CLEAN — see the report above")
+    if clobbered:
+        print(
+            f"replaced: {len(clobbered)} installed file(s) held content no install of this repo "
+            "wrote; each one's prior content is beside it as a numbered *.bak, yours to delete:"
+        )
+        for key in clobbered:
+            print(f"  {key}")
+    return ok
+
+
+# ─── Operator-config integration ─────────────────────────────────────────────
+
+# The published operator baseline, and the file the bail path writes beside a
+# live one. The extension lands LAST — incoming.CLAUDE.md — so an editor still
+# opens it as Markdown.
+PUBLISHED_BASELINE = REPO_ROOT / "user-config" / "INSTALLED_CLAUDE.md"
+INCOMING_PREFIX = "incoming."
+# The single rolling backup this verb ever writes: the live file's own bytes as
+# they stood immediately before a write that changes them. Overwritten on the
+# next such write, left untouched by one that changes nothing, and never
+# written at all on the bail path (which never touches the live file) or the
+# exact-match no-op (which has nothing to keep). Named like INCOMING_PREFIX —
+# prefix first, .md last — for the same reason: an editor still reads it as
+# Markdown.
+BACKUP_PREFIX = "backup."
+# Below this difflib ratio against the nearest recovered revision — twice the
+# matched non-blank lines over the two files' total — a live file is taken to
+# share no ancestry with the baseline. Two documents on the same subject written
+# independently share whole lines only by accident, so a quarter is a low bar
+# deliberately: the consequence of the call, append rather than align, is
+# reported before it is taken and undoable by hand either way.
+MIN_ANCESTRY_SIMILARITY = 0.25
+# The report's unit: a `## ` heading, and the text above the first one.
+SECTION_HEADING = re.compile(r"^## +(.+?)\s*$")
+PREAMBLE_SECTION = "(preamble)"
+# git log's per-commit line, marked so a filename can never be read as one. A
+# unit separator rather than a NUL: this travels in argv, which cannot carry
+# one, and git renders a control byte in a path as an escape rather than
+# verbatim, so no filename can open with it.
+LOG_MARK = "\x1f"
+# case -> (what the report leads with, what it tells the operator to do). Every
+# branch of plan_integration lands on exactly one key.
+CASE_REPORT = {
+    "fresh": (
+        "no live file — the published baseline is installed whole",
+        "installed; nothing of yours was there to keep",
+    ),
+    "current": (
+        "the live file already matches the published baseline",
+        "nothing to do",
+    ),
+    "published": (
+        "the live file is an unmodified published revision — the update applies whole",
+        "updated; it carried no local edits to keep",
+    ),
+    "unrelated": (
+        "no shared ancestry — the baseline is appended to your file, not merged",
+        "appended below your own content: hand-edit out the duplication, and anything of "
+        "ours that contradicts what you wrote",
+    ),
+    "merged": (
+        "local edits kept, published changes merged in around them",
+        "merged; your own sections and edits are in the result",
+    ),
+    "bail": (
+        "no recovered base merges as whole blocks — the live file is left alone",
+        "integrate by hand from the incoming copy, then delete it",
+    ),
+}
+
+
+@dataclass(frozen=True)
+class Revision:
+    """One published revision of the baseline, as git holds it."""
+
+    commit: str
+    date: str
+    text: str
+
+    @property
+    def label(self) -> str:
+        return f"{self.commit[:8]} ({self.date})"
+
+
+@dataclass(frozen=True)
+class Integration:
+    """What an integration decided, before anything is written.
+
+    `case` keys CASE_REPORT; `base` is the published revision the live file was
+    matched against, absent where no base was needed or none was found;
+    `live_text` is what the operator's file becomes, None where it is not
+    touched at all; `incoming_text` lands beside it as incoming.CLAUDE.md on the
+    bail path and nowhere else.
+    """
+
+    case: str
+    base: Revision | None = None
+    live_text: str | None = None
+    incoming_text: str | None = None
+
+
+def git_output(cwd: Path, *args: str) -> str | None:
+    """A git command's stdout, or None where git could not answer — no binary,
+    no repository, no such revision.
+
+    None is a classification input rather than a failure: a caller with no
+    history recovers no base, and no base is the bail path."""
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(cwd), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            check=False,
+        )
+    except OSError:
+        return None
+    return done.stdout if done.returncode == 0 else None
+
+
+def baseline_revisions(source: Path) -> list[Revision]:
+    """Every published revision of `source`, newest first.
+
+    `--follow`, because the published baseline has been renamed
+    (user-config/CLAUDE.md -> INSTALLED_CLAUDE.md) and a revision from before
+    the rename is exactly the era an operator's file may date from. The path a
+    revision names is read back out of the log rather than assumed: `git show
+    <commit>:<path>` wants the path as it was at that commit, which a rename
+    changes.
+    """
+    log = git_output(
+        source.parent,
+        "log",
+        "--follow",
+        f"--format={LOG_MARK}%H %cs",
+        "--name-only",
+        "--",
+        source.name,
     )
-    parser.add_argument(
-        "--generate",
-        action="store_true",
-        help="render templates into the deployed surfaces (agents/, commands/)",
+    if log is None:
+        return []
+    revisions: list[Revision] = []
+    commit = date = ""
+    for line in log.splitlines():
+        if line.startswith(LOG_MARK):
+            commit, _, date = line[len(LOG_MARK) :].partition(" ")
+        elif line.strip() and commit:
+            text = git_output(source.parent, "show", f"{commit}:{line}")
+            if text is not None:
+                revisions.append(Revision(commit=commit, date=date, text=text))
+            commit = ""
+    return revisions
+
+
+def line_matcher(left: str, right: str) -> difflib.SequenceMatcher:
+    """The line-level comparison both candidate measures read.
+
+    Blank lines are dropped before comparing: they are a third of a Markdown
+    document's lines and every one of them matches every other, which pulls the
+    similarity of two unrelated documents toward the similarity of two related
+    ones. autojunk is off for the mirror-image reason — it would discard a line
+    recurring across a long document, and here that is the structure."""
+    return difflib.SequenceMatcher(
+        None,
+        [line for line in left.splitlines() if line.strip()],
+        [line for line in right.splitlines() if line.strip()],
+        autojunk=False,
     )
-    parser.add_argument(
-        "--install",
+
+
+def differing_lines(left: str, right: str) -> int:
+    """How many lines the two texts do not have in common — the distance
+    candidate bases are ordered by, nearest first."""
+    return sum(
+        (i2 - i1) + (j2 - j1) for tag, i1, i2, j1, j2 in line_matcher(left, right).get_opcodes() if tag != "equal"
+    )
+
+
+@dataclass(frozen=True)
+class Block:
+    """One paragraph of a document, and the exact bytes it occupies there.
+
+    `text` — the paragraph's lines with the blank lines around them stripped
+    away — is what a merge aligns and compares on. `raw` is what a merge emits:
+    the same lines exactly as their document holds them, followed by the blank
+    lines that separated them from what came next. The two are kept apart
+    because only the first is a statement about content: two blocks saying the
+    same thing with different spacing are the same paragraph and different
+    bytes, and an integration has to honour both readings at once.
+    """
+
+    text: str
+    raw: str
+
+
+def blocks(text: str) -> list[Block]:
+    """`text` as blocks, one per paragraph, partitioning it: every byte lands in
+    exactly one block, so `stitch(blocks(text))` is `text` again.
+
+    The merge unit, and the whole of the safety discriminator: a paragraph is
+    bounded by blank lines on both sides by construction, so a merge over these
+    units adds, drops or replaces whole blocks and can never edit inside one.
+    Each block carries its own trailing blank lines — and the first carries the
+    document's leading ones — because those bytes are the operator's too, and a
+    block copied through a merge has to bring its spacing with it. A document
+    with no content line at all is the one exception, holding no blocks and so
+    stitching back as empty: there is nothing there for a merge to carry.
+    """
+    found: list[Block] = []
+    lines: list[str] = []
+    content: list[str] = []
+    ended = False
+    for line in text.splitlines(keepends=True):
+        if line.strip():
+            if ended:
+                found.append(Block(text="\n".join(content), raw="".join(lines)))
+                lines, content, ended = [], [], False
+            content.append(line.rstrip("\r\n"))
+        else:
+            ended = bool(content)
+        lines.append(line)
+    if content:
+        found.append(Block(text="\n".join(content), raw="".join(lines)))
+    return found
+
+
+def stitch(units: list[Block]) -> str:
+    """Blocks back into a document, each contributing its own bytes verbatim.
+
+    Write authority ends at the seam. A block brings the separator it had where
+    it came from, so a run of blocks out of one document reproduces that
+    document exactly — spacing, whitespace-only lines and all. The only bytes
+    this adds are at a joint the merge itself created, where a block that ended
+    its own document meets one that followed it nowhere: there it TOPS UP to the
+    blank line that keeps two paragraphs two, adding just the shortfall and
+    never removing what is already there. Trailing blank lines someone wrote are
+    content, not slack to be trimmed on the way past.
+    """
+    out: list[str] = []
+    for unit in units:
+        if out and out[-1].splitlines()[-1].strip():
+            out.append("\n" if out[-1].endswith("\n") else "\n\n")
+        out.append(unit.raw)
+    return "".join(out)
+
+
+#: An edit as both sides can compare it: where it applies in the base, and the
+#: paragraphs it puts there. Spacing is deliberately absent — two sides writing
+#: the same paragraphs at the same place agree, however each spaced them.
+Edit = tuple[int, int, tuple[str, ...]]
+
+
+def block_edits(base: list[Block], other: list[Block]) -> dict[Edit, tuple[Block, ...]]:
+    """`other` as edits against `base`: what each edit says, mapped to the
+    blocks that say it — so the comparison is over paragraphs and the emission
+    is over the bytes of whichever side supplied them."""
+    matcher = difflib.SequenceMatcher(
+        None,
+        [unit.text for unit in base],
+        [unit.text for unit in other],
+        autojunk=False,
+    )
+    return {
+        (i1, i2, tuple(unit.text for unit in other[j1:j2])): tuple(other[j1:j2])
+        for tag, i1, i2, j1, j2 in matcher.get_opcodes()
+        if tag != "equal"
+    }
+
+
+def unchanged_blocks(base: list[Block], live: list[Block]) -> dict[int, Block]:
+    """Base positions the live file left alone, as the LIVE document's blocks.
+
+    A region neither side edited is copied out of the operator's file rather
+    than out of the base: the two hold the same paragraphs by definition here,
+    and the operator's are the bytes that must survive the round trip."""
+    matcher = difflib.SequenceMatcher(
+        None,
+        [unit.text for unit in base],
+        [unit.text for unit in live],
+        autojunk=False,
+    )
+    kept: dict[int, Block] = {}
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for offset in range(i2 - i1):
+                kept[i1 + offset] = live[j1 + offset]
+    return kept
+
+
+def repeats_a_neighbour(sequence: list[Block], *, start: int, count: int) -> bool:
+    """Whether the `count` blocks at `start` say what the run of blocks
+    immediately before them, or immediately after them, already says."""
+
+    def said(first: int, last: int) -> list[str]:
+        return [unit.text for unit in sequence[max(first, 0) : max(last, 0)]]
+
+    here = said(start, start + count)
+    return here == said(start - count, start) or here == said(start + count, start + 2 * count)
+
+
+def merge_blocks(base: list[Block], live: list[Block], published: list[Block]) -> list[Block] | None:
+    """`live` and `published` reconciled against their common `base`, or None
+    where the two sides touched one span differently.
+
+    Both sides' edits are spans of whole paragraphs, so applying them is a
+    block-granular three-way merge. Two edits that overlap — including two
+    insertions at the same point, which no interval test catches — are a
+    conflict unless they say the same thing, in which case the live file's
+    blocks are the ones applied, since between two spellings of one paragraph
+    the operator's is the one already on disk. A conflict is not resolved here:
+    the caller's answer is a different base, or the bail path.
+
+    An insertion whose paragraphs already sit where it would land is dropped:
+    inserting them again would say the same thing twice, whatever base put the
+    merge in that position. It is the shape a second run takes when the live
+    file already carries the update — against the older base still on offer, an
+    operator edit next to the applied insertion is one changed span with it, so
+    the insertion is no longer recognisable as already present. The copy that
+    survives is the one already in place, which is the operator's own bytes.
+    """
+    ours, theirs = block_edits(base, live), block_edits(base, published)
+    for one in ours:
+        for other in theirs:
+            (o1, o2, _), (t1, t2, _) = one, other
+            overlap = max(o1, t1) < min(o2, t2) or o1 == o2 == t1 == t2
+            if overlap and one != other:
+                return None
+    edits = theirs | ours
+    kept = unchanged_blocks(base, live)
+    merged: list[Block] = []
+    inserted: list[tuple[int, int]] = []
+    at = 0
+    for edit in sorted(edits):
+        start, stop, _ = edit
+        merged.extend(kept[index] for index in range(at, start))
+        if start == stop:
+            inserted.append((len(merged), len(edits[edit])))
+        merged.extend(edits[edit])
+        at = max(at, stop)
+    merged.extend(kept[index] for index in range(at, len(base)))
+    redundant = {
+        index
+        for begin, count in inserted
+        if repeats_a_neighbour(merged, start=begin, count=count)
+        for index in range(begin, begin + count)
+    }
+    return [unit for index, unit in enumerate(merged) if index not in redundant]
+
+
+def below_h1(text: str) -> str:
+    """`text` from just after its first level-1 heading — all of it when there
+    is none. What a concatenation appends: our title is not a second title for
+    the operator's file."""
+    lines = text.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if line.startswith("# "):
+            return "".join(lines[index + 1 :])
+    return text
+
+
+def sections(text: str) -> dict[str, str]:
+    """Level-2 section name -> its body, in file order, with everything above
+    the first `## ` heading under PREAMBLE_SECTION (dropped when blank).
+
+    The granularity the integration reports at: a `##` section is the unit an
+    operator reads and integrates, and a line diff is not."""
+    found: dict[str, str] = {}
+    name = PREAMBLE_SECTION
+    body: list[str] = []
+    for line in text.splitlines(keepends=True):
+        heading = SECTION_HEADING.match(line)
+        if heading:
+            found[name] = "".join(body)
+            name, body = heading.group(1), []
+        else:
+            body.append(line)
+    found[name] = "".join(body)
+    if not found[PREAMBLE_SECTION].strip():
+        del found[PREAMBLE_SECTION]
+    return found
+
+
+def section_report(published: str, live: str) -> list[str]:
+    """The published baseline against the live file, named section by section:
+    what the update adds, what both hold and differ on, what is the operator's
+    own, and what already matches."""
+    ours, theirs = sections(published), sections(live)
+    categories = (
+        ("new in the published baseline", [name for name in ours if name not in theirs]),
+        ("in both, differing", [name for name in ours if name in theirs and ours[name] != theirs[name]]),
+        ("yours alone", [name for name in theirs if name not in ours]),
+        ("identical", [name for name in ours if name in theirs and ours[name] == theirs[name]]),
+    )
+    return [f"  sections {label}: {', '.join(names)}" for label, names in categories if names]
+
+
+def plan_integration(*, published: str, live: str | None, revisions: list[Revision]) -> Integration:
+    """Classify the live file against the published baseline and its history,
+    deciding everything before anything is written.
+
+    Base selection is by distance and confirmed by the merge: candidates are
+    ordered by how many lines separate them from the live file, and the first
+    that merges cleanly is the base. A base that conflicts everywhere was
+    probably the wrong pick, so the next candidate is tried rather than the
+    nearest one trusted outright.
+
+    A revision equal to the published text is not a candidate. It would merge
+    against anything — one side having no changes at all — and the merge it
+    produces is the live file unchanged, which is this update silently deciding
+    it had nothing to deliver. Excluding it is also what leaves the conflict
+    case reachable at all, since the newest revision is normally the published
+    one.
+    """
+    if live is None:
+        return Integration("fresh", live_text=published)
+    if live == published:
+        return Integration("current")
+    exact = next((revision for revision in revisions if revision.text == live), None)
+    if exact is not None:
+        return Integration("published", base=exact, live_text=published)
+
+    candidates = [revision for revision in revisions if revision.text != published]
+    ranked = sorted(candidates, key=lambda revision: differing_lines(revision.text, live))
+    if not ranked:
+        # No history to select from — no git, no repository, an unpublished
+        # source, or a baseline with no revision behind its current text. There
+        # is no base to merge against, and inventing one is exactly what the
+        # bail path exists to refuse.
+        return Integration("bail", incoming_text=published)
+    if line_matcher(ranked[0].text, live).ratio() < MIN_ANCESTRY_SIMILARITY:
+        # Their file entire, then the seam, then ours. Trimming what their file
+        # ends with, or imposing a separator on top of one they already wrote,
+        # would both be writes on their side of a joint that is only ours from
+        # their last byte onward — `stitch` tops up the shortfall and no more.
+        # The lstrip is on OUR text, whose leading blank lines we author.
+        below = blocks(below_h1(published).lstrip("\n"))
+        return Integration("unrelated", live_text=stitch(blocks(live) + below))
+    for candidate in ranked:
+        merged = merge_blocks(blocks(candidate.text), blocks(live), blocks(published))
+        if merged is not None:
+            return Integration("merged", base=candidate, live_text=stitch(merged))
+    return Integration("bail", base=ranked[0], incoming_text=published)
+
+
+def integrate_claude_md(*, source: Path, dest: Path) -> bool:
+    """Integrate the published operator baseline at `source` into `dest`, a
+    CLAUDE.md the operator owns and edits.
+
+    A merge, never an overwrite, and never a marked file: CLAUDE.md has no
+    comment syntax a reading model would not also read, so nothing may be
+    written into it to delimit what came from here. The merge base is recovered
+    from this repository's git history instead, rather than stored beside the
+    live file; the one thing this verb does store beside it is a single rolling
+    backup of the live file's pre-write bytes, written whenever a write changes
+    them and left alone otherwise (see BACKUP_PREFIX).
+
+    Classification is printed before the first byte is written, so an operator
+    sees which case they are in and which revision they were matched against —
+    a misclassification is visible rather than silent. On the bail path nothing
+    is written but incoming.CLAUDE.md, and the return is False: the integration
+    the operator asked for did not happen.
+    """
+    if not source.is_file():
+        raise TemplateError(f"published baseline '{rel(source)}' does not exist")
+    if dest.exists() and not dest.is_file():
+        raise TemplateError(f"DEST '{dest}' is not a file — name the CLAUDE.md itself, not its directory")
+    published = source.read_text(encoding="utf-8")
+    live = dest.read_text(encoding="utf-8") if dest.is_file() else None
+    plan = plan_integration(published=published, live=live, revisions=baseline_revisions(source))
+
+    headline, advice = CASE_REPORT[plan.case]
+    print(f"CLAUDE.md integration — {headline}")
+    print(f"  live:      {dest}")
+    print(f"  published: {rel(source)}")
+    if plan.base is not None and live is not None:
+        print(f"  base:      {plan.base.label}, {differing_lines(plan.base.text, live)} lines from yours")
+    elif live is not None:
+        print("  base:      none — no earlier published revision could be read from git history")
+    for line in section_report(published, live) if live is not None else []:
+        print(line)
+
+    if plan.live_text is not None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        backup = dest.with_name(BACKUP_PREFIX + dest.name)
+        if live is not None and plan.live_text != live:
+            backup.write_text(live, encoding="utf-8")
+            note = f", prior content backed up to {backup} — yours to delete"
+        else:
+            note = ""
+        dest.write_text(plan.live_text, encoding="utf-8")
+        print(f"wrote {dest} — {advice}{note}")
+    elif plan.incoming_text is not None:
+        incoming = dest.with_name(INCOMING_PREFIX + dest.name)
+        incoming.write_text(plan.incoming_text, encoding="utf-8")
+        print(f"wrote {incoming}, and nothing else — {dest} is untouched. {advice}")
+    else:
+        print(f"{dest} — {advice}")
+    print(
+        "reminder: publishing live improvements back into the repo is a manual diff-and-adopt per "
+        "user-config/README.md — this verb only installs, it never reads live changes back."
+    )
+    return plan.case != "bail"
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """The four verbs, each declaring only the flags it can act on.
+
+    A flag a verb does not declare is unrepresentable there rather than
+    refused by hand: `install` takes neither `--surfaces` nor a selection glob,
+    so a partial install cannot be asked for in the first place.
+
+    Prefix abbreviation is off on every parser built here, main and subcommand
+    alike: it would silently keep a renamed flag alive as a prefix of the
+    spelling that replaced it, whose value means something else entirely, so a
+    rename would land as a wrong-argument bug instead of an unknown-flag error.
+    """
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument(
+        "root",
         type=Path,
         metavar="ROOT",
-        help="full-product install into ROOT (a project's existing .claude "
-        "directory): copy the deployed surfaces entire, minus test suites and "
-        "caches, stamping each copied file with an !INSTALLED! banner. A "
-        "flavor (--model-family SPEC) adds a render pass over the copy. "
-        "Implies --output-dir ROOT",
+        help="the output root: an existing directory, whose agents/ and "
+        "commands/ subtrees this run writes or reads. There is no "
+        "in-repository default — this repository keeps no rendered tree",
     )
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
-    parser.add_argument("--verbose", "-v", action="store_true", help="list every file")
-    parser.add_argument(
-        "--no-diff",
-        action="store_true",
-        help="in check mode, report drift without printing the diff",
+    common.add_argument(
+        "--family",
+        metavar="NAME",
+        default=DEFAULT_FAMILY,
+        help=f"the model family whose tuning applies (default: {DEFAULT_FAMILY}): "
+        "a bare family name resolved against templates/family/, or a path to a "
+        "family file. Bare MODEL names are not valid values — the family's "
+        "required [tiers] table names its members. See templates/family/README.md",
     )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        metavar="ROOT",
-        help="render/check the agents/ and commands/ subtrees under ROOT "
-        "(an existing directory) instead of the repo's deployed surfaces",
+    common.add_argument(
+        "--model-tier-map",
+        metavar="SPEC",
+        help="override the tier -> family member map the family declares: "
+        "comma-separated tier=member pairs, or all=member "
+        "(--model-tier-map medium=haiku). Named tiers mask only themselves; "
+        "the rest keep the family's own [tiers] value. Drives which member's "
+        "overlay overrides render, never the rendered pin text",
     )
-    parser.add_argument(
+    common.add_argument(
+        "--model-pin-map",
+        metavar="SPEC",
+        help="override the tier -> rendered pin map: the same syntax, over "
+        "this tool's DEFAULT_PIN_MAP (--model-pin-map all=haiku). Pin text is "
+        "always in the claude model namespace, and is the sole source of the "
+        "five @!dyn.tier-*!@ tokens' text",
+    )
+    common.add_argument("--verbose", "-v", action="store_true", help="list every file")
+
+    selection = argparse.ArgumentParser(add_help=False)
+    selection.add_argument(
         "--surfaces",
         choices=("agents", "commands", "both"),
         # No default: the selection globs imply their surfaces, so combining
@@ -1826,7 +3099,7 @@ def main() -> None:
         help="which surface to render or check (default: both). Not combinable "
         "with --agent-glob/--command-glob, which imply their surfaces",
     )
-    parser.add_argument(
+    selection.add_argument(
         "--agent-glob",
         metavar="PATTERNS",
         help="restrict the run to the agents outputs matching PATTERNS — one "
@@ -1836,99 +3109,163 @@ def main() -> None:
         "unless --command-glob is given too; a pattern matching nothing is an "
         "error",
     )
-    parser.add_argument(
+    selection.add_argument(
         "--command-glob",
         metavar="PATTERNS",
         help="the same, over the commands surface",
     )
-    parser.add_argument(
-        "--model-family",
-        metavar="SPEC",
-        help="the model-tuning flag: SPEC is a family-file path, a bare family "
-        "name resolved against templates/models/, or a bare model name found in "
-        "exactly one family's [nb.*.models.*] tables — which additionally makes "
-        "that model the export flavor for the outputs carrying no frontmatter "
-        "model: pin (a pinned output resolves its own and ignores it). See "
-        "templates/models/README.md",
-    )
-    args = parser.parse_args()
-    if args.install is not None and (args.generate or args.output_dir is not None):
-        parser.error("--install ROOT already implies --generate --output-dir ROOT — " "pass it alone")
-    output_root = args.install if args.install is not None else args.output_dir
 
-    globs: GlobMap = {
-        surface: split_globs(spec)
-        for surface, spec in (("agents", args.agent_glob), ("commands", args.command_glob))
-        if spec is not None
-    }
-    if globs:
-        if args.surfaces is not None:
-            parser.error(
-                "--agent-glob/--command-glob already select their surface(s) — " "drop --surfaces, which they subsume"
-            )
-        if args.install is not None:
-            parser.error(
-                "--install does not accept selection globs: an install delivers "
-                "the whole product, and a partial install is a future feature. "
-                "Use the globs with --generate or check instead"
-            )
-    # The globs imply the surfaces they cover; without them, --surfaces (or its
-    # default) does.
-    surfaces = ("both" if len(globs) > 1 else next(iter(globs))) if globs else (args.surfaces or "both")
+    parser = argparse.ArgumentParser(
+        description="Generate, check and install the generated agent/command definitions, and "
+        "integrate the published operator baseline into an operator's own CLAUDE.md.",
+        allow_abbrev=False,
+    )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    verbs = parser.add_subparsers(dest="verb", required=True)
+
+    verbs.add_parser(
+        "generate",
+        parents=[common, selection],
+        allow_abbrev=False,
+        help="render the definitions into ROOT's two surfaces",
+        description="Render every declared definition into ROOT's agents/ and commands/ "
+        "surfaces, under the tuning triple this invocation names. The surface "
+        "directories, and the mirrored subdirectories beneath them, are created "
+        "as needed; the per-target write-safety table decides what may be "
+        "overwritten.",
+    )
+
+    check = verbs.add_parser(
+        "check",
+        parents=[common, selection],
+        allow_abbrev=False,
+        help="check the definitions under ROOT against what the templates render",
+        description="Check the tree under ROOT: every target byte-identical to what its "
+        "template currently renders under this invocation's tuning triple, and "
+        "every banner naming a template that exists and declares it. A target "
+        "whose banner claims a different triple is reported MISTUNED, so "
+        "validating a tuned set means checking it with that set's own flags.",
+    )
+    check.add_argument(
+        "--no-diff",
+        action="store_true",
+        help="report drift without printing the diff",
+    )
+
+    verbs.add_parser(
+        "install",
+        parents=[common],
+        allow_abbrev=False,
+        help="full-product install into ROOT (a project's existing .claude directory)",
+        description="Install the whole product into ROOT: render both deployed surfaces and "
+        "copy the shipped packages, minus test suites and caches, stamping each "
+        "copied file with an !INSTALLED! banner. The render runs under whatever "
+        "tuning triple the install was given. An installed tree is an artifact: "
+        "re-install to update it, and local edits to installed files are "
+        "replaced — not preserved, though the prior content of any file this "
+        "tool did not write is kept beside it as a numbered *.bak, yours to "
+        "delete. Reports by exception: a clean install is one summary line, and "
+        "-v lists every file.",
+    )
+
+    claude_md = verbs.add_parser(
+        "install-claude-md",
+        allow_abbrev=False,
+        help="integrate the published operator baseline into an operator's own CLAUDE.md",
+        description="Merge user-config/INSTALLED_CLAUDE.md into the CLAUDE.md at DEST, which "
+        "an operator owns and edits. The merge base is recovered from this "
+        "repository's git history — nothing is stored beside the live file and "
+        "nothing is ever written into it to mark a region. The case is "
+        "classified and reported, section by section, before anything is "
+        "written; a live file no recovered base merges cleanly against is left "
+        "untouched, with the baseline written beside it as incoming.CLAUDE.md "
+        "and a nonzero exit.",
+    )
+    claude_md.add_argument(
+        "dest",
+        type=Path,
+        metavar="DEST",
+        help="the CLAUDE.md to integrate into (~/.claude/CLAUDE.md, or a project's own). "
+        "Its parent directory is created if absent; a missing file is installed whole",
+    )
+    claude_md.add_argument(
+        "--source",
+        type=Path,
+        default=PUBLISHED_BASELINE,
+        metavar="PATH",
+        help=f"the published baseline to integrate (default: {rel(PUBLISHED_BASELINE)}). "
+        "Its own git history is where the merge bases come from",
+    )
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
+    args = parser.parse_args()
 
     try:
-        smap = surface_map(output_root=output_root, surfaces=surfaces)
+        if args.verb == "install-claude-md":
+            # A verb of its own entirely: no templates, no surfaces, no tuning
+            # triple. It is the one write in this tool that lands in a file its
+            # operator maintains, which is why it merges rather than renders.
+            sys.exit(0 if integrate_claude_md(source=args.source, dest=args.dest) else 1)
+
+        # An install delivers the product entire, so it declares neither flag
+        # and covers both surfaces unconditionally.
+        globs: GlobMap = {}
+        surfaces = "both"
+        if args.verb != "install":
+            globs = {
+                surface: split_globs(spec)
+                for surface, spec in (("agents", args.agent_glob), ("commands", args.command_glob))
+                if spec is not None
+            }
+            if globs and args.surfaces is not None:
+                parser.error(
+                    "--agent-glob/--command-glob already select their surface(s) — drop --surfaces, which they subsume"
+                )
+            # The globs imply the surfaces they cover; without them, --surfaces
+            # (or its default) does.
+            surfaces = ("both" if len(globs) > 1 else next(iter(globs))) if globs else (args.surfaces or "both")
+
+        smap = surface_map(args.root, surfaces=surfaces)
         if globs:
             validate_selection(output_keys(smap), globs)
         chunks = load_chunks()
-        nb = tuning = entries = family = model = None
-        if args.model_family is not None:
-            family, model = resolve_flavor(args.model_family)
-            if model is not None:
-                print(f"--model-family {model} resolves to model {model} in family {rel(family)}")
-            entries = load_family(family)
-            # Anchors are collected across ALL templates and chunks, not just
-            # the --surfaces selection, so a filtered render never miscalls a
-            # real anchor unknown.
-            validate_family_anchors(entries, collect_anchors(chunks, templates(surface_map())))
-            tuning = (family, model)
-        # Always per-pin: an output's own frontmatter model: pin owns its model
-        # scope, whether or not this invocation asked for a flavor. A model SPEC
-        # implies its family rather than naming it, so pins stay free to imply
-        # their own — exactly as they did under the retired bare --model.
-        nb = per_pin_resolver(
-            entries,
-            cli_model=model,
-            family_given=args.model_family is not None and model is None,
+        # A family is always loaded — --family defaults rather than being
+        # absent — so there is no untuned path left to branch on.
+        family_path = resolve_family(args.family)
+        family = load_family(family_path)
+        tuning = effective_tuning(
+            family_path,
+            family,
+            tier_spec=args.model_tier_map,
+            pin_spec=args.model_pin_map,
         )
-        if args.install is not None:
-            ok = install(
-                chunks,
-                smap,
-                root=args.install,
-                nb=nb,
-                tuning=tuning,
-                verbose=args.verbose,
-            )
-            if entries is not None:
-                report_nb(entries, nb(None), tuning)
-        elif args.generate:
-            ok = generate(
-                chunks,
-                smap,
-                nb=nb,
-                tuning=tuning,
-                globs=globs,
-                explicit_root=output_root is not None,
-                verbose=args.verbose,
-            )
-            if entries is not None:
-                report_nb(entries, nb(None), tuning)
+        # Anchors are collected across ALL templates and chunks, not just the
+        # --surfaces selection, so a filtered render never miscalls a real
+        # anchor unknown. The second surface map is built for its template dirs
+        # alone, so reusing this run's root keeps it an existing one.
+        validate_family_anchors(family.entries, collect_anchors(chunks, templates(surface_map(args.root))))
+        validate_family_members(family, tuning.tier_map, family_path)
+        binding = tier_binding(chunks, pin_map=tuning.pin_map)
+        overlays = tier_resolver(family.entries, tuning.tier_map)
+
+        report_tuning(tuning)
+        report_divergence(tuning)
+        report_tuned(tuning)
+
+        if args.verb == "install":
+            ok = install(binding, smap, root=args.root, overlays=overlays, tuning=tuning, verbose=args.verbose)
+            report_overlays(family.entries, overlays(None), tuning)
+        elif args.verb == "generate":
+            ok = generate(binding, smap, overlays=overlays, tuning=tuning, globs=globs, verbose=args.verbose)
+            report_overlays(family.entries, overlays(None), tuning)
         else:
             ok = check(
-                chunks,
+                binding,
                 smap,
-                nb=nb,
+                overlays=overlays,
                 tuning=tuning,
                 globs=globs,
                 verbose=args.verbose,
@@ -1936,11 +3273,6 @@ def main() -> None:
             )
         if globs:
             report_selection(output_keys(smap), globs)
-        if model is not None:
-            # A model SPEC's reach is accounted for in every mode: it is the one
-            # ask whose effect depends on what each output declares. A family
-            # SPEC asked for none, and prints nothing.
-            report_model_flavor(model, family, all_renders(chunks, smap, nb, tuning, globs))
     except TemplateError as exc:
         print(f"error: {exc}", file=sys.stderr)
         sys.exit(2)

@@ -1,15 +1,20 @@
 +++
-# Literal body, no chunks — deliberate. The same body text appears in
-# kb-coordinator's Phase 5 command emission, but the coordinator is still
-# hand-maintained, so the single-sourcing rule's 2+-consumer bar for chunk
-# extraction is not yet met on the template side. When kb-coordinator itself
-# is templated, extract this body into a shared chunk referenced from both.
-# No hand-authored frontmatter here: the command surface's generator
-# machinery emits the minimal banner-only frontmatter block above this body.
+# The locate preamble is a chunk shared with kb-next: both commands must find
+# the KB the same way or one of them is wrong.
+# No hand-authored frontmatter: the generator emits a banner-only block above
+# this body, and Claude Code lists the command by its first body line — so that
+# line is written to read as the description.
+# The docent is READ after the locate, never @-loaded: an @-load resolves
+# against the session cwd, which silently resolves to nothing from kb-root/.
 [outputs.kb-start]
 +++
-@.claude/agents/kb-docent.md
-@kb-root/entry-point.md
-@kb-root/session/covered-topics-index.md
+Open a knowledge-base reading session: locate the KB, load the docent, and take the user's first question.
+
+@!kb-session-locate!@
+
+Then, in order:
+
+1. Read `<project-root>/.claude/agents/kb-docent.md` — that definition is who you are for this session.
+2. Read `entry-point.md` from the KB root, and `session/covered-topics-index.md` if it exists.
 
 You are the docent. Wait for the first question.

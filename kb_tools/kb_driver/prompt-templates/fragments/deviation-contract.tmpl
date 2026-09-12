@@ -1,0 +1,11 @@
+## Deviations
+
+A deviation is anything you did that a pure sequencer would not have — one that dispatched exactly the members it was handed, once each, as assigned. Re-briefing a member, retrying a failure differently the second time, splitting or merging assigned work, changing the order: each of those is a deviation.
+
+Every one goes in the envelope's `deviations` list as an object with `kind`, `member`, `what` you did, and `why`. `kind` comes from this vocabulary and no other:
+
+@!deviation-kinds!@
+
+Use `other` when none of the named kinds fits, and say what it was in `what`.
+
+Reporting a deviation is neither a fault nor a request: nothing is withheld from you for it, and it does not ask anyone for permission after the fact.

@@ -1,0 +1,831 @@
+set shell := ["bash", "-cuo", "pipefail"]
+
+# consumed in python.just
+PROJECT_ROOT := justfile_directory() / ".."
+import '../python.just'
+
+[doc("pull test data from remote sources or generate it")]
+prep-test-data: prep-test-data-arxiv
+
+# The survey corpus: arXiv papers sampled by construction rather than by
+# citation, spanning categories whose LaTeX differs in kind (arxiv-survey.py
+# holds what that buys). Ids are VERSIONED — an e-print version is append-only,
+# so each names immutable bytes and this specifies a reproducible corpus while
+# redistributing none of it.
+#
+# One variable per category rather than one list: the grouping is the sample's
+# structure, and keeping it here means a category can be staged alone without a
+# second place to look for what is in one.
+ARXIV_CS_GR := "2609.09828v1 2609.09834v1 2609.10363v1 2609.10385v1"
+ARXIV_CS_LG := "2609.10505v1 2609.10514v1 2609.10525v1 2609.10529v1 2609.10534v1"
+ARXIV_ECON_TH := "2609.09693v1 2609.09888v1 2609.10074v1 2609.10499v1"
+ARXIV_EESS_AS := "2609.10351v1 2609.10366v1 2609.10394v1 2609.10466v1"
+ARXIV_MATH_DG := "2609.10318v1 2609.10323v1 2609.10442v1 2609.10523v1 2609.10527v1 2609.00183v1"
+ARXIV_MATH_ST := "2609.09855v1 2609.10038v1 2609.10291v1 2609.10428v1 2609.10467v1"
+ARXIV_MATH_AG := "2609.10401v1 2609.10420v1 2609.10454v1 2609.10481v1 2609.10488v1 2609.00268v1 2609.00269v1"
+ARXIV_MATH_NT := "2609.10423v1 2609.10446v1 2609.10483v1 2609.10526v1"
+ARXIV_MATH_AP := "2609.10427v1 2609.10478v1 2609.10480v1 2609.10517v1 2609.00108v1 2609.00209v1"
+ARXIV_MATH_PR := "2609.10450v1 2609.10528v1 2609.10530v1"
+# Two rather than five, for two unrelated reasons. arXiv serves a PDF from
+# /e-print for a submission that shipped no source, with a 200 and no way to
+# tell before unpacking it; two of this category's sample were such, and a paper
+# with no LaTeX measures nothing. The third is the unparseable-source hazard
+# (README.md, "Papers this corpus does not contain").
+ARXIV_PHYSICS_OPTICS := "2609.10111v1 2609.10252v1"
+
+ARXIV_IDS := ARXIV_CS_GR + " " + ARXIV_CS_LG + " " + ARXIV_ECON_TH + " " + ARXIV_EESS_AS + " " + ARXIV_MATH_DG + " " + ARXIV_MATH_ST + " " + ARXIV_MATH_AG + " " + ARXIV_MATH_NT + " " + ARXIV_MATH_AP + " " + ARXIV_MATH_PR + " " + ARXIV_PHYSICS_OPTICS
+
+# Candidates on trial for the survey corpus above, deliberately flat rather
+# than one-variable-per-category like ARXIV_IDS's inputs: the category
+# grouping is a property of the corpus a candidate may join, not of the
+# trial itself. An id graduates by being moved into its category's ARXIV_*
+# variable (where it then flows into ARXIV_IDS on its own) — never by being
+# left here, since this list is thrown away rather than merged in.
+ARXIV_CANDIDATE_IDS := ""
+
+ARXIV_TGZ := "test-data/transient/arxiv-tgz"
+ARXIV_STAGE := "test-data/transient/arxiv"
+
+# arXiv publishes a three-second courtesy interval for automated access. This
+# is their number, not a limit being worked around, and it is paid only on a
+# download that actually happens.
+ARXIV_DELAY := "3"
+
+[doc("download the survey corpus tarballs to transient/arxiv-tgz; each file already present is skipped silently; pass ids= (or use prep-test-data-arxiv-candidates) to fetch a different id list into the same cache")]
+prep-test-data-arxiv ids=ARXIV_IDS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p "{{ARXIV_TGZ}}"
+    fetched=0
+    skipped=0
+    for id in {{ids}}; do
+        target="{{ARXIV_TGZ}}/${id}.tar.gz"
+        if [[ -s "${target}" ]]; then
+            skipped=$((skipped + 1))
+            continue
+        fi
+        printf 'fetching %s\n' "${id}"
+        # --fail so a 4xx leaves no truncated file behind to be skipped next run.
+        curl -fsSL -o "${target}" "https://arxiv.org/e-print/${id}" || {
+            rm -f "${target}"
+            printf 'error: %s could not be fetched\n' "${id}" >&2
+            exit 1
+        }
+        fetched=$((fetched + 1))
+        sleep "{{ARXIV_DELAY}}"
+    done
+    printf '%s fetched, %s already present → %s\n' "${fetched}" "${skipped}" "{{ARXIV_TGZ}}"
+
+[doc("prep-test-data-arxiv over ARXIV_CANDIDATE_IDS instead of the corpus — same download cache (tarballs are keyed by id, so a candidate can never overwrite a corpus tarball or vice versa)")]
+prep-test-data-arxiv-candidates:
+    @just prep-test-data-arxiv "{{ARXIV_CANDIDATE_IDS}}"
+
+[doc("stage one arXiv paper as a throwaway consumer: git init, unpack, install the agent set, stub Makefile; every --* flag forwards verbatim to the root install recipe")]
+stage-arxiv-paper id *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tarball="{{ARXIV_TGZ}}/{{id}}.tar.gz"
+    if [[ ! -s "${tarball}" ]]; then
+        printf 'error: %s not downloaded — run `just prep-test-data-arxiv` first.\n' "${tarball}" >&2
+        exit 1
+    fi
+    # The id carries a `/` in the pre-2007 scheme (math/0211159v1), which cannot
+    # be a directory name component here; `_` keeps one paper to one directory.
+    dir="{{ARXIV_STAGE}}/$(printf '%s' "{{id}}" | tr '/' '_')"
+    # A staged paper is re-anchored rather than rebuilt: `cleared` is the tag
+    # this recipe commits right after unpacking (below), and resetting to it
+    # restores the sources exactly while dropping everything a build added.
+    # Unpacking again would be slower and would discard the property that
+    # every restage of a paper starts from bytes git has already vouched for.
+    if [[ -d "${dir}/.git" ]] && git -C "${dir}" rev-parse -q --verify cleared > /dev/null; then
+        git -C "${dir}" reset --hard cleared > /dev/null
+        rm -rf "${dir}/.claude-temp" "${dir}/kb-root"
+    else
+        rm -rf "${dir}"
+        mkdir -p "${dir}"
+        # An e-print is usually a tarball but may be a single gzipped file — a
+        # one-file submission has nothing to tar. Both are legal, neither is an error.
+        if ! tar xzf "${tarball}" -C "${dir}" 2>/dev/null; then
+            gunzip -c "${tarball}" > "${dir}/paper.tex"
+        fi
+        printf 'default:\n\t@echo %s\n\ntest:\n\t@echo tests passed.\n' "{{id}}" > "${dir}/Makefile"
+        printf '.claude-temp/\n__pycache__/\n' > "${dir}/.gitignore"
+        git -C "${dir}" init -q
+        git -C "${dir}" add -A
+        git -C "${dir}" -c user.name=arxiv -c user.email=arxiv@invalid commit -qm "sources as fetched"
+        git -C "${dir}" tag cleared
+    fi
+    ( cd "{{justfile_directory()}}/.." && just install "kb-testing/${dir}" {{args}} )
+    git -C "${dir}" add -A
+    git -C "${dir}" -c user.name=arxiv -c user.email=arxiv@invalid commit -qm "agent defs installed"
+    git -C "${dir}" tag -d staged > /dev/null 2>&1 || true
+    git -C "${dir}" tag staged
+    printf 'staged %s\n' "${dir}"
+
+[doc("restage every paper in the survey corpus (stage-arxiv-paper per id) — every --* flag forwards verbatim to the root install recipe")]
+stage-arxiv-corpus *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    count=0
+    for id in {{ARXIV_IDS}}; do
+        just stage-arxiv-paper "${id}" {{args}}
+        count=$((count + 1))
+    done
+    printf '%s paper(s) staged under %s\n' "${count}" "{{ARXIV_STAGE}}"
+
+# A recipe parameter defaulting to ARXIV_IDS (the shape used below for
+# prep-test-data-arxiv and no-inference-kb-driver-arxiv-corpus) does not work
+# cleanly here: stage-arxiv-corpus's only parameter is the trailing `*args`
+# it forwards verbatim to the root install recipe, and `just` fills
+# parameters positionally — a leading `ids` parameter would swallow the
+# first forwarded flag (e.g. `just stage-arxiv-corpus --family foo` would
+# bind `--family` to `ids`, not forward it) for every existing caller, not
+# just the bare, no-argument one this file's contract protects. `--set`
+# overrides ARXIV_IDS for the whole invocation instead, without touching
+# stage-arxiv-corpus's own parameter list, and no forwarding into a nested
+# `just` call is needed: the only nested call in its body is
+# `stage-arxiv-paper`, which never reads ARXIV_IDS itself.
+[doc("stage-arxiv-corpus over ARXIV_CANDIDATE_IDS instead of the corpus — same staged tree under ARXIV_STAGE (staging is keyed by id, so a candidate can never overwrite a corpus checkout or vice versa); every --* flag forwards verbatim to the root install recipe")]
+stage-arxiv-corpus-candidates *args:
+    @just --set ARXIV_IDS "{{ARXIV_CANDIDATE_IDS}}" stage-arxiv-corpus {{args}}
+
+# Log and bookkeeping files for kb-headless-eval live in THIS repo's
+# scratch (.claude-temp/kb-headless/, sibling of .claude/), never the
+# built KB's own .claude-temp — re-anchoring a staged paper (stage-arxiv-
+# paper's `git reset --hard cleared` path) wipes that on every restage,
+# which would destroy an in-flight run's evidence.
+KB_HEADLESS_DIR := justfile_directory() / ".." / ".claude-temp" / "kb-headless"
+
+# The standing KB inferential-quality evaluation instrument (a fixture, not
+# generated): its own header requires every run to use the prompt body
+# unchanged so reports compare row-for-row across runs — edits to it are
+# edits to the comparison baseline and get owner sign-off, not casual
+# tuning from this justfile. See kb-headless-eval.
+KB_EVAL_BRIEF := justfile_directory() / "test-data" / "fixtures" / "kb-quality-eval-brief.md"
+
+# Extraction+substitution lives in a real script, not an inline heredoc:
+# `just` requires every recipe-body line — including a heredoc's own
+# terminator — to carry the recipe's leading-whitespace prefix, which a
+# bash heredoc's terminator rules cannot satisfy (confirmed the hard way:
+# dedenting the heredoc broke just's parser, and re-indenting it broke
+# bash's terminator match — the two requirements are incompatible). A
+# standalone file sidesteps this and is independently runnable/testable.
+KB_EVAL_EXTRACT_SCRIPT := justfile_directory() / "test-data" / "fixtures" / "extract-kb-eval-prompt.py"
+
+# Claude executable to use. Can be overridden to
+# ```./test-data/fixtures/claude-gemma.sh``` which export envars for having
+# claude use locally hosted gemma-4 models instead of Antrhopic-hosted
+CLAUDE := "claude"
+
+# No runaway-cost guard, deliberately: subscription
+# plan, R&D — cost is not a constraint. (For the record: there is no
+# `--max-turns` in this CLI; `--max-budget-usd` exists but is unused.)
+
+[doc("run the standing KB inferential-quality eval against a built KB at kb_dir, described in the report by corpus_note; blocks until done, then reports the deliverable")]
+kb-headless-eval run_tag kb_dir corpus_note:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -z "{{run_tag}}" ]]; then
+        printf 'error: run_tag must not be empty.\n' >&2
+        exit 1
+    fi
+    case "{{run_tag}}" in
+        */*)
+            printf 'error: run_tag "%s" contains a `/` — it becomes a report filename component, not a path.\n' "{{run_tag}}" >&2
+            exit 1
+            ;;
+    esac
+    if [[ ! -d "{{kb_dir}}/kb-root" ]]; then
+        printf 'error: nothing to evaluate — run a build first (%s/kb-root does not exist).\n' "{{kb_dir}}" >&2
+        exit 1
+    fi
+
+    kb_root_abs="$(cd "{{kb_dir}}/kb-root" && pwd)"
+    report_path="{{justfile_directory()}}/../mad-design/KB_INFERENTIAL_QUALITY_EVAL_{{run_tag}}.md"
+    log_file="{{KB_HEADLESS_DIR}}/eval-{{run_tag}}.stream.jsonl"
+    mkdir -p "{{KB_HEADLESS_DIR}}"
+
+    # Extraction+substitution is mechanical, never hand-copied — see
+    # KB_EVAL_EXTRACT_SCRIPT and its own docstring for the contract (exact
+    # three placeholders, both boundary lines, single-pass substitution).
+    # A refusal there (missing boundary/placeholder, a stray brace in a
+    # value) exits nonzero, which -e turns into this recipe refusing too.
+    substituted_body="$(python3 "{{KB_EVAL_EXTRACT_SCRIPT}}" "{{KB_EVAL_BRIEF}}" "${kb_root_abs}" "${report_path}" "{{corpus_note}}")"
+
+    # bypassPermissions again — sanctioned here too even though the report
+    # write lands in the real adjagent repo, not a throwaway fixture: the
+    # eval is read-only against kb-root/ plus exactly one bounded write
+    # (report_path, fully specified above, not a pattern the model
+    # chooses), and headless mode has no TTY to answer a permission prompt
+    # regardless. --model fable checked against `claude --help` above,
+    # matching KB_EVAL_BRIEF's own dispatch contract ("model: fable").
+    # Blocking, not detached: the eval is a bounded
+    # single pass over an already-built KB, and its own last step ("on
+    # completion, report the deliverable") wants to run in the same
+    # invocation, not a separate status/harvest round trip.
+    set +e
+    ( cd "{{kb_dir}}" && {{CLAUDE}} -p "${substituted_body}" \
+        --model fable \
+        --output-format stream-json --verbose \
+        --permission-mode bypassPermissions \
+        > "${log_file}" 2>&1 )
+    claude_exit=$?
+    set -e
+
+    # The report file is the one deliverable — its absence means the run
+    # failed regardless of claude's own exit code, so that code is
+    # reported but never substituted for the file check.
+    printf 'report path: %s\n' "${report_path}"
+    if [[ -f "${report_path}" ]]; then
+        printf 'report exists: yes — eval produced its deliverable (claude exit %s)\n' "${claude_exit}"
+    else
+        printf 'report exists: no — eval did NOT produce its deliverable, regardless of claude exit code %s\n' "${claude_exit}"
+    fi
+    printf 'log: %s\n' "${log_file}"
+
+# Rung 1: every stage under --dry-run and --no-inference together,
+# driven through the shipped entry point exactly as the integration test
+# (kb_tools/tests/test_kb_driver_dryrun.py) proves the shape:
+# `python3 -m kb_tools.kb_driver run --config … --dry-run`. Builds its own
+# throwaway consumer repo — never a real project — under this repo's own
+# scratch tree, wiped and rebuilt every invocation for idempotence. The
+# config/charter pair is written under the consumer's gitignored
+# .claude-temp/kb-build/, never at its root: a dirty worktree there fails
+# preflight (exit 14) before the driver does anything else. The run
+# directory is a sibling of the wiped consumer, not inside it: within one
+# invocation the run directory is the evidence a wipe
+# must not touch (across invocations, wiping both is fine, and this recipe
+# does).
+#
+# The consumer's .claude/ is populated by `install` — this repo's one
+# deployment shape, run for real against the fixture rather than approximated
+# by a symlink. That is what makes `just kb-refresh` and `just kb-verify`
+# real commands here: the include line kb_util's graph-init op writes imports
+# runner-snippets/kb.just from .claude/agents/kb_tools/, which now holds
+# installed files rather than a link back into this tree, and dry-run
+# replaces the model, not the pipeline, so the refresh and gate rows run
+# those targets for real against the synthetic corpus replay.py leaves
+# behind. The install path is exercised as a side effect: a package that
+# fails to arrive at its frozen destination fails this rung.
+#
+# The driver itself now imports from that same installed copy — PYTHONPATH
+# below resolves to the consumer's own .claude/agents, not this repository's
+# working tree. A staged run exercises the installed set; the `just install`
+# call above is what puts a change there before this recipe's driver
+# invocation can see it.
+[doc("drive kb_driver's dry-run rung across all stages against a throwaway fixture repo")]
+kb-driver-dryrun: venv
+    #!/usr/bin/env bash
+    set -euo pipefail
+    fixture_root="{{PROJECT_ROOT}}/.claude-temp/kb-driver-dryrun"
+    consumer="${fixture_root}/consumer"
+    run_parent="${fixture_root}/runs"
+    scratch_rel=".claude-temp/kb-build"
+    config_name="driver-run.toml"
+
+    rm -rf "${fixture_root}"
+    mkdir -p "${consumer}"
+
+    git -C "${consumer}" init -q
+    git -C "${consumer}" config user.email "fixture@example.invalid"
+    git -C "${consumer}" config user.name "fixture"
+    git -C "${consumer}" config commit.gpgsign false
+
+    # The ROOT justfile's `install`, as `stage-arxiv-paper` reaches it:
+    # `install` is not a recipe of this justfile, and `justfile()` names
+    # this one — the path must resolve to the root justfile explicitly.
+    "{{just_executable()}}" --justfile "{{PROJECT_ROOT}}/justfile" install "${consumer}"
+
+    printf '.claude-temp/\n__pycache__/\n' > "${consumer}/.gitignore"
+    printf 'default:\n    @true\n' > "${consumer}/justfile"
+
+    # Near-empty, but not structureless: the source survey runs for real at
+    # phase-0, and a document with no sectioning yields a manifest holding
+    # nothing for a coverage assignment to claim. Two sections per volume, each
+    # spanning more than one line, is the smallest source that exercises the
+    # leaf-cut, coverage and tiling path end to end — the same shape
+    # kb_tools/tests/test_kb_driver_dryrun.py's own fixture uses, independently.
+    for source in VolumeOne.tex VolumeTwo.tex; do
+        printf '\\documentclass{article}\n\\begin{document}\n\\section{Overview}\nSynthetic body for %s.\nA second line, so the section can be cut.\n\\section{Details}\nMore synthetic body.\nA second line here too.\n\\end{document}\n' \
+            "${source}" > "${consumer}/${source}"
+    done
+
+    # The document-graph stage resolves every citation against exactly one
+    # bibliography and takes its path as a required flag; the launch line
+    # carries only sources, so the driver resolves the one sitting beside them
+    # and stops where that is none or several. These sources cite nothing, but
+    # the file still has to be there and still has to parse — hence one real
+    # entry rather than an empty file.
+    printf '@book{synthetic,\n  author = {A. Fixture},\n  title = {Nothing Cited},\n  year = {2026}\n}\n' \
+        > "${consumer}/synthetic.bib"
+
+    git -C "${consumer}" add -A
+    git -C "${consumer}" commit -qm seed
+
+    mkdir -p "${consumer}/${scratch_rel}"
+    printf '# Build charter\n\nEverything in the two volumes.\n' > "${consumer}/${scratch_rel}/build-charter.md"
+    printf '[run]\nsources = ["VolumeOne.tex", "VolumeTwo.tex"]\npermission_mode = "acceptEdits"\n' \
+        > "${consumer}/${scratch_rel}/${config_name}"
+
+    # Subshell-scoped cd: the driver reads its config path and runs preflight
+    # relative to the consuming repo's root, exactly as a runner recipe (and
+    # the integration test, via subprocess cwd=) invokes it. `-e` above
+    # propagates a nonzero driver exit as this recipe's own exit; stdout and
+    # stderr pass through uncaptured, so the driver's own relay baton —
+    # including the ledger's final checklist — lands directly in this
+    # recipe's output.
+    # BOTH mode flags, and the consumer is why. `--dry-run` replaces the calls
+    # the driver dispatches; it does not reach a model spawned inside a tool the
+    # driver invokes, and the two claim-graph stages spawn theirs there. This
+    # consumer is a FRESH entry — .tex sources and no kb-root/ — so those stages
+    # apply to it, and `--dry-run` alone would have this recipe spend real
+    # inference under a name that says it does not. `--no-inference` drops those
+    # rows instead, and the walk still reaches every stage.
+    #
+    # What that costs: the rows `--no-inference` drops are rows `--dry-run`
+    # would otherwise have exercised, so the dispatch-and-capture path is
+    # covered here only for the rows that survive both. The integration test
+    # covers it whole, against a REVISION consumer where the claim-graph stages
+    # do not apply and `--dry-run` alone is therefore honest.
+    (
+        cd "${consumer}"
+        # The consumer's own installed copy, not this repository's working
+        # tree: `just install` above just froze kb_tools into the fixture's
+        # .claude/agents/, and a staged run exercises that installed set.
+        PYTHONPATH=.claude/agents \
+            "{{VENV_PYTHON}}" -m kb_tools.kb_driver run \
+            --config "${scratch_rel}/${config_name}" \
+            --dry-run \
+            --no-inference \
+            --run-dir "${run_parent}" \
+            --decide start.proceed=yes
+    )
+
+# Scratch for a backgrounded live kb_driver run: pid file, console log, and
+# run-directory bookkeeping. Read by kb-driver-harvest and kb-driver-kill.
+KB_DRIVER_LIVE_DIR := justfile_directory() / ".." / ".claude-temp" / "kb-driver-live"
+
+# Scratch for the arXiv-corpus sweep below: per-paper console logs, driver
+# run-dirs, and resolution/outcome status files. A sibling of
+# KB_DRIVER_LIVE_DIR, never inside it, so a backgrounded live build and this
+# sweep never share a pid file, log, or run directory.
+KB_DRIVER_ARXIV_DIR := justfile_directory() / ".." / ".claude-temp" / "kb-driver-arxiv"
+
+# Sibling of KB_DRIVER_ARXIV_DIR, never shared with it: no-inference-kb-
+# driver-arxiv-corpus rm -rf's its whole status/logs/runs tree at the start
+# of every invocation — not per id — so a candidate sweep run against the
+# same directory would destroy a completed corpus sweep's record rather than
+# merely add to it. Read only via `--set KB_DRIVER_ARXIV_DIR` on
+# no-inference-kb-driver-arxiv-corpus-candidates below, never referenced
+# directly by any recipe body.
+KB_DRIVER_ARXIV_CANDIDATE_DIR := justfile_directory() / ".." / ".claude-temp" / "kb-driver-arxiv-candidates"
+
+# No config file, no charter, and no `--permission-mode`: `--no-inference`
+# (hardwired below, not read from any variable or argument — nothing this
+# recipe accepts can countermand it) means no dispatched call ever needs a
+# permission mode answered, sources arrive as repeated `--source` flags, and
+# a charter is optional.
+#
+# `id_safe` mirrors stage-arxiv-paper's own `tr '/' '_'` mapping from id to
+# staged directory name; the two must agree on this mapping since this
+# recipe never stages anything itself, only reads what stage-arxiv-paper
+# already wrote.
+[doc("run a --no-inference kb_driver build over one staged arXiv paper; resolves --source from 00README.json's toplevel entry or, failing that, a lone \\documentclass file; writes a status file under KB_DRIVER_ARXIV_DIR/status/ that no-inference-kb-driver-arxiv-corpus reads to tally outcomes — exit code is advisory (0 built, 2 the source could not be resolved or the paper isn't staged, anything else the driver's own exit code)")]
+no-inference-kb-driver-arxiv-paper id: venv
+    #!/usr/bin/env bash
+    set -euo pipefail
+    id_safe="$(printf '%s' "{{id}}" | tr '/' '_')"
+    dir="{{ARXIV_STAGE}}/${id_safe}"
+    status_dir="{{KB_DRIVER_ARXIV_DIR}}/status"
+    log_dir="{{KB_DRIVER_ARXIV_DIR}}/logs"
+    mkdir -p "${status_dir}" "${log_dir}"
+    status_file="${status_dir}/${id_safe}.status"
+
+    if [[ ! -d "${dir}/.git" ]]; then
+        reason="{{id}} is not staged (${dir}/.git missing) — run \`just stage-arxiv-paper {{id}}\` first"
+        printf 'result=skipped\nrule=none\nsource=\nreason=%s\n' "${reason}" > "${status_file}"
+        printf 'skip {{id}}: %s\n' "${reason}" >&2
+        exit 2
+    fi
+
+    rule=""
+    source=""
+    candidates=()
+    readme="${dir}/00README.json"
+    if [[ -f "${readme}" ]]; then
+        # A malformed file, no "toplevel" entry, or more than one is not an
+        # error here — it is step 1 not resolving, which step 2 exists to
+        # handle; `|| true` turns a parse exception into an empty result
+        # rather than failing the recipe. One physical line, not a heredoc
+        # or a multi-line -c string: `just` requires every recipe-body line
+        # to carry this recipe's own leading indentation, which conflicts
+        # with Python's requirement that top-level statements carry none
+        # (the same incompatibility KB_EVAL_EXTRACT_SCRIPT's comment names,
+        # here worked around by never introducing a second line instead of
+        # by a standalone script file).
+        toplevel="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); names = [s.get("filename", "") for s in data.get("sources", []) if s.get("usage") == "toplevel"]; print(names[0] if len(names) == 1 and names[0] else "")' "${readme}" 2>/dev/null || true)"
+        if [[ -n "${toplevel}" && -f "${dir}/${toplevel}" ]]; then
+            rule="readme"
+            source="${toplevel}"
+        fi
+    fi
+
+    if [[ -z "${rule}" ]]; then
+        shopt -s nullglob
+        for f in "${dir}"/*.tex; do
+            if grep -qF '\documentclass' "${f}" 2>/dev/null; then
+                candidates+=("$(basename "${f}")")
+            fi
+        done
+        shopt -u nullglob
+        if [[ "${#candidates[@]}" -eq 1 ]]; then
+            rule="documentclass"
+            source="${candidates[0]}"
+        fi
+    fi
+
+    if [[ -z "${rule}" ]]; then
+        reason="00README.json named no single toplevel source, and ${#candidates[@]} top-level .tex file(s) contain \\documentclass"
+        printf 'result=skipped\nrule=none\nsource=\nreason=%s\n' "${reason}" > "${status_file}"
+        printf 'skip {{id}}: %s\n' "${reason}" >&2
+        exit 2
+    fi
+    printf 'resolved {{id}} via %s: %s\n' "${rule}" "${source}"
+
+    log_file="${log_dir}/${id_safe}.console.log"
+    run_dir_parent="{{KB_DRIVER_ARXIV_DIR}}/runs/${id_safe}"
+    mkdir -p "${run_dir_parent}"
+
+    # start.proceed fires unconditionally on every live run (kb-driver-
+    # launch's own comment traces why, against the barrier registry); no
+    # other `--decide` is pre-answered here for the same reason it isn't
+    # there — which barrier, if any, an individual unguided paper hits is
+    # exactly what this sweep cannot know in advance.
+    set +e
+    ( cd "${dir}" && \
+      PYTHONPATH=.claude/agents \
+      "{{VENV_PYTHON}}" -m kb_tools.kb_driver run \
+        --source "${source}" \
+        --no-inference \
+        --run-dir "${run_dir_parent}" \
+        --decide start.proceed=yes \
+        > "${log_file}" 2>&1 )
+    driver_exit=$?
+    set -e
+
+    if [[ "${driver_exit}" -eq 0 ]]; then
+        result="built"
+    else
+        result="failed"
+    fi
+    printf 'result=%s\nrule=%s\nsource=%s\ndriver_exit=%s\nlog=%s\n' \
+        "${result}" "${rule}" "${source}" "${driver_exit}" "${log_file}" > "${status_file}"
+    printf '%s {{id}} (driver exit %s) — log: %s\n' "${result}" "${driver_exit}" "${log_file}"
+    exit "${driver_exit}"
+
+# Classification reads the status file no-inference-kb-driver-arxiv-paper writes, never
+# that recipe's own exit code: argparse (the driver CLI's own argument
+# parser, reached before any of the driver's documented exit codes) exits 2
+# on a bad invocation, the same value this file uses for "skipped" — the two
+# are not the same outcome, so only the status file's `result=` line, not
+# the exit code, tells them apart.
+[doc("sweep --no-inference kb_driver builds across the whole staged arXiv corpus (no-inference-kb-driver-arxiv-paper per id, sequential); a paper that fails or can't be resolved is logged and the sweep continues — it exits non-zero only when the sweep itself could not run, never for a per-paper outcome; pass ids= (or use no-inference-kb-driver-arxiv-corpus-candidates) to sweep a different id list")]
+no-inference-kb-driver-arxiv-corpus ids=ARXIV_IDS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ ! -d "{{ARXIV_STAGE}}" ]]; then
+        printf 'error: %s does not exist — run `just stage-arxiv-corpus` first.\n' "{{ARXIV_STAGE}}" >&2
+        exit 1
+    fi
+
+    rm -rf "{{KB_DRIVER_ARXIV_DIR}}"
+    mkdir -p "{{KB_DRIVER_ARXIV_DIR}}/status" "{{KB_DRIVER_ARXIV_DIR}}/logs" "{{KB_DRIVER_ARXIV_DIR}}/runs"
+
+    # {{ids}} is a space-joined id list, interpolated unquoted so `(...)`
+    # opens an array assignment rather than a single string.
+    ids=({{ids}})
+    total="${#ids[@]}"
+    built=()
+    failed=()
+    skipped=()
+    rule_readme=0
+    rule_documentclass=0
+    rule_none=0
+
+    n=0
+    for id in "${ids[@]}"; do
+        n=$((n + 1))
+        printf '\n[%s/%s] %s\n' "${n}" "${total}" "${id}"
+
+        # A per-paper failure is a measurement, not a sweep failure: -e
+        # would otherwise end the loop on the first bad paper, so it is
+        # suspended for exactly this one call.
+        #
+        # KB_DRIVER_ARXIV_DIR is forwarded explicitly via --set: this `just`
+        # call starts a fresh process that does not inherit an outer --set,
+        # and no-inference-kb-driver-arxiv-
+        # paper reads that variable directly rather than taking it as a
+        # parameter — this is what lets no-inference-kb-driver-arxiv-corpus-
+        # candidates redirect both the corpus sweep and its per-paper writes
+        # to KB_DRIVER_ARXIV_CANDIDATE_DIR with one override.
+        set +e
+        just --set KB_DRIVER_ARXIV_DIR "{{KB_DRIVER_ARXIV_DIR}}" no-inference-kb-driver-arxiv-paper "${id}"
+        set -e
+
+        id_safe="$(printf '%s' "${id}" | tr '/' '_')"
+        status_file="{{KB_DRIVER_ARXIV_DIR}}/status/${id_safe}.status"
+        if [[ -f "${status_file}" ]]; then
+            result="$(sed -n 's/^result=//p' "${status_file}")"
+            rule="$(sed -n 's/^rule=//p' "${status_file}")"
+        else
+            # no-inference-kb-driver-arxiv-paper writes a status file on every path it
+            # takes; its absence means that recipe did not run to completion
+            # at all (e.g. a venv or shell failure ahead of both the skip
+            # and the build write) — recorded as a failure, not left to
+            # crash the sweep.
+            result="failed"
+            rule="none"
+        fi
+
+        case "${rule}" in
+            readme) rule_readme=$((rule_readme + 1)) ;;
+            documentclass) rule_documentclass=$((rule_documentclass + 1)) ;;
+            *) rule_none=$((rule_none + 1)) ;;
+        esac
+        case "${result}" in
+            built) built+=("${id}") ;;
+            skipped) skipped+=("${id}") ;;
+            *) failed+=("${id}") ;;
+        esac
+    done
+
+    printf '\n=== source resolution (%s papers) ===\n' "${total}"
+    printf 'via 00README.json:  %s\n' "${rule_readme}"
+    printf 'via \\documentclass: %s\n' "${rule_documentclass}"
+    printf 'unresolved:         %s\n' "${rule_none}"
+
+    printf '\n=== tally ===\n'
+    printf 'built (%s):' "${#built[@]}"; printf ' %s' ${built[@]+"${built[@]}"}; printf '\n'
+    printf 'failed (%s):' "${#failed[@]}"; printf ' %s' ${failed[@]+"${failed[@]}"}; printf '\n'
+    printf 'skipped (%s):' "${#skipped[@]}"; printf ' %s' ${skipped[@]+"${skipped[@]}"}; printf '\n'
+
+[doc("no-inference-kb-driver-arxiv-corpus over ARXIV_CANDIDATE_IDS, writing to its own status/logs/runs tree (KB_DRIVER_ARXIV_CANDIDATE_DIR) rather than the corpus's — that recipe rm -rf's its whole output tree on every invocation, not per id, so sharing KB_DRIVER_ARXIV_DIR here would destroy the corpus sweep's record")]
+no-inference-kb-driver-arxiv-corpus-candidates:
+    @just --set KB_DRIVER_ARXIV_DIR "{{KB_DRIVER_ARXIV_CANDIDATE_DIR}}" no-inference-kb-driver-arxiv-corpus "{{ARXIV_CANDIDATE_IDS}}"
+
+# The live-inference sister to ARXIV_IDS: papers kb-driver-arxiv-corpus
+# actually spends a model call over, never the whole survey corpus. Seeded
+# with two ids from two different subfields so the loop is exercised on the
+# first real run rather than a single-element path nobody has taken:
+# 2609.09855v1 (math.ST, 32 documents, 16 awaiting claim identification) and
+# 2609.10318v1 (math.DG, 11 documents, 1 awaiting) — seventeen asks total.
+# Adding an id here is the only change needed to cover more.
+ARXIV_LIVE_IDS := "2609.10318v1 2609.09855v1"
+
+# Separate from KB_DRIVER_ARXIV_DIR: no-inference-kb-driver-arxiv-corpus rm -rf's that
+# directory on every invocation of its own, and sharing it would let either
+# sweep destroy the other's evidence. A sibling of it, never inside it.
+KB_DRIVER_ARXIV_LIVE_DIR := justfile_directory() / ".." / ".claude-temp" / "kb-driver-arxiv-live"
+
+# This is the one recipe in this file that runs the driver with inference
+# enabled against staged arXiv papers — every other arxiv-* recipe above is
+# --no-inference or a passthrough that cannot become anything else (see this
+# file's header comment on no-inference-kb-driver-arxiv-paper/-corpus).
+#
+# One driver invocation per paper, straight through to completion — no
+# pre-flight mechanical build. A pre-flight build was tried and discarded: it
+# recorded every stage in the ledger, so the live pass that followed found
+# each one already recorded and skipped it, reporting `built` in seconds
+# having spent nothing. Resuming a recorded stage is correct driver behaviour
+# — it is what makes an interrupted run safe to relaunch — but running the
+# whole build twice on purpose is what manufactured the false resume here.
+#
+# Staging is a deliberate, separate act, never something this recipe does
+# behind the operator's back: it builds over what `stage-arxiv-paper` or
+# `stage-arxiv-corpus` already staged, refusing an unstaged id with the same
+# detection no-inference-kb-driver-arxiv-paper uses (a staged paper's
+# directory always holds a git checkout) and the same shape of message. That
+# also answers the driver's point-14 double-run guard
+# (kb_claimgraph/conform.py `_cleanliness`, which refuses a tree that already
+# carries `<!-- id:`): a paper left over from an earlier build fails that
+# check immediately, and the fix is the same one the operator already has —
+# restage it deliberately — not something this recipe does for them.
+#
+# Source resolution (00README.json's "toplevel" entry, falling back to a lone
+# \documentclass file) is still duplicated from no-inference-kb-driver-arxiv-
+# paper rather than called: that recipe hardwires --no-inference with no
+# passthrough (by design — it is what keeps "nothing has spent a call on this
+# corpus" a fact about the mechanical sweep), so invoking it here would run a
+# whole --no-inference build as a side effect of resolving a filename.
+# Resolution runs against whatever the precondition check above has just
+# confirmed is staged.
+#
+# A paper that isn't staged, whose source can't be resolved, or whose driver
+# invocation fails is logged and tallied, never ends the sweep — the same
+# rule no-inference-kb-driver-arxiv-corpus follows, for the same reason: the
+# outcomes are the product.
+[doc("run a kb_driver build with inference enabled over ARXIV_LIVE_IDS, one invocation per paper straight through to completion, over already-staged papers only — refuses (skips) an unstaged id rather than staging it; a paper that's unstaged, unresolved, or fails is logged and the sweep continues")]
+kb-driver-arxiv-corpus: venv
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ ! -d "{{ARXIV_STAGE}}" ]]; then
+        printf 'error: %s does not exist — run `just stage-arxiv-corpus` first.\n' "{{ARXIV_STAGE}}" >&2
+        exit 1
+    fi
+
+    rm -rf "{{KB_DRIVER_ARXIV_LIVE_DIR}}"
+    status_dir="{{KB_DRIVER_ARXIV_LIVE_DIR}}/status"
+    log_dir="{{KB_DRIVER_ARXIV_LIVE_DIR}}/logs"
+    run_dir_root="{{KB_DRIVER_ARXIV_LIVE_DIR}}/runs"
+    mkdir -p "${status_dir}" "${log_dir}" "${run_dir_root}"
+
+    # {{ARXIV_LIVE_IDS}} is a space-joined id list, interpolated unquoted so
+    # `(...)` opens an array assignment (the same trick ARXIV_IDS uses in
+    # no-inference-kb-driver-arxiv-corpus) rather than a single string.
+    ids=({{ARXIV_LIVE_IDS}})
+    total="${#ids[@]}"
+    built=()
+    failed=()
+    skipped=()
+
+    n=0
+    for id in "${ids[@]}"; do
+        n=$((n + 1))
+        id_safe="$(printf '%s' "${id}" | tr '/' '_')"
+        dir="{{ARXIV_STAGE}}/${id_safe}"
+        printf '\n[%s/%s] %s\n' "${n}" "${total}" "${id}"
+
+        # Same precondition and detection as no-inference-kb-driver-arxiv-
+        # paper's own unstaged check: a staged paper's directory always holds
+        # a git checkout, and this recipe never stages one itself.
+        if [[ ! -d "${dir}/.git" ]]; then
+            reason="${id} is not staged (${dir}/.git missing) — run \`just stage-arxiv-paper ${id}\` first"
+            printf 'result=skipped\nrule=none\nsource=\nreason=%s\n' "${reason}" > "${status_dir}/${id_safe}.status"
+            printf 'skip %s: %s\n' "${id}" "${reason}" >&2
+            skipped+=("${id}")
+            continue
+        fi
+
+        # Source resolution — same rule as no-inference-kb-driver-arxiv-paper
+        # (00README.json's "toplevel" entry, falling back to a lone
+        # \documentclass file); see this recipe's own header comment on why
+        # it is repeated here rather than called.
+        rule=""
+        source=""
+        candidates=()
+        readme="${dir}/00README.json"
+        if [[ -f "${readme}" ]]; then
+            toplevel="$(python3 -c 'import json, sys; data = json.load(open(sys.argv[1])); names = [s.get("filename", "") for s in data.get("sources", []) if s.get("usage") == "toplevel"]; print(names[0] if len(names) == 1 and names[0] else "")' "${readme}" 2>/dev/null || true)"
+            if [[ -n "${toplevel}" && -f "${dir}/${toplevel}" ]]; then
+                rule="readme"
+                source="${toplevel}"
+            fi
+        fi
+        if [[ -z "${rule}" ]]; then
+            shopt -s nullglob
+            for f in "${dir}"/*.tex; do
+                if grep -qF '\documentclass' "${f}" 2>/dev/null; then
+                    candidates+=("$(basename "${f}")")
+                fi
+            done
+            shopt -u nullglob
+            if [[ "${#candidates[@]}" -eq 1 ]]; then
+                rule="documentclass"
+                source="${candidates[0]}"
+            fi
+        fi
+        if [[ -z "${rule}" ]]; then
+            reason="00README.json named no single toplevel source, and ${#candidates[@]} top-level .tex file(s) contain \\documentclass"
+            printf 'result=skipped\nrule=none\nsource=\nreason=%s\n' "${reason}" > "${status_dir}/${id_safe}.status"
+            printf 'skip %s: %s\n' "${id}" "${reason}" >&2
+            skipped+=("${id}")
+            continue
+        fi
+        printf 'resolved %s via %s: %s\n' "${id}" "${rule}" "${source}"
+
+        log_file="${log_dir}/${id_safe}.console.log"
+        run_dir_parent="${run_dir_root}/${id_safe}"
+        mkdir -p "${run_dir_parent}"
+
+        # Identical to no-inference-kb-driver-arxiv-paper's own driver
+        # invocation, minus --no-inference. A per-paper failure is a
+        # measurement, not a sweep failure, so -e is suspended for exactly
+        # this one call, the same way no-inference-kb-driver-arxiv-corpus
+        # suspends it around no-inference-kb-driver-arxiv-paper.
+        set +e
+        ( cd "${dir}" && \
+          PYTHONPATH=.claude/agents \
+          "{{VENV_PYTHON}}" -m kb_tools.kb_driver run \
+            --source "${source}" \
+            --run-dir "${run_dir_parent}" \
+            --decide start.proceed=yes \
+            > "${log_file}" 2>&1 )
+        driver_exit=$?
+        set -e
+
+        if [[ "${driver_exit}" -eq 0 ]]; then
+            result="built"
+            built+=("${id}")
+        else
+            result="failed"
+            failed+=("${id}")
+        fi
+        printf 'result=%s\nrule=%s\nsource=%s\ndriver_exit=%s\nlog=%s\n' \
+            "${result}" "${rule}" "${source}" "${driver_exit}" "${log_file}" > "${status_dir}/${id_safe}.status"
+        printf '%s %s (driver exit %s) — log: %s\n' "${result}" "${id}" "${driver_exit}" "${log_file}"
+    done
+
+    printf '\n=== tally ===\n'
+    printf 'built (%s):' "${#built[@]}"; printf ' %s' ${built[@]+"${built[@]}"}; printf '\n'
+    printf 'failed (%s):' "${#failed[@]}"; printf ' %s' ${failed[@]+"${failed[@]}"}; printf '\n'
+    printf 'skipped (%s):' "${#skipped[@]}"; printf ' %s' ${skipped[@]+"${skipped[@]}"}; printf '\n'
+
+[doc("print a finished live kb_driver run's result; refuses while the process is still alive")]
+kb-driver-harvest:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pid_file="{{KB_DRIVER_LIVE_DIR}}/driver.pid"
+    run_parent="{{KB_DRIVER_LIVE_DIR}}/runs"
+
+    if [[ -f "${pid_file}" ]]; then
+        pid="$(cat "${pid_file}")"
+        if kill -0 "${pid}" 2>/dev/null; then
+            printf 'error: live driver run (pid %s) is still alive — see `just kb-driver-kill` to stop it first; harvest only applies to a finished run.\n' "${pid}" >&2
+            exit 1
+        fi
+    fi
+    if [[ ! -f "${run_parent}/LATEST" ]]; then
+        printf 'error: no run recorded at %s/LATEST — nothing to harvest.\n' "${run_parent}" >&2
+        exit 1
+    fi
+    run_dir="$(cat "${run_parent}/LATEST")"
+    if [[ ! -f "${run_dir}/exit.json" ]]; then
+        printf 'error: %s/exit.json is missing — the run may have been killed before it could write one; inspect %s/run.log.\n' "${run_dir}" "${run_dir}" >&2
+        exit 1
+    fi
+
+    printf 'run directory: %s\n\n' "${run_dir}"
+    printf 'exit.json:\n'
+    cat "${run_dir}/exit.json"
+
+    # exit.json names the barrier record's path rather than embedding it —
+    # the record is the same body-plus-baton the driver already relayed to
+    # the console at the moment of the stop, kept on disk for whoever missed
+    # that moment.
+    if command -v jq >/dev/null 2>&1; then
+        barrier_record="$(jq -r '.barrier_record // empty' "${run_dir}/exit.json")"
+        if [[ -n "${barrier_record}" && -f "${barrier_record}" ]]; then
+            printf '\nbarrier record (%s):\n' "${barrier_record}"
+            cat "${barrier_record}"
+        fi
+    else
+        printf '\njq not found — read the barrier_record path out of exit.json above and cat it directly.\n'
+    fi
+
+    printf '\nfull run log: %s\n' "${run_dir}/run.log"
+
+[doc("SIGTERM a live kb_driver run if alive, and clear its pid file; fails (pid file left in place) if the process does not actually exit")]
+kb-driver-kill:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pid_file="{{KB_DRIVER_LIVE_DIR}}/driver.pid"
+    if [[ ! -f "${pid_file}" ]]; then
+        printf 'no pid file — nothing to kill.\n'
+        exit 0
+    fi
+    pid="$(cat "${pid_file}")"
+    if ! kill -0 "${pid}" 2>/dev/null; then
+        printf 'pid %s already not alive.\n' "${pid}"
+        rm -f "${pid_file}"
+        printf 'cleared %s\n' "${pid_file}"
+        exit 0
+    fi
+    kill -TERM "${pid}"
+    # A sent signal is not a dead process: confirm it before saying so,
+    # rather than trusting kill(1)'s exit code — this is the same pid-file
+    # trust failure as the launch-side bug, on the reporting end.
+    exited=""
+    for ((attempt = 0; attempt < 10; attempt++)); do
+        if ! kill -0 "${pid}" 2>/dev/null; then
+            exited="yes"
+            break
+        fi
+        sleep 1
+    done
+    if [[ -z "${exited}" ]]; then
+        printf 'error: sent SIGTERM to pid %s but it is still alive after 10s — pid file left at %s; inspect the process directly.\n' "${pid}" "${pid_file}" >&2
+        exit 1
+    fi
+    printf 'sent SIGTERM to pid %s — confirmed exited.\n' "${pid}"
+    rm -f "${pid_file}"
+    printf 'cleared %s\n' "${pid_file}"
+
+# Not wired into the root `just test` (that stays the fast unit run over
+# kb_tools/liaison_tools/gen-defs): this suite exercises kb-testing's own
+# recipes against DATA STAGED under test-data/transient/, never fixtures
+# committed to the repo, so it is invoked deliberately rather than on every
+# unit-test pass.
+[doc("run the kb-testing integration suite (tests/): exercises this justfile's recipes against staged, not committed, test data — a clean checkout has nothing to run until prep-test-data/stage-* populate test-data/transient/ — never part of the root `just test`")]
+integration-test *pytest_args: venv
+    PYTHONPATH="{{PROJECT_ROOT}}" PYTHONDONTWRITEBYTECODE=1 "{{VENV_PYTHON}}" -m pytest tests {{pytest_args}}
+

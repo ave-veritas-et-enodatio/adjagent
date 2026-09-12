@@ -10,6 +10,15 @@ __pycache__/
 mad-design/
 mad-review/
 
+# this repo's own render tree (justfile RENDERED): a build product, produced
+# on demand by the same install path a consuming project gets. Never committed.
+rendered/
+
+# guest-liaison session state: messages.json is a plaintext record of
+# everything relayed to a third-party endpoint, and params.env records the
+# base URL and the key-file path. Never version-controlled.
+guest-session/
+
 
 # auto-made backups of regenerated files.
 *.bak

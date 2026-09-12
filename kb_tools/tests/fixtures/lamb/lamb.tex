@@ -1,0 +1,62 @@
+% A whole paper in twenty-odd lines, carrying four properties on purpose.
+% Everything a build needs BEYOND the paper — a runner file, .gitignore, git
+% init, the agent-set install — is staging and is made by whatever stands this
+% up. Only the source belongs here.
+%
+% PROPERTY 1 — a colon in the title. A YAML emitter must quote a scalar
+% containing ": ", so `\title{... : ...}` reaches the rendering's metadata block
+% as `title: "Mary and Her Lamb: An Account"`. A reader that keeps the quotes
+% carries them into the volume's heading, its directory slug and its
+% entry-point link text — and quoted link text is the citation gate's own
+% excerpt grammar, so the build died at `graph-init` reporting a
+% citation-grammar violation that named nothing resembling a title. Subtitled
+% titles are ordinary; no other fixture happens to carry one, which is the only
+% reason this never fired. Do not remove the colon.
+%
+% PROPERTY 2 — no claim-bearing environment anywhere. No \newtheorem, no boxed
+% result, nothing the inventory classifies as stating one. A corpus that
+% declares no results at all is a legitimate build with an empty claim graph,
+% and no other fixture covers it.
+%
+% PROPERTY 3 — the paper cites. This is load-bearing and is not decoration: an
+% uncited bibliography exercises nothing, because no `Cite` node is produced and
+% neither the citeproc path nor the filter path is ever reached. The \cite below
+% is what makes the three citation states reachable from this one paper.
+%
+% PROPERTY 4 — two bibliography forms travel beside this file, and BOTH are
+% wanted. `lamb.bib` is bibtex's input, which pandoc resolves through
+% `--bibliography`: the citation then renders as author-year prose and the
+% volume gains a references leaf. `lamb.bbl` is bibtex's OUTPUT — LaTeX markup,
+% only the cited works, already formatted — and is the shape an arXiv tarball
+% usually ships instead. Pandoc does not pick a .bbl up from `\bibliography{}`;
+% it has to be \input or inlined, which is a staging concern rather than a
+% property of this file. Neither form is unused: they are the two halves of the
+% same test, and dropping the one that looks inert removes a path.
+\documentclass{article}
+\title{Mary and Her Lamb: An Account}
+\author{A. Nonymous}
+\begin{document}
+\maketitle
+\begin{abstract}
+We recount the case of Mary, who had a little lamb. No results are claimed.
+\end{abstract}
+
+\section{Introduction}
+Mary had a little lamb. Its fleece was white as snow.
+
+\section{Field Observations}
+Everywhere that Mary went, the lamb was sure to go. The behaviour is
+consistent with earlier accounts of nothing whatsoever \cite{nobody2026}.
+
+\subsection{The Schoolhouse Incident}
+It followed her to school one day, which was against the rule.
+
+\subsection{Reception}
+It made the children laugh and play to see a lamb at school.
+
+\section{Discussion}
+The teacher turned it out, but still it lingered near.
+
+\section{Conclusion}
+It waited patiently about till Mary did appear.
+\end{document}

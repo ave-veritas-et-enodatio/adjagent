@@ -1,0 +1,11 @@
+% Bibtex's OUTPUT, and the shape an arXiv tarball usually ships instead of a
+% .bib: LaTeX markup, only the cited works, already formatted to the style.
+%
+% Pandoc does NOT pick this up from `\bibliography{...}` — the reference list
+% simply vanishes — so reaching it means \input-ing or inlining it, which is a
+% staging step rather than anything this file can declare. Once it does reach
+% pandoc, `thebibliography` is already in authored_blocks.lua's STRUCTURAL list
+% and is read as structure rather than mistaken for a claim block.
+\begin{thebibliography}{1}
+\bibitem[Nobody(2026)]{nobody2026} Nobody. \emph{Nothing}. 2026.
+\end{thebibliography}

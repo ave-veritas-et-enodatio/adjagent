@@ -1,0 +1,22 @@
+# Review the knowledge base's own documentation
+
+Two documents, and only these two:
+
+- `@!dyn.readme-path!@` — what this knowledge base holds, how it is organized, how a reader navigates it.
+- `@!dyn.conventions-path!@` — the document formats in use, the link conventions, and what someone adding material later has to follow.
+
+Each is an absolute path, and the directory the two share is this knowledge base. The tree under it is the corpus they describe.
+
+The corpus itself is not under review: a finding about a document below these two is one nobody can act on now.
+
+What is in scope is whether these two are true about that tree: a navigation instruction that does not work when followed, a convention stated here that the documents on disk do not keep, a part of the corpus these two never mention. Read into that tree far enough to check them — that reading is the audit, and it is the part that cannot be done from the two files alone.
+
+The tree is the standard a claim in these documents is checked against; the toolchain that built it is not. Its source, its specification and the output of its commands describe alike every knowledge base it produces, so a claim checked against those comes out the same on every build.
+
+Say of each finding whether it would read the same against the next knowledge base this toolchain builds. One that would is a defect in the toolchain rather than in this corpus, and no later round here can answer it: the only text a round rewrites is the authored passage opening the overview document, everything else in both files being assembled from this build's records or written in from a shipped skeleton.
+
+Neither document is a software project's README. There is no build, no installation and no dependency list in this corpus, and no section about one is owed.
+
+@!verdict-contract!@
+
+@!return-contract!@
