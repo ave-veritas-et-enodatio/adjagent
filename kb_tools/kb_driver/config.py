@@ -35,6 +35,18 @@ the barrier registry's admissible answers when one is supplied; the registry
 lives in ``barriers.py`` and is injected rather than imported, since config
 load sits below it in the dependency direction.
 
+**There is no build-mode setting, and the key that carried one is refused.** A
+build is either a launch or a resume, and a resume is not configured — it is
+what a ledger with recorded stages already says, re-derived from the ledger on
+every invocation. A setting whose vocabulary has one member is a question with
+one answer, so ``[run] build_mode``, its vocabulary and its default are deleted
+outright rather than kept as a single-valued vestige. Deleted is not the same as
+unknown: an unknown key is ignored here, which is right for one nobody ever
+honoured and wrong for one whose author is relying on it — this key decided
+which rows a build walked, so ignoring it would silently walk a different build
+than the file asks for. Every such key is named in :data:`RETIRED_RUN_KEYS` and
+refused at load with what to do instead.
+
 **Two fields say what a run is made of; one bounds how far it goes.**
 ``no_inference`` drops every row that would cost a model call, row by row, and
 the walk carries on past them to a finished build. ``dry_run`` replays the calls
@@ -57,8 +69,14 @@ import tomllib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 from .. import kb_pipeline, kb_util
+
+# The step-id vocabulary `[timeouts.by_step]` is keyed by. Imported rather than
+# injected the way the barrier registry above is: what made the registry a
+# parameter is that `barriers` imports this module, and `steps` does not.
+from . import steps
 
 # --- vocabularies -----------------------------------------------------------
 
@@ -88,24 +106,31 @@ DRY_RUN_FLAG = "--dry-run"
 # so the one this module does not render back: see :func:`invocation`.
 THROUGH_FLAG = "--through"
 
+# Where this run's evidence goes: `[log] run_dir`'s flag, and the one flag that
+# names a `[log]` key rather than a `[run]` one. This module resolves it against
+# the file and renders it back into the resume line — a card that dropped it
+# would hand back an invocation whose evidence lands somewhere else
+# (:func:`invocation`). Spelled in `kb_util` for `NO_INFERENCE_FLAG`'s reason
+# read one step further: `baton` prints it in the watch command it offers and
+# may import no driver module, so the one spelling has to sit where both can
+# reach it.
+RUN_DIR_FLAG = kb_util.RUN_DIR_FLAG
+
 # The installed CLI's permission modes, probed at 2.1.220 (`--permission-mode`
 # rejects anything else and names the set). Config load validates against this
 # list and refuses an unknown mode at load rather than discovering it at the
 # first call.
 PERMISSION_MODES = ("acceptEdits", "auto", "bypassPermissions", "manual", "dontAsk", "plan")
 
-BUILD_MODES = ("fresh", "revision")
 BRIEF_TRANSPORTS = ("stdin", "file")  # never argv
 RUNNERS = ("just", "make")
 LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 # --- defaults ---------------------------------------------------------------
 
-DEFAULT_CHARTER_FILE = ".claude-temp/kb-build/build-charter.md"
 DEFAULT_PERMISSION_MODE = "bypassPermissions"
 DEFAULT_CLAUDE_COMMAND = ("claude",)
 DEFAULT_BRIEF_TRANSPORT = "stdin"
-DEFAULT_BUILD_MODE = "fresh"
 DEFAULT_SINGLE_SECONDS = 1800
 DEFAULT_WAVE_SECONDS = 7200
 DEFAULT_SILENCE_SECONDS = 600
@@ -116,6 +141,18 @@ DEFAULT_LOG_LEVEL = "INFO"
 # beneath it. The run lock does NOT — it is anchored at the repo root, so that
 # changing this value cannot buy a second concurrent run.
 DEFAULT_RUN_DIR = ".claude-temp/kb-driver"
+
+#: ``[run]`` keys that once meant something and no longer do, each with the
+#: sentence its refusal carries. Keyed rather than listed so the refusal says
+#: what to do instead of only that the key is gone.
+RETIRED_RUN_KEYS: Mapping[str, str] = MappingProxyType(
+    {
+        "build_mode": (
+            "a build is either a launch or a resume, and a resume is not configured — it is what "
+            "the ledger's recorded stages already say. Remove the key"
+        ),
+    }
+)
 
 
 class ConfigError(ValueError):
@@ -149,7 +186,13 @@ class Decision:
 class RunSection:
     sources: tuple[str, ...]
     permission_mode: str
-    build_mode: str
+    #: Where this run looks for a charter, defaulted to ``kb_pipeline``'s own
+    #: durable path rather than restated here. A charter is an input that must
+    #: already stand when the build opens, and the ``start`` boundary's body
+    #: names it permanently — so the default may never point into
+    #: ``.claude-temp/``, which staging deletes wholesale: a ledger entry naming
+    #: a wiped path names nothing. Configurable all the same, for a consumer
+    #: that keeps its charter elsewhere in the tree.
     charter_file: Path
     runner: str | None
     #: The one bibliography this run resolves citations against, where a run
@@ -185,6 +228,10 @@ class TimeoutSection:
     single_seconds: int
     wave_seconds: int
     silence_seconds: int
+    #: Per-step total bounds, keyed by step id. The keys are checked against the
+    #: step table at load and the values against the same positivity rule the
+    #: three scalars above take, because a key naming no step leaves the default
+    #: silently in force and a non-positive one is refused mid-build or nowhere.
     by_step: Mapping[str, int]
 
 
@@ -326,11 +373,28 @@ def _str_map(table: Mapping[str, object], key: str, *, section: str) -> dict[str
     return dict(mapping)
 
 
-def _int_map(table: Mapping[str, object], key: str, *, section: str) -> dict[str, int]:
+def _int_map(table: Mapping[str, object], key: str, *, section: str, keys: Sequence[str]) -> dict[str, int]:
+    """A table of positive durations, keyed by a closed vocabulary.
+
+    Both refusals are the ones :func:`_int_field` already makes for a duration
+    this module names itself, applied to one the caller names instead. A key
+    outside the vocabulary is a misspelling, and left unrefused it does nothing
+    at all — the default stays in force and the run reads as configured. A
+    non-positive value reaches ``call.Caller``'s own spawn boundary instead, as a
+    boundary error mid-build, where every other duration setting is refused at
+    load. The refusal carries the whole vocabulary, because a step id is a thing
+    an operator types from memory.
+    """
     mapping = _table(table, key, section=f"{section}.{key}")
     for name, value in mapping.items():
+        if name not in keys:
+            raise ConfigError(
+                f"[{section}.{key}] {name!r} names no step. The steps this build walks, " f"in order: {', '.join(keys)}"
+            )
         if not isinstance(value, int) or isinstance(value, bool):
             raise ConfigError(f"[{section}.{key}] {name} must be an integer, got {type(value).__name__}")
+        if value <= 0:
+            raise ConfigError(f"[{section}.{key}] {name} must be positive, got {value}")
     return dict(mapping)
 
 
@@ -436,12 +500,42 @@ def _read(path: Path) -> dict:
         raise ConfigError(f"config file is not valid TOML: {path}: {exc}") from exc
 
 
-def invocation(path: Path | None, run_overrides: Mapping[str, object] | None = None) -> str:
+def run_dir_parent(parent: Path | str | None) -> str:
+    """The run-directory parent a card must name, or empty where it need not.
+
+    One predicate, two lines: the resume line rendered below, and the watch line
+    the baton composes from :attr:`baton.BatonContext.run_dir_parent`, which is
+    set wherever a context is built. The default is what a bare invocation
+    already finds, so naming it would put a flag on every card to say nothing;
+    anything else is a directory the next invocation would otherwise not look
+    in — and a ``watch`` that looked in the default one would read a stale
+    ``LATEST``, find a dead ``run.pid``, and report a live run as terminated.
+    """
+    if parent is None or str(parent) == DEFAULT_RUN_DIR:
+        return ""
+    return str(parent)
+
+
+def invocation(
+    path: Path | None,
+    run_overrides: Mapping[str, object] | None = None,
+    *,
+    run_dir: Path | str | None = None,
+) -> str:
     """The flags that reproduce this run, rendered from what it was given.
 
     Written out flag by flag rather than derived from the override keys: the
     two are spelled differently (``--source`` carries ``sources``), and a
     resume line is not the place for a mapping that could be wrong.
+
+    **The run directory is rendered wherever it is not the default one**
+    (:func:`run_dir_parent`, which the watch line reads too). ``run_dir`` is the
+    *effective* parent — the flag where one was given, the file's ``[log]
+    run_dir`` otherwise — so a card built from this line hands back the
+    directory this run's evidence is actually in. A resume line that dropped it
+    would put the resumed run's evidence under the default parent and leave the
+    first run's stranded, which is the one thing a resume must not do to a run's
+    own account of itself.
 
     **The bound is not rendered, deliberately.** ``--through`` bounds one
     invocation rather than specifying the build, and this string is what every
@@ -464,6 +558,9 @@ def invocation(path: Path | None, run_overrides: Mapping[str, object] | None = N
     mode = overrides.get("permission_mode")
     if mode is not None:
         parts += [PERMISSION_MODE_FLAG, str(mode)]
+    named_parent = run_dir_parent(run_dir)
+    if named_parent:
+        parts += [RUN_DIR_FLAG, named_parent]
     for flag, key in ((NO_INFERENCE_FLAG, "no_inference"), (DRY_RUN_FLAG, "dry_run")):
         if overrides.get(key):
             parts.append(flag)
@@ -475,12 +572,19 @@ def load(
     *,
     run_overrides: Mapping[str, object] | None = None,
     admissible: Mapping[str, frozenset[str]] | None = None,
+    run_dir: Path | None = None,
 ) -> DriverConfig:
     """Validate one run's specification. Any refusal is a ConfigError (exit 13).
 
     ``path`` is the config file, or ``None`` for a run the flags specify
     entirely. ``run_overrides`` are ``[run]`` keys from the command line, which
     win over the file's own for the keys they name.
+
+    ``run_dir`` is ``--run-dir``, the one flag naming a ``[log]`` key rather
+    than a ``[run]`` one, and it takes the same precedence for the same reason —
+    one rule for both doors. Resolving it here rather than at the call site is
+    what lets ``log.run_dir`` be the *effective* parent and the resume line
+    render it: a flag the config never saw is a flag no card can hand back.
 
     ``admissible`` maps ``"<stage>.<kind>"`` to that barrier's admissible
     answers. Supply the registry to have decisions checked at load; omit it
@@ -490,6 +594,9 @@ def load(
     raw = _read(path) if path is not None else {}
 
     run_raw = {**_table(raw, "run", section="run"), **overrides}
+    for retired, reason in RETIRED_RUN_KEYS.items():
+        if retired in run_raw:
+            raise ConfigError(f"[run] {retired} is retired: {reason}")
     runner = run_raw.get("runner")
     run = RunSection(
         sources=_str_list_field(run_raw, "sources", section="run", flag=SOURCE_FLAG),
@@ -497,8 +604,7 @@ def load(
         permission_mode=_str_field(
             run_raw, "permission_mode", section="run", default=DEFAULT_PERMISSION_MODE, choices=PERMISSION_MODES
         ),
-        build_mode=_str_field(run_raw, "build_mode", section="run", default=DEFAULT_BUILD_MODE, choices=BUILD_MODES),
-        charter_file=Path(_str_field(run_raw, "charter_file", section="run", default=DEFAULT_CHARTER_FILE)),
+        charter_file=Path(_str_field(run_raw, "charter_file", section="run", default=kb_pipeline.CHARTER_RELPATH)),
         runner=None if runner is None else _str_field(run_raw, "runner", section="run", choices=RUNNERS),
         no_inference=_bool_field(run_raw, "no_inference", section="run", default=False),
         dry_run=_bool_field(run_raw, "dry_run", section="run", default=False),
@@ -526,7 +632,7 @@ def load(
         silence_seconds=_int_field(
             timeouts_raw, "silence_seconds", section="timeouts", default=DEFAULT_SILENCE_SECONDS
         ),
-        by_step=_int_map(timeouts_raw, "by_step", section="timeouts"),
+        by_step=_int_map(timeouts_raw, "by_step", section="timeouts", keys=tuple(steps.STEPS_BY_ID)),
     )
 
     retry_raw = _table(raw, "retry", section="retry")
@@ -538,15 +644,15 @@ def load(
     )
 
     log_raw = _table(raw, "log", section="log")
-    run_dir = _str_field(log_raw, "run_dir", section="log", default="")
+    configured_run_dir = _str_field(log_raw, "run_dir", section="log", default="")
     log = LogSection(
         level=_str_field(log_raw, "level", section="log", default=DEFAULT_LOG_LEVEL, choices=LOG_LEVELS),
-        run_dir=Path(run_dir) if run_dir else Path(DEFAULT_RUN_DIR),
+        run_dir=run_dir if run_dir is not None else Path(configured_run_dir or DEFAULT_RUN_DIR),
     )
 
     return DriverConfig(
         path=path,
-        invocation=invocation(path, overrides),
+        invocation=invocation(path, overrides, run_dir=log.run_dir),
         run=run,
         claude=claude,
         timeouts=timeouts,

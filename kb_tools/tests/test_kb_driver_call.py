@@ -1,7 +1,10 @@
 """Call policy: retry, the one re-ask, and the three persistence routes.
 
-Every case drives the real ``call.Caller`` against ``replay``'s synthetic
-stream-json, through the same ``transport.invoke`` a live call goes through.
+Every case drives the real ``call.Caller`` through the same
+``inference.invoke`` a live call goes through, against ``replay``'s synthetic
+stream-json — save one, which substitutes the real ``SubprocessInvoker``
+because the fault it is about is ``Popen``'s own and no synthetic invoker
+raises it where it happens.
 Two things are asserted about writes throughout, not only in the route tests:
 that each route wrote exactly where its step row declares, and that nothing the
 driver process wrote landed under ``kb-root/``.
@@ -19,13 +22,13 @@ no longer holds one.
 
 import json
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
 
-from kb_tools import kb_pipeline
-from kb_tools.kb_driver import baton, call, config, envelope, prompt_templates, replay, runlog, steps, transport
+from kb_tools import inference, kb_pipeline
+from kb_tools.kb_driver import baton, call, config, envelope, prompt_templates, replay, runlog, steps
 
 # --- the templates a call composes against ----------------------------------
 
@@ -64,9 +67,11 @@ DOCS_TEXT = "# README\n"
 
 # A path slot's value is checked before the call is made — absolute, and there
 # on disk — so these are functions of the repo under test rather than literals.
-# The `repo` fixture stands the two meta documents up because a real `phase-5`
-# meets them already written: `phase-3a`'s readiness stamp seeds CONVENTIONS.md
-# and `p5.docs` assembles README.md in the row before the review.
+# The `repo` fixture stands both documents a review brief names up because a
+# real `phase-5` meets them already written: `phase-3a`'s readiness stamp seeds
+# CONVENTIONS.md and `ov.docs` assembles README.md in the stage before the
+# review. Which of them the stage's own boundary then checks is a narrower set
+# (`kb_pipeline.META_DOCS`) and not this fixture's question.
 
 
 def docs_slots(repo: Path) -> dict[str, str]:
@@ -92,14 +97,21 @@ DOCS_STEP = steps.Step(
 
 
 def docs_step_slots(repo: Path) -> dict[str, str]:
-    return {"readme-path": str(repo / "kb-root" / kb_pipeline.META_DOCS[0])}
+    return {"readme-path": str(repo / "kb-root" / kb_pipeline.OVERVIEW_DOC)}
+
+
+#: The pair a review brief states, each named for itself. A zip over a document
+#: set would drop `conventions-path` the moment that set stopped holding two
+#: names, and a dropped required slot is refused by `steps.REQUIRED_PATH_SLOTS`
+#: rather than noticed here.
+REVIEW_DOCS: dict[str, str] = {
+    "readme-path": kb_pipeline.OVERVIEW_DOC,
+    "conventions-path": kb_pipeline.CONVENTIONS_DOC,
+}
 
 
 def review_slots(repo: Path) -> dict[str, str]:
-    return {
-        slot: str(repo / "kb-root" / name)
-        for slot, name in zip(("readme-path", "conventions-path"), kb_pipeline.META_DOCS)
-    }
+    return {slot: str(repo / "kb-root" / name) for slot, name in REVIEW_DOCS.items()}
 
 
 # The two local rows, and the values one call of the first carries. `wave.fix`
@@ -183,8 +195,7 @@ def _config(*, attempts: int = 3, silence: int = 30) -> config.DriverConfig:
         run=config.RunSection(
             sources=("AcmeWidgets.tex",),
             permission_mode="acceptEdits",
-            build_mode="fresh",
-            charter_file=Path(".claude-temp/kb-build/build-charter.md"),
+            charter_file=Path(kb_pipeline.CHARTER_RELPATH),
             runner=None,
         ),
         claude=config.ClaudeSection(command=("claude",), env={}, brief_transport="stdin"),
@@ -199,15 +210,15 @@ def _config(*, attempts: int = 3, silence: int = 30) -> config.DriverConfig:
 def repo(tmp_path: Path) -> Path:
     """A repo root with the scratch layout root and a kb-root the driver may never write.
 
-    The two meta documents stand because ``phase-5`` meets them written — the
-    readiness stamp seeds CONVENTIONS.md two stages earlier and ``p5.docs``
-    assembles README.md in the row before the review — and a path slot is
-    checked against disk before its call is made.
+    Both documents a review brief names stand because ``phase-5`` meets them
+    written — the readiness stamp seeds CONVENTIONS.md at ``phase-3a`` and
+    ``ov.docs`` assembles README.md in the stage before the review — and a path
+    slot is checked against disk before its call is made.
     """
     root = tmp_path / "repo"
     (root / steps.SCRATCH_ROOT).mkdir(parents=True)
     (root / "kb-root").mkdir()
-    for name in kb_pipeline.META_DOCS:
+    for name in REVIEW_DOCS.values():
         (root / "kb-root" / name).write_text(f"# {name}\n", encoding="utf-8")
     return root
 
@@ -272,8 +283,8 @@ def _fix_outputs(repo: Path, *domains: str) -> tuple[Path, ...]:
 
 
 def _passage(repo: Path) -> Path:
-    """``p5.docs``' one declared artifact: the prose answer, under the scratch layout."""
-    return repo / steps.SCRATCH_ROOT / steps.overview_prose(stage="phase-5")
+    """``ov.docs``' one declared artifact: the prose answer, under the scratch layout."""
+    return repo / steps.SCRATCH_ROOT / steps.overview_prose(stage=steps.STEPS_BY_ID["ov.docs"].stage)
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +327,9 @@ def test_the_write_to_disk_route_validates_the_document_and_writes_none_of_it(
     readme = repo / "kb-root" / "README.md"
     harness = build(_writes({readme: DOCS_TEXT}, replay.clean("Wrote README.md.")))
 
-    outcome = harness.caller.execute(call.CallRequest(step=DOCS_STEP, seq=3, slots=docs_step_slots(repo), outputs=(readme,)))
+    outcome = harness.caller.execute(
+        call.CallRequest(step=DOCS_STEP, seq=3, slots=docs_step_slots(repo), outputs=(readme,))
+    )
 
     assert outcome.ok
     assert outcome.written == (), "the seat wrote the document; the driver validated it"
@@ -403,6 +416,49 @@ def test_the_driver_process_writes_nothing_under_kb_root(repo: Path, build: Call
     assert not [path for path in driver_wrote if repo / "kb-root" in path.parents]
 
 
+# ---------------------------------------------------------------------------
+# The driver-persists route's write is atomic
+# ---------------------------------------------------------------------------
+#
+# **The dying write is injected as data, not by patching.** A text carrying a
+# lone surrogate cannot be encoded, so the write fails after the file has been
+# opened and before all of its bytes are there — which is the shape a killed
+# process leaves, reachable through whichever write call this module makes rather
+# than through the one a patch happened to name. Every reader of these paths asks
+# presence and non-emptiness and nothing else, so a zero-byte or truncated file
+# under the final name reads as work that finished.
+
+UNWRITABLE_TEXT = "A passage that does not survive encoding: " + "\ud800" + "\n"
+
+
+def _persist_request(repo: Path, target: Path) -> call.CallRequest:
+    return call.CallRequest(step=steps.STEPS_BY_ID["ov.docs"], seq=1, slots=docs_slots(repo), outputs=(target,))
+
+
+def test_a_dying_persist_leaves_no_partial_artifact_under_the_final_name(
+    repo: Path, build: Callable[..., Harness]
+) -> None:
+    harness = build(replay.clean(PASSAGE_TEXT))
+    target = _passage(repo)
+
+    with pytest.raises(UnicodeEncodeError):
+        harness.caller._persist(_persist_request(repo, target), text=UNWRITABLE_TEXT)
+
+    assert not target.exists(), "a write that died left a file under the name a resume reads as finished work"
+
+
+def test_a_dying_persist_leaves_the_artifact_already_there_untouched(repo: Path, build: Callable[..., Harness]) -> None:
+    """The target is the previous file or the whole new one, and there is no third state."""
+    harness = build(replay.clean(PASSAGE_TEXT))
+    target = _passage(repo)
+    harness.caller._persist(_persist_request(repo, target), text=PASSAGE_TEXT)
+
+    with pytest.raises(UnicodeEncodeError):
+        harness.caller._persist(_persist_request(repo, target), text=UNWRITABLE_TEXT)
+
+    assert target.read_text(encoding="utf-8") == PASSAGE_TEXT
+
+
 def test_a_driver_persist_target_outside_the_scratch_root_is_a_boundary_error(
     repo: Path, build: Callable[..., Harness]
 ) -> None:
@@ -416,9 +472,7 @@ def test_a_driver_persist_target_outside_the_scratch_root_is_a_boundary_error(
     assert not stray.exists()
 
 
-def test_a_path_a_seat_could_not_act_on_is_refused_before_the_call(
-    repo: Path, build: Callable[..., Harness]
-) -> None:
+def test_a_path_a_seat_could_not_act_on_is_refused_before_the_call(repo: Path, build: Callable[..., Harness]) -> None:
     """Relative, absent, or a named absence where the slot admits none.
 
     The first is measured: a review handed ``kb-root/README.md`` searched for a
@@ -449,11 +503,11 @@ def test_an_optional_path_slot_may_carry_the_named_absence(repo: Path, build: Ca
     harness = build(replay.clean(PASSAGE_TEXT))
 
     outcome = harness.caller.execute(
-        call.CallRequest(step=steps.STEPS_BY_ID["p5.docs"], seq=3, slots=docs_slots(repo), outputs=(passage,))
+        call.CallRequest(step=steps.STEPS_BY_ID["ov.docs"], seq=3, slots=docs_slots(repo), outputs=(passage,))
     )
 
     assert outcome.ok
-    assert steps.NOTHING in harness.brief(3, "p5.docs").read_text(encoding="utf-8")
+    assert steps.NOTHING in harness.brief(3, "ov.docs").read_text(encoding="utf-8")
 
 
 def test_an_empty_return_never_becomes_an_artifact(repo: Path, build: Callable[..., Harness]) -> None:
@@ -500,6 +554,86 @@ def test_a_step_that_makes_no_call_is_a_boundary_error(build: Callable[..., Harn
         harness.caller.execute(call.CallRequest(step=steps.STEPS_BY_ID["p3a.record"], seq=4))
 
 
+@pytest.mark.parametrize("smuggled", [["--model", "haiku"], ["--model=haiku"]])
+def test_a_command_prefix_carrying_model_is_refused_in_either_spelling(
+    repo: Path, build: Callable[..., Harness], smuggled: list[str]
+) -> None:
+    """Both spellings override every seat's frontmatter pin, so both are refused alike.
+
+    Exact list membership reads the separated form and misses the joined one,
+    which argparse accepts identically — so the pin was overridable with no log
+    line, no exit-code change, and nothing on the card to read.
+    """
+    harness = build(replay.clean(PASSAGE_TEXT))
+    caller = replace(
+        harness.caller,
+        config=replace(
+            harness.caller.config,
+            claude=replace(harness.caller.config.claude, command=("claude", *smuggled)),
+        ),
+    )
+
+    with pytest.raises(runlog.BoundaryError, match="--model"):
+        caller.execute(
+            call.CallRequest(
+                step=steps.STEPS_BY_ID["ov.docs"], seq=3, slots=docs_slots(repo), outputs=(_passage(repo),)
+            )
+        )
+
+    assert harness.invoker.calls == 0
+
+
+def test_an_empty_composed_brief_is_a_boundary_error_rather_than_a_call(
+    repo: Path, build: Callable[..., Harness], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The spawn boundary: nothing is worth spawning on a brief with nothing in it."""
+    harness = build(replay.clean(PASSAGE_TEXT))
+
+    def persist_nothing(briefs_dir: Path, *, seq: int, step_id: str, text: str) -> Path:
+        del text
+        path = briefs_dir / f"{seq:03d}-{step_id}.md"
+        path.write_text("", encoding="utf-8")
+        return path
+
+    monkeypatch.setattr(prompt_templates, "persist", persist_nothing)
+
+    with pytest.raises(runlog.BoundaryError, match="brief is empty"):
+        harness.caller.execute(
+            call.CallRequest(
+                step=steps.STEPS_BY_ID["ov.docs"], seq=3, slots=docs_slots(repo), outputs=(_passage(repo),)
+            )
+        )
+
+    assert harness.invoker.calls == 0
+
+
+def test_a_call_spawned_while_another_is_live_is_a_boundary_error(repo: Path, build: Callable[..., Harness]) -> None:
+    """Exactly one ``claude`` subprocess at a time — a policy of this driver's, held here.
+
+    The re-entry is made from inside a replayed call, which is where a second
+    spawn would happen for real: a scenario stands in for the process that is
+    still live while the next one is started.
+    """
+    nested: list[runlog.BoundaryError] = []
+    request = call.CallRequest(
+        step=steps.STEPS_BY_ID["ov.docs"], seq=3, slots=docs_slots(repo), outputs=(_passage(repo),)
+    )
+
+    def reentrant(context: replay.ReplayContext) -> replay.Response:
+        try:
+            harness.caller.execute(replace(request, seq=4))
+        except runlog.BoundaryError as exc:
+            nested.append(exc)
+        return replay.clean(PASSAGE_TEXT)(context)
+
+    harness = build(reentrant)
+
+    assert harness.caller.execute(request).ok
+    assert [str(exc) for exc in nested] == ["a call would be spawned while another is still live"]
+    # …and the guard released, so the next call is not poisoned by the last.
+    assert harness.caller.execute(replace(request, seq=5)).ok
+
+
 # ---------------------------------------------------------------------------
 # Transport retry
 # ---------------------------------------------------------------------------
@@ -511,7 +645,7 @@ def test_a_transport_death_is_retried_until_a_call_stands(repo: Path, build: Cal
     harness = build(replay.sequence(replay.transport_die(), replay.transport_die(), stands))
 
     outcome = harness.caller.execute(
-        call.CallRequest(step=steps.STEPS_BY_ID["p5.docs"], seq=3, slots=docs_slots(repo), outputs=(passage,))
+        call.CallRequest(step=steps.STEPS_BY_ID["ov.docs"], seq=3, slots=docs_slots(repo), outputs=(passage,))
     )
 
     assert outcome.ok
@@ -519,7 +653,7 @@ def test_a_transport_death_is_retried_until_a_call_stands(repo: Path, build: Cal
     assert harness.invoker.calls == 3
     assert harness.sleeps == [5.0, 30.0]  # the coordinator's own backoff: driver and briefs state one policy
     # Every attempt's capture is its own evidence file.
-    assert all(harness.stream(3, "p5.docs", attempt).is_file() for attempt in (1, 2, 3))
+    assert all(harness.stream(3, "ov.docs", attempt).is_file() for attempt in (1, 2, 3))
 
 
 def test_exhausted_transport_retries_exit_12(repo: Path, build: Callable[..., Harness]) -> None:
@@ -527,16 +661,16 @@ def test_exhausted_transport_retries_exit_12(repo: Path, build: Callable[..., Ha
     passage = _passage(repo)
 
     outcome = harness.caller.execute(
-        call.CallRequest(step=steps.STEPS_BY_ID["p5.docs"], seq=3, slots=docs_slots(repo), outputs=(passage,))
+        call.CallRequest(step=steps.STEPS_BY_ID["ov.docs"], seq=3, slots=docs_slots(repo), outputs=(passage,))
     )
 
     assert outcome.exit_code == baton.EXIT_TRANSPORT
     assert harness.invoker.calls == 3
-    assert outcome.detail[0] == "p5.docs: transport-failure after 3 attempt(s)"
+    assert outcome.detail[0] == "ov.docs: transport-failure after 3 attempt(s)"
     assert "connection reset" in outcome.detail
     assert not passage.exists()
     # A transport death is not a contract failure: the step is never re-asked.
-    assert not harness.brief(3, f"p5.docs{call.REASK_SUFFIX}").exists()
+    assert not harness.brief(3, f"ov.docs{call.REASK_SUFFIX}").exists()
 
 
 def test_a_cli_rejection_is_never_retried_and_exits_13(repo: Path, build: Callable[..., Harness]) -> None:
@@ -544,7 +678,7 @@ def test_a_cli_rejection_is_never_retried_and_exits_13(repo: Path, build: Callab
     harness = build(replay.cli_rejection(stderr))
 
     outcome = harness.caller.execute(
-        call.CallRequest(step=steps.STEPS_BY_ID["p5.docs"], seq=3, slots=docs_slots(repo), outputs=(_passage(repo),))
+        call.CallRequest(step=steps.STEPS_BY_ID["ov.docs"], seq=3, slots=docs_slots(repo), outputs=(_passage(repo),))
     )
 
     assert outcome.exit_code == baton.EXIT_CONFIG
@@ -553,15 +687,51 @@ def test_a_cli_rejection_is_never_retried_and_exits_13(repo: Path, build: Callab
     assert stderr.strip() in outcome.detail
 
 
+def test_a_command_that_cannot_be_spawned_exits_14_and_carries_a_restore_line(
+    tmp_path: Path, repo: Path, build: Callable[..., Harness]
+) -> None:
+    """A missing or mistyped ``[claude] command`` is an environment fault, not a driver defect.
+
+    The real ``SubprocessInvoker``, because the fault is ``Popen``'s own
+    ``FileNotFoundError`` and a substituted invoker cannot raise it in the place
+    that matters. Exit 14 is where ``ledger._run`` already puts a tool it could
+    not spawn, and its card is the one that fits: relay the ``restore:`` line
+    and re-run after it. Unclassified, this leaves as exit 15 — the code whose
+    card names the run directory as a bug report against the driver.
+    """
+    absent = tmp_path / "no-such-claude"
+    harness = build(replay.clean(PASSAGE_TEXT))
+    caller = replace(
+        harness.caller,
+        invoker=inference.SubprocessInvoker(),
+        config=replace(
+            harness.caller.config,
+            claude=replace(harness.caller.config.claude, command=(str(absent),)),
+        ),
+    )
+    passage = _passage(repo)
+
+    outcome = caller.execute(
+        call.CallRequest(step=steps.STEPS_BY_ID["ov.docs"], seq=3, slots=docs_slots(repo), outputs=(passage,))
+    )
+
+    assert outcome.exit_code == baton.EXIT_ENVIRONMENT
+    assert outcome.attempts == 1, "a command that is not on the path is not on it three times either"
+    assert harness.sleeps == []
+    assert str(absent) in outcome.detail[0]
+    assert "restore:" in outcome.detail[0]
+    assert not passage.exists()
+
+
 def test_a_silence_wedge_is_a_transport_failure_and_exhausts_to_12(repo: Path, build: Callable[..., Harness]) -> None:
     harness = build(replay.stall(), attempts=1, silence=1)
 
     outcome = harness.caller.execute(
-        call.CallRequest(step=steps.STEPS_BY_ID["p5.docs"], seq=3, slots=docs_slots(repo), outputs=(_passage(repo),))
+        call.CallRequest(step=steps.STEPS_BY_ID["ov.docs"], seq=3, slots=docs_slots(repo), outputs=(_passage(repo),))
     )
 
     assert outcome.exit_code == baton.EXIT_TRANSPORT
-    assert outcome.detail[0].startswith(f"p5.docs: {transport.Outcome.SILENCE.value}")
+    assert outcome.detail[0].startswith(f"ov.docs: {inference.Outcome.SILENCE.value}")
 
 
 # ---------------------------------------------------------------------------

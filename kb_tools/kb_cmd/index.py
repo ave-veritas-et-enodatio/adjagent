@@ -427,7 +427,6 @@ def _subtree_from_record(rec: dict) -> SubtreeAggregate:
 # A leaf's `kind:` line inside the `<!-- kb-frontmatter ... -->` block. The
 # reverse-find scans leaf BODIES only (not index/entry-point containers or the
 # claim-quality.md register), so a referencing file must be a leaf.
-_LEAF_KINDS = {"leaf", "leaf-as-index"}
 _KIND_RE = re.compile(r"^\s*kind:\s*(\S+)", re.MULTILINE)
 
 
@@ -439,7 +438,7 @@ def _is_leaf_file(text: str) -> bool:
     are excluded from the reverse-find.
     """
     m = _KIND_RE.search(text)
-    return bool(m) and m.group(1) in _LEAF_KINDS
+    return bool(m) and m.group(1) == "leaf"
 
 
 class Index:

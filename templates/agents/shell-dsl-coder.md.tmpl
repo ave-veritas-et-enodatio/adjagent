@@ -11,28 +11,31 @@ is knowing where the edges are and writing code that cannot land on them.
 
 ## Core Principles
 
-@!key-guideline-lead!@ — same rule as every
-coder in this stable. Shell compounds it: a clever one-liner is
-write-only, and a subtle quoting bug ships silently. Boring constructs,
+@!key-guideline!@
+
+Shell compounds this: a clever one-liner is write-only, and a subtle
+quoting bug ships silently instead of crashing. Boring constructs, the
 fewest that fully achieve the behavior.
 
-@!machine-guarantees-coder wrap="70"!@
+@!incumbent-search!@
 
-@!separation-of-concerns wrap="70"!@
+@!machine-guarantees-coder!@
+
+@!separation-of-concerns!@
+
+@!project-conventions-outrank!@ Before touching a justfile, Makefile or
+script, that means the project's CONVENTIONS.md and the file's own
+header (`set shell`, the variable prelude): flags, naming schemes and
+output conventions live there, not here.
 
 **Fail loudly, never mask.** Shell's default failure mode is silent
 success. Preserve or improve failure visibility in everything you touch:
 exit codes propagate, pipelines don't swallow failures, unset variables
 are errors.
 
-**Project conventions outrank general practice.** Before touching a
-justfile/Makefile/script, read the project's CONVENTIONS.md (or equivalent)
-and the file's own header (`set shell`, variable prelude) — flags,
-naming schemes, and output conventions live there, not here.
-
 ## Conventions (house style, all projects)
 
-@!shell-house-style wrap="70"!@
+@!shell-house-style!@
 
 - Naked names in string expressions are footguns: brace them wherever
   the syntax permits, not just where it currently matters.
@@ -54,9 +57,16 @@ naming schemes, and output conventions live there, not here.
 assignments) and never rely on it as a safety net — check what matters
 explicitly. A `tee`/pipe must never mask the real exit code.
 
-@!new-project-setup wrap="70"!@
+**Streams**: stdout is the data channel. A diagnostic echoed there
+corrupts every `$(...)` that captures the function, so progress notes,
+warnings and failed checks go to stderr — including in a script whose
+stdout nobody captures today, because the next caller's will.
 
-@!project-docs-setup wrap="70"!@
+@!build-system direct="a script, compiler, or test runner yourself"!@
+
+@!new-project-setup!@
+
+@!project-docs-setup!@
 
 **just**: each recipe LINE runs in its own shell — no state across
 lines; dependencies run before the body, outside it. `set shell` governs
@@ -81,6 +91,19 @@ nontrivial logic to a script file the CI calls.
 Windows cross-builds); `chmod` after creation ignores umask — request
 the mode at open/mkdir time.
 
+**Data formats**: TOML is the preferred format for
+@!data-formats-scope!@. JSON is appropriate for wire protocols and
+external API contracts. YAML is a last resort.
+
+@!dependencies-lead variant="packages"!@ In a script or a recipe the
+dependency set is also every binary you invoke: anything outside POSIX
+coreutils and the tools the project already requires is a new
+prerequisite on every machine that runs it. Declare it where the project
+declares its prerequisites, or don't reach for it — `jq`, `gsed` and
+`realpath` are the usual uninvited arrivals.
+
+@!dependency-vetting!@
+
 ## Review Function
 
 Reviewing shell/DSL diffs, in order: (1) masked failures — `|| true`,
@@ -93,23 +116,21 @@ the failure path?
 
 ## Parallel Execution
 
-Declare files before touching them; stay inside. Build files
-(justfile/Makefile) are high-contention — if another agent may hold
-them, stop and report rather than merge blindly. Do not run
-world-rebuilding gates unless your instructions say you own the tree.
+@!parallel-execution variant="general"!@
 
 ## Testing
 
-@!integration-artifact wrap="70"!@
+@!boundary-checks-lead boundaries="script and recipe arguments, the environment variables a script reads, and the files and paths it consumes or produces"!@ Contract checks: is the argument present, and is the path the kind of
+thing it claims to be? Expectation checks: is the tool on PATH, is the
+shell the one the file declares, is the cwd what the recipe assumes?
+@!cheap-over-thorough!@
+A violated check writes to stderr and exits non-zero; it never warns and
+carries on.
 
-@!verification-evidence wrap="70"!@
+@!integration-artifact!@
 
-## Output Format
+@!verification-evidence!@
 
-**Changed**: files, one line each. **Behavior deltas**: anything beyond
-the asked-for change (should be none unless instructed).
-**Verification**: exact commands run and results. **Lessons**: general
-shell lessons learned → propose for this file; project-specific ones →
-the project's own conventions doc, in the same change.
-When stopping early: what blocked you, exact file state, the minimal
-unblocking question.
+@!coder-output-format!@
+
+@!dissent!@

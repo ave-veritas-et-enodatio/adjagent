@@ -41,6 +41,53 @@ def test_only_phase_3a_has_a_pre_commit_hook() -> None:
     assert with_pre_commit == {"phase-3a"}
 
 
+def test_a_document_the_readiness_stamp_writes_is_not_also_a_later_stages_contract() -> None:
+    """One owner per document, and the earlier one wins whatever a later one declares.
+
+    ``CONVENTIONS.md`` is stamped at ``phase-3a`` from a packaged template whose
+    only slot is the project name, so it stands before the meta-documentation
+    stages are reached and a boundary check for it there is satisfied by work
+    neither stage did. What that costs is not a false green but a lost
+    observable: a contract no run can fail cannot tell a stage that did its job
+    from one that did nothing.
+
+    The reviewer is still handed both paths — narrowing what a seat is asked to
+    read is a different question from what a boundary checks, and this asserts
+    only the second.
+    """
+    assert kb_pipeline.CONVENTIONS_DOC in kb_pipeline.READINESS_DOCS
+    assert kb_pipeline.CONVENTIONS_DOC not in kb_pipeline.META_DOCS
+    # Not vacuous by emptiness: the set still declares the one document whose
+    # opening passage no read of the KB produces.
+    assert kb_pipeline.META_DOCS == (kb_pipeline.OVERVIEW_DOC,)
+
+
+def test_the_meta_documentation_boundary_refuses_on_the_overview_and_on_nothing_else(tmp_path: Path) -> None:
+    """The stamped document standing does not buy the stage its boundary.
+
+    The tree here is the one both meta-documentation stages really meet on a run
+    whose draft never landed: ``phase-3a`` stamped ``CONVENTIONS.md`` and the
+    overview was never written. The refusal names the overview, and the report
+    holds no unit the readiness stamp already satisfied — otherwise a stage that
+    wrote nothing covers half its contract for free.
+    """
+    kb = kb_util.kb_root(tmp_path)
+    kb.mkdir(parents=True)
+    (kb / kb_pipeline.CONVENTIONS_DOC).write_text("# Conventions\n", encoding="utf-8")
+    ctx = kb_pipeline.CheckContext(repo_root=tmp_path)
+
+    report = kb_pipeline._check_meta_docs(ctx)
+
+    assert [unit.id for unit in report.units] == [kb_pipeline.OVERVIEW_DOC]
+    refusal = kb_pipeline._coverage_refusal(report)
+    assert refusal is not None and kb_pipeline.OVERVIEW_DOC in refusal
+
+    # And it is the overview that lifts it: the stamped document was standing
+    # the whole time and nothing about the refusal moved until this write.
+    (kb / kb_pipeline.OVERVIEW_DOC).write_text("# Overview\n", encoding="utf-8")
+    assert kb_pipeline._coverage_refusal(kb_pipeline._check_meta_docs(ctx)) is None
+
+
 # ---------------------------------------------------------------------------
 # Where the build expects the user
 # ---------------------------------------------------------------------------
@@ -98,7 +145,7 @@ def _card(stage_id: str, tmp_path: Path) -> str:
 # STAGES-table-definition time — there is no per-render value it could go
 # stale against, unlike a stage id or a repo-relative path.
 _GENERATED_OPS = (
-    kb_util.OP_OPEN_BUILD,
+    kb_util.OP_START_BUILD,
     kb_util.OP_ADVANCE_STEP,
     kb_util.OP_SHOW_STAGE_STATUS,
 )
@@ -153,7 +200,7 @@ def test_no_card_carries_a_rendered_manifest_view(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("module", "constant", "value", "stage_ids"),
     [
-        pytest.param(kb_util, "OP_OPEN_BUILD", "commence-build", ("start",), id="open-build-op"),
+        pytest.param(kb_util, "OP_START_BUILD", "commence-build", ("start",), id="start-build-op"),
         pytest.param(kb_util, "OP_ADVANCE_STEP", "record-stage", ("phase-3a",), id="advance-step-op"),
     ],
 )

@@ -22,7 +22,6 @@ RAISED_BY_THE_TABLE = frozenset(pair for step in steps.STEPS for pair in step.ba
 #: registry by construction and could never report the registry drifting away
 #: from the intended set.
 DESIGN_5_1: dict[str, tuple[str, ...]] = {
-    "start.build-mode": ("fresh", "revision"),
     "start.proceed": ("yes", "no"),
     "spine-seed.runner-choice": ("just", "make"),
     "phase-5.cap-exhausted": ("stop", "authorize-one-more"),
@@ -42,11 +41,11 @@ def _decision(pair: str, answer: str, *, note: str = "", source: str = "config")
 def test_the_registry_is_exactly_the_pairs_design_5_1_enumerates() -> None:
     """Completeness against ``DESIGN_5_1``, which is the authority.
 
-    Not "the registry has four entries" — that would pass a registry holding
-    the wrong four. The pairs and the answers each admits are both checked,
+    Not "the registry has three entries" — that would pass a registry holding
+    the wrong three. The pairs and the answers each admits are both checked,
     because an answer set is what an operator is told they may choose from.
     """
-    assert len(DESIGN_5_1) == 4
+    assert len(DESIGN_5_1) == 3
     assert set(barriers.REGISTRY) == set(DESIGN_5_1)
     assert {pair: spec.answers for pair, spec in barriers.REGISTRY.items()} == DESIGN_5_1
 
@@ -92,7 +91,7 @@ def test_a_cap_exhausted_barrier_reports_a_loop_that_hit_its_limit() -> None:
 
 def test_the_admissible_map_is_what_config_validates_against() -> None:
     assert set(barriers.ADMISSIBLE) == set(barriers.REGISTRY)
-    assert barriers.ADMISSIBLE[barriers.START_BUILD_MODE] == frozenset({"fresh", "revision"})
+    assert barriers.ADMISSIBLE[barriers.START_PROCEED] == frozenset({"yes", "no"})
 
 
 def test_an_unregistered_pair_is_a_driver_defect() -> None:
@@ -107,27 +106,27 @@ def test_an_unregistered_pair_is_a_driver_defect() -> None:
 
 def test_decide_takes_precedence_over_config_for_its_pair() -> None:
     resolver = barriers.Resolver(
-        config_decisions={barriers.START_BUILD_MODE: _decision(barriers.START_BUILD_MODE, "fresh")},
-        cli_decisions=[_decision(barriers.START_BUILD_MODE, "revision", source="cli")],
+        config_decisions={barriers.START_PROCEED: _decision(barriers.START_PROCEED, "no")},
+        cli_decisions=[_decision(barriers.START_PROCEED, "yes", source="cli")],
     )
 
-    decision = resolver.take(barriers.START_BUILD_MODE)
+    decision = resolver.take(barriers.START_PROCEED)
 
     assert decision is not None
-    assert decision.answer == "revision"
+    assert decision.answer == "yes"
     assert decision.source == "cli"
 
 
 def test_an_answer_is_consumed_at_most_once_per_run() -> None:
     """The second raise has no answer, even though config still holds one."""
-    pair = barriers.START_BUILD_MODE
-    resolver = barriers.Resolver(config_decisions={pair: _decision(pair, "revision", note="already seeded")})
+    pair = barriers.START_PROCEED
+    resolver = barriers.Resolver(config_decisions={pair: _decision(pair, "yes", note="already confirmed")})
 
     first = resolver.take(pair)
     second = resolver.take(pair)
 
-    assert first is not None and first.answer == "revision"
-    assert first.note == "already seeded"
+    assert first is not None and first.answer == "yes"
+    assert first.note == "already confirmed"
     assert second is None
 
 
@@ -164,29 +163,16 @@ def test_grants_are_counted_per_pair_and_start_at_zero() -> None:
     assert resolver.grants("phase-5.cap-exhausted") == 0
 
 
-def test_the_build_mode_fallback_answers_without_raising_a_record() -> None:
-    """``[run] build_mode`` is the carrier; the barrier table is the override door."""
-    resolver = barriers.Resolver(config_decisions={})
+def test_no_barrier_answers_from_a_config_field_outside_the_barrier_tables() -> None:
+    """``Resolver.resolve`` went with the build mode, and the registry keeps only one door.
 
-    decision = resolver.resolve(barriers.START_BUILD_MODE, fallback="revision")
-
-    assert decision.answer == "revision"
-    assert decision.pair == barriers.START_BUILD_MODE
-
-
-def test_the_barrier_table_overrides_the_config_build_mode() -> None:
-    resolver = barriers.Resolver(
-        config_decisions={barriers.START_BUILD_MODE: _decision(barriers.START_BUILD_MODE, "revision")}
-    )
-
-    assert resolver.resolve(barriers.START_BUILD_MODE, fallback="fresh").answer == "revision"
-
-
-def test_an_inadmissible_fallback_is_a_driver_defect() -> None:
-    resolver = barriers.Resolver(config_decisions={})
-
-    with pytest.raises(Exception, match="not admissible"):
-        resolver.resolve(barriers.START_BUILD_MODE, fallback="sideways")
+    Its whole subject was ``[run] build_mode`` as a carrier the barrier table
+    overrode. With no such field left, an answer reaches a barrier through
+    ``--decide`` or a ``[barriers.*]`` table and through nothing else — asserted
+    over the surface rather than described, since a second door that reappeared
+    would be a second precedence rule for an operator to learn.
+    """
+    assert not hasattr(barriers.Resolver, "resolve")
 
 
 # ---------------------------------------------------------------------------

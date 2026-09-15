@@ -226,8 +226,8 @@ format-python *paths: venv
     #!/usr/bin/env bash
     set -euo pipefail
     if [[ "$#" -eq 0 ]]; then
-        black_isort_paths=(kb_tools liaison_tools tests gen-defs.py)
-        flake8_paths=(kb_tools liaison_tools gen-defs.py tests)
+        black_isort_paths=(kb_tools liaison_tools tests gen-defs.py dupe_sweep.py)
+        flake8_paths=(kb_tools liaison_tools gen-defs.py dupe_sweep.py tests)
     else
         black_isort_paths=("$@")
         flake8_paths=("$@")
@@ -235,6 +235,27 @@ format-python *paths: venv
     "{{VENV_PYTHON}}" -m black --line-length=120 "${black_isort_paths[@]}"
     "{{VENV_PYTHON}}" -m isort --profile black --line-length 120 "${black_isort_paths[@]}"
     "{{VENV_PYTHON}}" -m flake8 --ignore="{{FLAKE8_IGNORE}}" "${flake8_paths[@]}"
+
+
+# The two duplication sweeps. One idea in two places is invisible inside either
+# of them — nothing in a file reports a fact about two files — so it has been
+# found here by adversarial multi-model review or by accident, and both are too
+# expensive to be the standing instrument. These are the standing instrument.
+#
+# They EMIT CANDIDATES AND NEVER VERDICTS, and exit zero with findings on
+# purpose: whether two sites are one idea is a judgment, and a gate here would
+# be claiming it. Read the output, or hand it to a seat that will.
+#
+# Stdlib only under the system python3, like every other tool here, with
+# PYTHONPATH pointed at this tree because the sweep is imported as a top-level
+# module. `--rev` sweeps a past tree, which is how the known-answer run is made.
+[doc("list duplicated-prose candidates across templates/ — chunk bodies and template inline prose; trailing args forward to the sweep (--rev, --min-words, --coverage)")]
+sweep-prose *args:
+    PYTHONPATH="{{justfile_directory()}}" PYTHONDONTWRITEBYTECODE=1 python3 -m dupe_sweep prose "$@"
+
+[doc("list one-idea-two-places candidates across kb_tools/ — structural twins, repeated constants, repeated docstring and comment rules; trailing args forward to the sweep (--rev, --min-words, --coverage)")]
+sweep-python *args:
+    PYTHONPATH="{{justfile_directory()}}" PYTHONDONTWRITEBYTECODE=1 python3 -m dupe_sweep python "$@"
 
 
 # The claim-graph sheet for one built KB. A recipe rather than a command line:

@@ -32,9 +32,12 @@ Five checks, all errors:
                            needs a matching depends-on edge, or an entry-level
                            ``no-edge: <reason>`` exemption
 
-SCOPE — authored files only. Leaf BODIES are exempt: a leaf is a verbatim
-translation of its source, and its claim-graph obligations live in its
-frontmatter and markers, which ARE in scope. Registers, indexes, summaries,
+SCOPE — authored files only. Leaf BODIES are exempt: a leaf body is converted
+corpus prose, so an id or an invariant name standing in it is the source's own
+word and not a citation this KB makes, while the leaf's own claim-graph
+obligations live in its frontmatter and markers, which ARE in scope. The
+exemption keys on the declared ``kind:`` and never on what a body looks like.
+Registers, indexes, summaries,
 ``invariants.md`` and the meta-docs are scanned whole. ``.index/`` is out of
 scope entirely — it is contract and derived space, not build-authored content
 (the exclusion comes free from ``kb_links.SKIP_DIRS``).
@@ -91,7 +94,7 @@ FRONTMATTER_RE = re.compile(r"<!--\s*kb-frontmatter\b.*?-->", re.DOTALL)
 # enough that quoting a whole paragraph is a failure rather than a habit.
 EXCERPT_MAX_CHARS = 240
 
-LEAF_KINDS = ("leaf", "leaf-as-index")
+LEAF_KINDS = ("leaf",)
 
 
 @dataclass(frozen=True)
@@ -134,9 +137,12 @@ def in_scope_text(text: str) -> str:
     """The part of a file the checks read, everything else blanked.
 
     A leaf contributes only its frontmatter and its Tier-2 markers — its body
-    is a verbatim translation of the source and carries no citation
-    obligations. Every other authored file is scanned whole. Fenced and inline
-    code is blanked either way: an example is documentation, not a citation.
+    is converted corpus prose, whose citation-shaped tokens are the source's
+    own rather than assertions this KB makes, and the leaf's own citation
+    obligations sit in the two parts kept. The test is the declared ``kind:``,
+    never what a body looks like. Every other authored file is scanned whole.
+    Fenced and inline code is blanked either way: an example is documentation,
+    not a citation.
     """
     text = kb_links.strip_code(text)
     if leaf_kind(text) not in LEAF_KINDS:

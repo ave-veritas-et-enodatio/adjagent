@@ -23,7 +23,7 @@ permission_mode = "acceptEdits"
 # answer-set validation is testable without importing it.
 ADMISSIBLE = {
     "phase-1b.design-gate": frozenset({"approve", "revise", "cancel"}),
-    "start.build-mode": frozenset({"fresh", "revision"}),
+    "start.proceed": frozenset({"yes", "no"}),
 }
 
 
@@ -43,8 +43,7 @@ def test_minimal_config_applies_every_default(tmp_path: Path) -> None:
 
     assert cfg.run.sources == ("AcmeWidgets.tex",)
     assert cfg.run.permission_mode == "acceptEdits"
-    assert cfg.run.build_mode == "fresh"
-    assert cfg.run.charter_file == Path(config.DEFAULT_CHARTER_FILE)
+    assert cfg.run.charter_file == Path(kb_pipeline.CHARTER_RELPATH)
     assert cfg.run.runner is None
     assert cfg.claude.command == ("claude",)
     assert cfg.claude.brief_transport == "stdin"
@@ -62,7 +61,6 @@ def test_full_config_is_typed_through(tmp_path: Path) -> None:
 [run]
 sources = ["a.tex", "b.tex"]
 permission_mode = "bypassPermissions"
-build_mode = "revision"
 charter_file = "scratch/charter.md"
 runner = "make"
 
@@ -76,7 +74,7 @@ single_seconds = 60
 wave_seconds = 120
 silence_seconds = 30
 [timeouts.by_step]
-"p2.5.claims" = 14400
+"p5.review" = 14400
 
 [retry]
 transport_attempts = 2
@@ -93,13 +91,12 @@ note = "Approve."
     cfg = config.load(_write(tmp_path, body), admissible=ADMISSIBLE)
 
     assert cfg.run.sources == ("a.tex", "b.tex")
-    assert cfg.run.build_mode == "revision"
     assert cfg.run.charter_file == Path("scratch/charter.md")
     assert cfg.run.runner == "make"
     assert cfg.claude.command == ("claude", "--dangerously-skip-update")
     assert cfg.claude.env == {"ANTHROPIC_LOG": "debug"}
     assert cfg.claude.brief_transport == "file"
-    assert cfg.timeouts.by_step == {"p2.5.claims": 14400}
+    assert cfg.timeouts.by_step == {"p5.review": 14400}
     assert cfg.retry.transport_attempts == 2
     assert cfg.retry.backoff_seconds == (1, 2, 3)
     assert cfg.log.run_dir == Path("/var/tmp/kb-driver")
@@ -134,8 +131,7 @@ def test_flags_alone_specify_a_run_and_every_other_field_defaults() -> None:
     assert cfg.path is None
     assert cfg.run.sources == ("a.tex", "b.tex")
     assert cfg.run.permission_mode == config.DEFAULT_PERMISSION_MODE
-    assert cfg.run.build_mode == config.DEFAULT_BUILD_MODE
-    assert cfg.run.charter_file == Path(config.DEFAULT_CHARTER_FILE)
+    assert cfg.run.charter_file == Path(kb_pipeline.CHARTER_RELPATH)
     assert cfg.run.runner is None
     assert cfg.claude.command == config.DEFAULT_CLAUDE_COMMAND
     assert cfg.log.run_dir == Path(config.DEFAULT_RUN_DIR)
@@ -144,7 +140,7 @@ def test_flags_alone_specify_a_run_and_every_other_field_defaults() -> None:
 
 def test_a_flag_wins_over_the_file_for_the_field_it_names(tmp_path: Path) -> None:
     """Precedence, and its bound: an override replaces its own field and no other."""
-    body = MINIMAL + 'build_mode = "revision"\n[barriers.phase-1b.design-gate]\ndecision = "approve"\n'
+    body = MINIMAL + 'runner = "make"\n[barriers.phase-1b.design-gate]\ndecision = "approve"\n'
 
     cfg = config.load(
         _write(tmp_path, body),
@@ -154,7 +150,7 @@ def test_a_flag_wins_over_the_file_for_the_field_it_names(tmp_path: Path) -> Non
 
     assert cfg.run.sources == ("flagged.tex",), "a repeated --source replaces the list rather than extending it"
     assert cfg.run.permission_mode == "plan"
-    assert cfg.run.build_mode == "revision", "a field no flag names keeps the file's value"
+    assert cfg.run.runner == "make", "a field no flag names keeps the file's value"
     assert cfg.decisions["phase-1b.design-gate"].answer == "approve"
 
 
@@ -209,6 +205,46 @@ def test_the_resume_line_reproduces_what_the_run_was_given(
     assert config.invocation(path, overrides) == expected
 
 
+@pytest.mark.parametrize(
+    ("run_dir", "expected"),
+    [
+        (None, "--source a.tex"),
+        (config.DEFAULT_RUN_DIR, "--source a.tex"),
+        (Path("/outside/runs"), f"--source a.tex {config.RUN_DIR_FLAG} /outside/runs"),
+    ],
+)
+def test_the_resume_line_names_the_run_directory_wherever_it_is_not_the_default(
+    run_dir: Path | str | None, expected: str
+) -> None:
+    """A resumed run's evidence lands where the first run's did, or the line is wrong.
+
+    ``--run-dir`` is what a run launched outside the default parent is launched
+    with, and a resume line that dropped it would file the resumed run's
+    evidence under the default and strand the first run's. The default itself
+    stays unspelled: a bare invocation already finds it.
+    """
+    assert config.invocation(None, {"sources": ("a.tex",)}, run_dir=run_dir) == expected
+
+
+def test_the_run_directory_flag_wins_over_the_file_and_reaches_the_resume_line(tmp_path: Path) -> None:
+    """One rule for both doors, and one effective value for both readers.
+
+    ``--run-dir`` names a ``[log]`` key rather than a ``[run]`` one, and takes
+    the same precedence. ``log.run_dir`` is where the run directory is laid out
+    and ``invocation`` is what the card hands back, so the two reading one value
+    is what keeps a card from naming a directory the run did not use.
+    """
+    body = MINIMAL + '[log]\nrun_dir = "/var/tmp/configured"\n'
+
+    configured = config.load(_write(tmp_path, body))
+    flagged = config.load(_write(tmp_path, body), run_dir=Path("/outside/runs"))
+
+    assert configured.log.run_dir == Path("/var/tmp/configured")
+    assert f"{config.RUN_DIR_FLAG} /var/tmp/configured" in configured.invocation
+    assert flagged.log.run_dir == Path("/outside/runs")
+    assert f"{config.RUN_DIR_FLAG} /outside/runs" in flagged.invocation
+
+
 # ---------------------------------------------------------------------------
 # Refused configs — the validation table
 # ---------------------------------------------------------------------------
@@ -226,7 +262,6 @@ def test_the_resume_line_reproduces_what_the_run_was_given(
         ("empty sources", '[run]\nsources = []\npermission_mode = "auto"\n', "sources"),
         ("sources not strings", '[run]\nsources = [1]\npermission_mode = "auto"\n', "sources"),
         ("missing [run]", '[log]\nlevel = "INFO"\n', "sources"),
-        ("unknown build mode", MINIMAL + 'build_mode = "sideways"\n', "build_mode"),
         ("unknown runner", MINIMAL + 'runner = "cmake"\n', "runner"),
         ("bad brief transport", MINIMAL + '[claude]\nbrief_transport = "argv"\n', "brief_transport"),
         ("command not a list", MINIMAL + '[claude]\ncommand = "claude"\n', "command"),
@@ -243,6 +278,66 @@ def test_invalid_config_is_refused_naming_the_key(tmp_path: Path, case: str, bod
     with pytest.raises(config.ConfigError) as excinfo:
         config.load(_write(tmp_path, body))
     assert expected in str(excinfo.value), case
+
+
+def test_a_per_step_timeout_naming_no_step_is_refused_naming_it_and_the_vocabulary(tmp_path: Path) -> None:
+    """A misspelled step id is inert, not partial: the default stays in force.
+
+    Nothing reads a key no step answers to, so the run bounds that step by
+    ``single_seconds`` and reports itself configured. The vocabulary rides the
+    refusal because the id is a thing an operator types from memory.
+    """
+    body = MINIMAL + '[timeouts.by_step]\n"p5.reveiw" = 14400\n'
+
+    with pytest.raises(config.ConfigError) as excinfo:
+        config.load(_write(tmp_path, body))
+
+    message = str(excinfo.value)
+    assert "p5.reveiw" in message, "the refusal names the key that is wrong"
+    assert "p5.review" in message, "…and the vocabulary it should have been drawn from"
+
+
+@pytest.mark.parametrize("seconds", [0, -60])
+def test_a_non_positive_per_step_timeout_is_refused_at_load(tmp_path: Path, seconds: int) -> None:
+    """The same bound the three scalar durations take, at the same door.
+
+    Unrefused, this value reaches ``call.Caller``'s own spawn boundary as a
+    boundary error three stages into a build, which reports a driver defect for
+    a number the config file supplied.
+    """
+    body = MINIMAL + f'[timeouts.by_step]\n"p5.review" = {seconds}\n'
+
+    with pytest.raises(config.ConfigError) as excinfo:
+        config.load(_write(tmp_path, body))
+
+    message = str(excinfo.value)
+    assert "p5.review" in message
+    assert "positive" in message
+
+
+@pytest.mark.parametrize("retired", sorted(config.RETIRED_RUN_KEYS))
+@pytest.mark.parametrize("door", ["file", "flag"])
+def test_a_retired_run_key_is_refused_at_load_rather_than_ignored(tmp_path: Path, retired: str, door: str) -> None:
+    """An unknown key is ignored here; a retired one is not, and the difference is intent.
+
+    ``build_mode`` selected which rows a build walked. A file still carrying it
+    means something by it, so ignoring it would walk a different build than the
+    file asks for and say nothing — where an unknown key nobody ever honoured
+    changes nothing by being skipped. The refusal carries the key and what to do
+    instead, both doors alike, because a flag is refused in the same words its
+    config key is.
+    """
+    body = MINIMAL + f'{retired} = "fresh"\n'
+    with pytest.raises(config.ConfigError) as excinfo:
+        if door == "file":
+            config.load(_write(tmp_path, body))
+        else:
+            config.load(None, run_overrides={"sources": ("a.tex",), retired: "fresh"})
+
+    message = str(excinfo.value)
+    assert retired in message
+    assert "retired" in message
+    assert config.RETIRED_RUN_KEYS[retired] in message, "the refusal says what to do instead"
 
 
 @pytest.mark.parametrize(
@@ -383,6 +478,4 @@ def test_the_rows_a_no_inference_run_drops_are_the_step_tables_answer() -> None:
     dropped = [step.id for step in steps.STEPS if step.spends_inference]
 
     assert dropped
-    assert all(
-        not steps.applies(step, build_mode="fresh", spend_inference=False) for step in steps.STEPS if step.id in dropped
-    )
+    assert all(not steps.applies(step, spend_inference=False) for step in steps.STEPS if step.id in dropped)

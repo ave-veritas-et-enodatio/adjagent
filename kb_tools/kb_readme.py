@@ -1,6 +1,6 @@
 """The KB's overview document, assembled from the build's own derived facts.
 
-``phase-5`` used to ask a seat to compose ``<kb-root>/README.md`` whole, counts
+The build used to ask a seat to compose ``<kb-root>/README.md`` whole, counts
 included, and a second seat to check those counts by recounting. Every one of
 them already sits in ``.index/`` or in the tree, so the composition is
 mechanical and the check was two model calls spent moving integers out of a
@@ -53,8 +53,6 @@ PROSE_SLOT = "overview-passage"
 # Markdown and carries no braces of its own; one that did would be reported as
 # an unfilled slot, which is loud rather than silent.
 _SLOT_RE = re.compile(r"\{([a-z][a-z0-9-]*)\}")
-
-_LEAF_KINDS = frozenset({"leaf", "leaf-as-index"})
 
 # What a slot carries where the KB has nothing to put in it. A slot is never
 # filled with the empty string: a document that silently loses a sentence's
@@ -197,7 +195,7 @@ def _tree_facts(kb_root: Path) -> dict[str, str]:
     }
     return {
         "document-count": str(len(kinds)),
-        "leaf-count": str(sum(1 for kind in kinds.values() if kind in _LEAF_KINDS)),
+        "leaf-count": str(sum(1 for kind in kinds.values() if kind == "leaf")),
         "document-tree": _render_tree(kinds),
     }
 

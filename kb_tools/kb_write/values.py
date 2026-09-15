@@ -138,7 +138,7 @@ _READER_NUMBER_RE = re.compile(r"-?\d+(?:\.\d+)?")
 #: it does not encode claim-graph flavor. The reader's two guards are
 #: ``kb_index_lib.py:1226`` (leaf kinds) and ``:1506`` (index kinds); a document
 #: whose kind is outside this set parses as neither.
-DOCUMENT_KINDS: tuple[str, ...] = ("leaf", "leaf-as-index", "index", "entry-point")
+DOCUMENT_KINDS: tuple[str, ...] = ("leaf", "index", "entry-point")
 
 #: The closed ``status:`` vocabulary of an experiment block. ``run`` means the
 #: result exists and its strengthens edges count; ``pending`` means unrun and

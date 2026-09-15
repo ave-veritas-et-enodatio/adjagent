@@ -1,4 +1,4 @@
-"""Relay batons — one per exit code, plus the unlisted-code fallback.
+"""Relay batons — one per exit code, the mode's own where a code means two things, and the unlisted-code fallback.
 
 Every terminating invocation of the driver ends by printing a baton: the card
 that tells the relaying session what to place in its message body, what to ask
@@ -40,6 +40,13 @@ EXIT_CONFIG = 13
 EXIT_ENVIRONMENT = 14
 EXIT_INTERNAL = 15
 EXIT_LOCKED = 16
+#: A dispatched call did not answer its brief. Two routes reach it: a return
+#: that could not produce the declared output shape, twice (``call.Caller``),
+#: and a return whose shape was fine and whose content the run could see was no
+#: answer — a ``phase-5`` fix round composing the document that already stands
+#: (``run._assemble_overview``). A brief and a seat are what it is a mismatch
+#: between, and neither exists on a row that invokes a tool and reads an exit
+#: code — such a row's missing output is :data:`EXIT_COVERAGE`.
 EXIT_CONTRACT = 17
 #: The run stopped where it was told to — ``--through``, or the point past
 #: which ``--no-inference`` cannot go. Not a failure and not a completion: the
@@ -47,6 +54,12 @@ EXIT_CONTRACT = 17
 #: neither EXIT_OK's "report completion" nor the fallback's "do not interpret
 #: this" is a true card for it.
 EXIT_BOUNDED = 18
+#: A stage was refused its boundary: the stage's own declared output is not
+#: there, so the ledger would not commit it (``kb_pipeline`` exit 6). The
+#: refusal names the output and where it was looked for, and no answer supplies
+#: it — which is why this is its own code rather than :data:`EXIT_CONTRACT`,
+#: whose remedy is a brief or a seat that these rows do not have.
+EXIT_COVERAGE = 19
 
 # Watch mode's own set. 0 is shared and means "the recorded-stage set grew".
 EXIT_WATCH_TIMEOUT = 21
@@ -69,9 +82,17 @@ RUN_MODE_EXIT_CODES: tuple[int, ...] = (
     EXIT_LOCKED,
     EXIT_CONTRACT,
     EXIT_BOUNDED,
+    EXIT_COVERAGE,
 )
 
 WATCH_MODE_EXIT_CODES: tuple[int, ...] = (EXIT_OK, EXIT_WATCH_TIMEOUT, EXIT_WATCH_DRIVER_GONE)
+
+#: The two modes, as the mode-scoped card table below is keyed. A context
+#: carries one because the exit code alone cannot say which ladder it was read
+#: on: ``0`` is the code both modes reach, and it does not mean the same thing
+#: in each.
+MODE_RUN = "run"
+MODE_WATCH = "watch"
 
 # The line prefix follows the existing [kb-build] / [card] / [preflight]
 # convention: the checklist block stays the only thing matching `^\[[x* ]\] `,
@@ -98,8 +119,19 @@ class BatonContext:
     question: str = ""  # the registry's question text, verbatim
     admissible: tuple[str, ...] = ()
     run_dir: str = ""
+    #: The run directory's **parent** — what ``watch --run-dir`` names, as
+    #: against :attr:`run_dir`, which is this run's own directory inside it. A
+    #: watch command is offered with no ``--config`` and no ``--source``, so
+    #: this is the only way one can say where to look; empty means the default
+    #: parent, which a bare ``watch`` already reads (``config.run_dir_parent``).
+    run_dir_parent: str = ""
     detail: tuple[str, ...] = ()  # extra ASK lines: findings paths, the named key, …
     unconsumed_decisions: tuple[str, ...] = ()
+    #: Which mode's ladder this exit was read on — :data:`MODE_RUN` or
+    #: :data:`MODE_WATCH`. Set by the mode that ends the invocation; an
+    #: exception escaping one renders under the default, which is sound because
+    #: every card those codes reach is mode-neutral.
+    mode: str = MODE_RUN
 
 
 @dataclass(frozen=True)
@@ -113,6 +145,10 @@ class BatonSpec:
 
 _RESUME = f"{kb_util.DRIVER_INVOCATION} run {{invocation}}"
 _DECIDE = (f"{_RESUME} \\", "    --decide {pair}=<answer>")
+# Both commands a card offers name the directory this run's evidence is in —
+# the resume through the invocation it was launched with, the watch through a
+# field of its own, since a watch invocation carries none of the rest of it.
+_WATCH_AGAIN = f"{kb_util.DRIVER_INVOCATION} watch{{watch_run_dir}}"
 
 _BATONS: dict[int, BatonSpec] = {
     EXIT_OK: BatonSpec(
@@ -147,7 +183,7 @@ _BATONS: dict[int, BatonSpec] = {
     ),
     EXIT_LOCKED: BatonSpec(
         ask="none — report the live pid",
-        then_run=(f"{kb_util.DRIVER_INVOCATION} watch", "    (or stop the other run first)"),
+        then_run=(_WATCH_AGAIN, "    (or stop the other run first)"),
     ),
     EXIT_CONTRACT: BatonSpec(
         ask="none — report the step and the validator's complaint",
@@ -160,14 +196,43 @@ _BATONS: dict[int, BatonSpec] = {
         ask="none — report the stage the run stopped at and that the rest is unwalked",
         then_run=(f"{_RESUME}", "    (resume past the bound; position comes from the ledger)"),
     ),
+    # The condition comes before the command, and deliberately: the resume is
+    # the right act and it is the wrong act now, so a card leading with the line
+    # gets run immediately, refused identically, and printed again.
+    EXIT_COVERAGE: BatonSpec(
+        ask=(
+            "none — the stage was refused its boundary because its own declared output is not there; "
+            "report that stage and the lines under this one, verbatim"
+        ),
+        then_run=(
+            "nothing until that output stands. The stage is unrecorded, so once it does, this re-walks it:",
+            f"    {_RESUME}",
+        ),
+    ),
     EXIT_WATCH_TIMEOUT: BatonSpec(
         ask="none",
-        then_run=(f"{kb_util.DRIVER_INVOCATION} watch",),
+        then_run=(_WATCH_AGAIN,),
     ),
     EXIT_WATCH_DRIVER_GONE: BatonSpec(
         ask="none yet — read {run_dir}/exit.json first",
         then_run=("the baton in that record",),
     ),
+}
+
+#: The cards a mode renders in place of the shared table's. One code is in here
+#: because one code means two things: a run's ``0`` is a finished build, and a
+#: watch's ``0`` is a **live** one whose recorded set just grew — which is the
+#: only condition watch returns it on. Rendering "report completion" for the
+#: second told a relay that a build still hours from its last stage was done.
+#: A mode with no table here, and a code with no entry in its table, reads the
+#: shared one.
+_MODE_BATONS: dict[str, dict[int, BatonSpec]] = {
+    MODE_WATCH: {
+        EXIT_OK: BatonSpec(
+            ask="none — report which stages were recorded since the last watch, and that the build is still running",
+            then_run=(_WATCH_AGAIN, "    (poll again; a finished build is what exit.json says, never a poll)"),
+        ),
+    },
 }
 
 _FALLBACK = BatonSpec(
@@ -201,11 +266,14 @@ CODES: tuple[int, ...] = tuple(sorted(_BATONS))
 def render(exit_code: int, context: BatonContext | None = None) -> str:
     """Render the relay baton for ``exit_code``; unlisted codes get the fallback.
 
-    An answer-substituting code reached without a barrier pair gets
-    :data:`_NO_BARRIER` instead of its own row — see that constant.
+    The context's mode is read first, because a code both modes reach need not
+    mean the same thing in each (:data:`_MODE_BATONS`). An answer-substituting
+    code reached without a barrier pair then gets :data:`_NO_BARRIER` instead of
+    its own row — see that constant.
     """
     ctx = context if context is not None else BatonContext()
-    spec = _BATONS.get(exit_code, _FALLBACK)
+    mode_spec = _MODE_BATONS.get(ctx.mode, {}).get(exit_code)
+    spec = mode_spec if mode_spec is not None else _BATONS.get(exit_code, _FALLBACK)
     if spec.substitutes_answer and not ctx.pair:
         spec = _NO_BARRIER
     fields = {
@@ -213,6 +281,10 @@ def render(exit_code: int, context: BatonContext | None = None) -> str:
         "pair": ctx.pair or "<stage>.<kind>",
         "question": ctx.question,
         "run_dir": ctx.run_dir or "<run-dir>",
+        # A flag and its value, or nothing at all — the empty case is a run
+        # whose evidence is where a bare watch already looks, and a placeholder
+        # there would be an operator pasting a command with a hole in it.
+        "watch_run_dir": f" {kb_util.RUN_DIR_FLAG} {ctx.run_dir_parent}" if ctx.run_dir_parent else "",
     }
 
     lines = [

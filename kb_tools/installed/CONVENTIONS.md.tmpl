@@ -24,10 +24,6 @@ Authored: leaf content, leaf frontmatter, register entry text, dependency member
 
 Authored does not mean typed. Everything authored except leaf prose is metadata, and metadata is written only by the `kb_util` write ops: you supply values, the op composes the format, proves what it wrote by reading it back, and refuses rather than writing what it cannot prove. It mints an entry's id itself and prints it, so no id is ever chosen. The op surface, its invocation, and the three outcomes are in the CLI itself: `PYTHONPATH=<project-root>/.claude/agents python3 -m kb_tools.kb_util --help` lists every op with the exit codes it reports, and `--help` on one op adds that op's own options and its closed set of value keys. The toolchain's prose contracts stay in its source repository and are not installed into a consuming project, so no document under this project root holds them. A values file carrying a key its op does not take is refused with the offending key, its line, and the complete set the op does take, so the call you would have made anyway is what answers the question.
 
-## Leaves are verbatim
-
-A leaf is translated source, never editorially altered: not tightened, not re-pitched, not simplified for a different reader. Markup transformation and the metadata the write ops stamp are the only edits a leaf accepts. What a leaf owes the graph it discharges through its frontmatter and its register entry, never through its prose. If a change appears to require rewriting leaf text, that is a finding to report, not an edit to make.
-
 ## The gate
 
 `kb-refresh` regenerates derived state; `kb-verify` is the read-only gate. Refresh before verify, always, and leave the gate green. Run both through this project's runner rather than invoking the tools directly. A failure marked refresh-fixable means run refresh; anything else is a real defect in what was authored, and re-running will not clear it.
@@ -36,7 +32,7 @@ A leaf is translated source, never editorially altered: not tightened, not re-pi
 
 Create files only at targets an assignment names. Output with no assigned home is a question to raise, never a location to choose.
 
-`CLAUDE.md` and `CONVENTIONS.md` in this tree belong to the build, not to work done in the KB afterwards: the toolchain stamps them when a build passes review, except that a `CLAUDE.md` carrying this project's scope pin was written at build start and left whole. No agent authors or edits either, and corpus content belongs in neither — it belongs in `invariants.md`.
+`CLAUDE.md` and `CONVENTIONS.md` in this tree belong to the build, not to work done in the KB afterwards: the toolchain stamps them both at the build's validation gate — `CLAUDE.md` carrying this project's scope pin — and leaves whole whichever of the two a project had already authored for itself. No agent authors or edits either, and corpus content belongs in neither — it belongs in `invariants.md`.
 
 ## Citations
 

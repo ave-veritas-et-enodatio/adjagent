@@ -32,17 +32,23 @@ under ``preflight``; and drives the build's stage ledger through
 ``show-status`` / ``start-build`` / ``advance-step``, with ``show-stage-status``
 reading one stage's coverage beside them.
 
-``show-confirmation`` and ``open-build`` stand either side of the build's
-opening gate: the first renders the whole confirmation as one message and
-writes nothing, the second takes the answer and performs everything it releases
-— seed, charter, start record — as one all-or-nothing act. Between them is the
-user's answer and no sequencing. The target definitions
-themselves ship in ``runner-snippets/`` (``kb.just`` / ``kb.mk``) and are
-included from the installed tree, never copied into the consumer's file.
+``show-confirmation`` stands in front of the build's opening gate: it renders
+the whole confirmation as one message and writes nothing. What the answer then
+releases is ``start-build``, already above — one route into a build, so there is
+no second door to keep in step with it. The target definitions themselves ship
+in ``runner-snippets/`` (``kb.just`` / ``kb.mk``) and are included from the
+installed tree, never copied into the consumer's file.
 
 ``validate-build`` joins that op set as the built-tree validator's front end:
 handed a KB tree, it walks that tree and checks its structure. The tree is the
 whole of what it is told, and the tree is produced upstream of this op.
+
+``show-run-lock`` reports the driver's run lock — live, stale or absent, with
+the holder named where there is one — so a caller outside ``kb_driver`` (a
+staging recipe about to wipe a workspace) can ask whether a build is running in
+this repository. It writes nothing, clears nothing, and restates nothing: the
+judgement is ``kb_driver.runlog.lock_state``'s, and its own answer rides its
+stdout rather than its exit status.
 
 The nine metadata **write** ops — ``insert-claim-entry``,
 ``insert-support-entry``, ``insert-experiment-entry``, ``set-rigor``,
@@ -63,9 +69,8 @@ Stdlib only.
 """
 
 import argparse
-import contextlib
 import functools
-import shutil
+import re
 import subprocess
 import sys
 import tomllib
@@ -234,28 +239,41 @@ OP_ADVANCE_STEP = "advance-step"
 #: come to spell one fact two ways.
 NO_INFERENCE_FLAG = "--no-inference"
 
+#: Where a run's evidence goes. Spelled here for a different reason than the
+#: flag above: no op takes it, but both of the driver's modes declare it and the
+#: relay cards print it back in the commands they offer — and a card is rendered
+#: by ``kb_driver.baton``, which imports no driver module and so cannot read the
+#: driver's own constant. This is the module it can read.
+RUN_DIR_FLAG = "--run-dir"
+
 # The stage-coverage read: what one stage still has to cover, asked instead of
 # reconstructed. It records nothing, so it is a reading verb over the ledger
 # rather than a fourth ledger op.
 OP_SHOW_STAGE_STATUS = "show-stage-status"
 
-# The two calls the build's opening gate stands between: one read that renders
-# the whole confirmation, and one write that performs everything the answer
-# releases. Between them sits the user's answer and nothing else — the sequence
-# they replaced had six ordered items and one judgement point, and a caller
-# executing it in the wrong order seeded nothing and recorded nothing.
-#
-# `open-build` records the `start` boundary itself, which leaves `start-build`
-# above looking superseded. It is not: `open-build` is the agent verb and
-# `start-build` the machine verb, and both stay. The collapse exists because a
-# model skipped an ordered step; `kb_driver` skips none, so it keeps the op
-# that takes a charter path where it has one — and none where the build carries
-# no charter — rather than writing a values file to pass one.
+# The read that stands in front of the build's opening gate: the whole
+# confirmation as one message, so a caller relays it rather than composing one.
+# It writes nothing, and what the user's answer releases is `start-build` above
+# and nothing else — one door into a build, so there is no second route for this
+# one to drift from. The spine seed is not part of opening one: `graph-init`
+# runs at `spine-seed`, over a tree `document-graph` has by then written.
 OP_SHOW_CONFIRMATION = "show-confirmation"
-OP_OPEN_BUILD = "open-build"
 
 # The built-tree validator: walks a built KB tree and checks its structure.
 OP_VALIDATE_BUILD = "validate-build"
+
+# The driver's run lock, read from outside the driver. The lock is the
+# repository's and a recipe that is about to wipe a workspace has to know
+# whether a build is running in it; the judgement stays `kb_driver.runlog`'s and
+# this op only reports it, so nothing outside that module tests a pid.
+OP_SHOW_RUN_LOCK = "show-run-lock"
+
+#: The fields :data:`OP_SHOW_RUN_LOCK` prints, in this order. Closed and total:
+#: every answer carries all five, empty where there is nobody to name, so a
+#: shell reading them branches on the value and never on which keys arrived.
+#: Spelled with underscores because a caller reads them into variables of the
+#: same names.
+RUN_LOCK_KEYS: tuple[str, ...] = ("state", "pid", "run_id", "started", "lock")
 
 # The claim-graph renderer: reads the derived index and emits one SVG sheet.
 # `kb_graph.ops` takes its report tag from this token, so the op's name and the
@@ -608,18 +626,27 @@ def run_git(repo_root: Path, *args: str) -> subprocess.CompletedProcess[str] | N
         return None
 
 
+#: The KB tree's tri-state, named once. Every value :func:`kb_root_state`
+#: returns is a member and every consumer branching on one reads it here, so a
+#: caller cannot answer for a state the function does not produce.
+KB_ROOT_ABSENT = "absent"
+KB_ROOT_SPINE_ONLY = "spine-only"
+KB_ROOT_POPULATED = "populated"
+KB_ROOT_STATES = (KB_ROOT_ABSENT, KB_ROOT_SPINE_ONLY, KB_ROOT_POPULATED)
+
+
 def kb_root_state(repo_root: Path) -> str:
-    """Tri-state of the KB tree: ``absent`` | ``spine-only`` | ``populated``.
+    """Tri-state of the KB tree, one of :data:`KB_ROOT_STATES`.
 
     ``spine-only`` means the directory exists with nothing in it outside
     ``.index/`` — a seeded but uncontented KB.
     """
     kb = kb_root(repo_root)
     if not kb.is_dir():
-        return "absent"
+        return KB_ROOT_ABSENT
     if any(entry.name != INDEX_DIRNAME for entry in kb.iterdir()):
-        return "populated"
-    return "spine-only"
+        return KB_ROOT_POPULATED
+    return KB_ROOT_SPINE_ONLY
 
 
 def document_tree_present(repo_root: Path) -> bool:
@@ -722,9 +749,9 @@ def preflight_report(repo_root: Path) -> list[PreflightItem]:
         else:
             items.append(PreflightItem(PASS, "worktree-clean", "no uncommitted entries"))
 
-    # Non-gating facts. The kb-root tri-state is the INPUT to the
-    # fresh-vs-revision determination, not the determination itself — that
-    # stays a user confirmation.
+    # Non-gating facts. The kb-root tri-state is reported and never acted on
+    # here: the one place it decides anything is the driver's launch guard,
+    # which refuses to open a build over a populated tree.
     items.append(PreflightItem(FACT, "kb-root", f"{kb_root_state(repo_root)} ({kb_root(repo_root)})"))
     found = _find_installer_target(repo_root, None)
     if found is None:
@@ -786,78 +813,6 @@ def _seed_index_dir(repo_root: Path) -> tuple[bool, str]:
     return True, f"created {path}"
 
 
-def _index_files(repo_root: Path) -> frozenset[Path]:
-    """Every file under the derived index, or nothing when it does not exist yet."""
-    path = index_dir(repo_root)
-    return frozenset(entry for entry in path.rglob("*") if entry.is_file()) if path.is_dir() else frozenset()
-
-
-def _unseed_index(repo_root: Path, before: frozenset[Path], *, remove_dir: bool) -> None:
-    """Put the derived index back to the files that were there before the seed.
-
-    Two shapes: a directory the seed created goes entirely, taking the KB
-    directory with it when that is left empty; a directory that was already
-    there keeps every file it had and loses the ones the seed's refresh added.
-
-    What is deliberately not restored is the *content* of a file that was
-    already there and that refresh rewrote. Derived state is regenerated from
-    the canonical layer at will and is byte-identical for a given one, so
-    putting stale bytes back would be undoing a correction rather than a write.
-    """
-    if remove_dir:
-        shutil.rmtree(index_dir(repo_root), ignore_errors=True)
-        kb = kb_root(repo_root)
-        if kb.is_dir() and not any(kb.iterdir()):
-            kb.rmdir()
-        return
-    for path in sorted(_index_files(repo_root) - before):
-        path.unlink()
-
-
-def _unseed_sheet(repo_root: Path, *, existed: bool) -> None:
-    """Remove the claim-graph sheet the seed's refresh minted, where it minted one.
-
-    Derived like ``.index/`` and undone by the same rule: a sheet that was
-    already there and that refresh rewrote keeps its new bytes, because derived
-    state is regenerated from the canonical layer at will; one this seed brought
-    into being goes with everything else it brought into being, or the retry's
-    own preflight meets a dirty worktree.
-    """
-    if not existed:
-        (kb_root(repo_root) / CLAIM_GRAPH_FILENAME).unlink(missing_ok=True)
-
-
-def _authored_documents(repo_root: Path) -> dict[Path, str]:
-    """Every authored Markdown file under ``kb-root/``, by path, as it stands.
-
-    The tree's own documents, ``.index/`` excluded. Refresh splices derived
-    fields — ``subtree-claims`` and its kin — into their frontmatter blocks, so
-    these are the files an all-or-nothing caller has to be able to put back.
-    Where the seed ran over an empty KB there were none, which is why this
-    arrived with the document tree becoming the precondition.
-    """
-    kb = kb_root(repo_root)
-    if not kb.is_dir():
-        return {}
-    return {
-        path: path.read_text(encoding="utf-8")
-        for path in kb.rglob("*.md")
-        if INDEX_DIRNAME not in path.relative_to(kb).parts
-    }
-
-
-def _restore_authored(before: dict[Path, str]) -> None:
-    """Put the tree's authored documents back to the text the seed found.
-
-    Unlike ``.index/``, these are files the caller wrote and the seed only ever
-    edited in passing: leaving a derived field spliced into one would leave the
-    worktree dirty, and the retry's own preflight gates on a clean worktree.
-    """
-    for path, text in before.items():
-        if path.is_file() and path.read_text(encoding="utf-8") != text:
-            path.write_text(text, encoding="utf-8")
-
-
 def _seed_runner(repo_root: Path, runner: str | None) -> str | None:
     """The runner a seed installs into: the caller's, the detected file's, or the default.
 
@@ -869,16 +824,6 @@ def _seed_runner(repo_root: Path, runner: str | None) -> str | None:
     if runner is not None or _find_installer_target(repo_root, None) is not None:
         return runner
     return DEFAULT_RUNNER
-
-
-def _unseed_runner(repo_root: Path, runner: str | None, before: tuple[str, Path] | None) -> None:
-    """Put the runner file back as the seed found it: no file, or no include line."""
-    if before is not None:
-        uninstall_targets(repo_root, runner)
-        return
-    found = _find_installer_target(repo_root, runner)
-    if found is not None:
-        found[1].unlink()
 
 
 #: This seeder's report-line tag, one word so a reader scanning a mixed
@@ -896,7 +841,7 @@ GRAPH_INIT_TAG = f"[{OP_GRAPH_INIT}]"
 EXIT_NO_DOCUMENT_TREE = 3
 
 
-def graph_init_kb(repo_root: Path, runner: str | None = None, *, undo: contextlib.ExitStack | None = None) -> int:
+def graph_init_kb(repo_root: Path, runner: str | None = None) -> int:
     """Initialise the claim-graph spine over ``repo_root``'s document tree, verified green.
 
     Runs the ``preflight`` suite first, then — over a ``kb-root/`` that already
@@ -912,11 +857,9 @@ def graph_init_kb(repo_root: Path, runner: str | None = None, *, undo: contextli
     carrying neither runner file gets :data:`DEFAULT_RUNNER`'s; ``runner`` names
     the other, and where a runner file exists the probe order decides as before.
 
-    ``undo``, when given, receives one callback per artifact this seed brings
-    into being — and one for the tree's authored documents, which refresh edits
-    in passing — so a caller composing the seed into a larger all-or-nothing act
-    can put the repository back. A standalone ``graph-init`` passes none: its
-    work stands, and re-running it is a no-op over whatever already landed.
+    The seed is not undoable and needs no undo: it is its own op, its work
+    stands wherever it got to, and re-running it is a no-op over whatever
+    already landed.
 
     Exit codes: 0 seeded (or already fully seeded) and green; 1 refresh or
     verify failed; 2 preflight found a blocking item and nothing was seeded;
@@ -950,25 +893,13 @@ def graph_init_kb(repo_root: Path, runner: str | None = None, *, undo: contextli
         return EXIT_NO_DOCUMENT_TREE
 
     print(f"{GRAPH_INIT_TAG} repo root: {repo_root}")
-    index_before = _index_files(repo_root)
     new_index, index_report = _seed_index_dir(repo_root)
-    if undo is not None:
-        undo.callback(_unseed_index, repo_root, index_before, remove_dir=new_index)
     print(f"{GRAPH_INIT_TAG} index dir: {index_report}")
     seed_runner = _seed_runner(repo_root, runner)
-    before = _find_installer_target(repo_root, seed_runner)
     new_targets = not targets_installed(repo_root, seed_runner)
     print(f"{GRAPH_INIT_TAG} runner targets: {install_targets(repo_root, seed_runner)}")
-    if new_targets and undo is not None:
-        undo.callback(_unseed_runner, repo_root, seed_runner, before)
 
     kb = str(kb_root(repo_root))
-    if undo is not None:
-        undo.callback(_restore_authored, _authored_documents(repo_root))
-        # Registered last of the four, so it runs first: the index's own undo
-        # removes the KB directory when the seed created it and left it empty,
-        # and a sheet still sitting there would keep it from being empty.
-        undo.callback(_unseed_sheet, repo_root, existed=(kb_root(repo_root) / CLAIM_GRAPH_FILENAME).is_file())
     print(f"{GRAPH_INIT_TAG} refresh:")
     if refresh_kb_metadata.main(["--kb-root", kb]) != 0:
         to_stderr(f"{GRAPH_INIT_TAG} refresh FAILED — spine not seeded.")
@@ -1027,9 +958,14 @@ ENTRY_TABLE = "entry"
 #: own line numbers.
 CHARTER_KEY = "charter"
 
-#: The flag the two build-opening ops read that file through — the metadata
-#: ops' transport, deliberately not their flag (:func:`_add_charter_values_option`).
+#: The flag ``show-confirmation`` reads that file through — the metadata ops'
+#: transport, deliberately not their flag (:func:`_add_charter_values_option`).
 CHARTER_VALUES_FLAG = "--charter-values"
+
+#: ``start-build``'s own flag, naming a charter that already stands on disk.
+#: Spelled once because two surfaces render it: the subparser that declares it
+#: and the ``start`` card that tells a caller to run it.
+CHARTER_FLAG = "--charter"
 
 
 def read_charter_values(path: Path) -> str:
@@ -1150,12 +1086,14 @@ def run_validate(*, kb_root: Path) -> int:
 # if-chain because here it cannot be reached by the wrong op.
 #
 # `preflight`, `graph-init`, `show-status`, `show-stage-status`,
-# `show-confirmation`, `open-build`, `start-build` and `advance-step` anchor on
-# `find_git_root()`: each reports on, or creates, an environment that may have
-# no KB yet. The two record ops are there because the ledger is the commit
-# trail: a build's first stages are recorded before anything has created
-# `kb-root/` — the tree is the `document-graph` stage's own product, and the
-# stage that opens the build precedes it.
+# `show-confirmation`, `start-build`, `advance-step` and
+# `show-run-lock` anchor on `find_git_root()`: each reports on, or creates, an
+# environment that may have no KB yet. The two record ops are there because the
+# ledger is the commit trail: a build's first stages are recorded before anything
+# has created `kb-root/` — the tree is the `document-graph` stage's own product,
+# and the stage that opens the build precedes it. The lock read is there because
+# the lock is the repository's, and its caller is often one that is about to
+# remove `kb-root/` or has already.
 # `install-targets`, `uninstall-targets`, the nine write ops and the one
 # read-only metadata op anchor on `find_repo_root()`, which additionally
 # requires the KB tree — the read-only op among them because a citation is
@@ -1179,11 +1117,10 @@ def _handle_preflight(args: argparse.Namespace) -> int:
 def _handle_graph_init(args: argparse.Namespace) -> int:
     rc = graph_init_kb(find_git_root(), args.runner)
     if rc == 0:
-        # The baton belongs to the standalone seed, as `preflight`'s belongs to
-        # the standalone probe: `open-build` runs this same seed and records the
-        # start itself, so there "next: start-build" would send a caller to redo
-        # what the call it is inside already did.
-        print(f"{GRAPH_INIT_TAG} next: {OP_START_BUILD} [--charter <path>]")
+        # The seed's writes are uncommitted until a boundary commit sweeps them
+        # up, so the baton names a record: a caller who stops here leaves the
+        # spine standing in a worktree the next preflight refuses.
+        print(f"{GRAPH_INIT_TAG} next: {OP_START_BUILD} [{CHARTER_FLAG} <path>]")
     return rc
 
 
@@ -1200,19 +1137,6 @@ def _handle_show_confirmation(args: argparse.Namespace) -> int:
     # The git root, for `show-status`' reason: this renders before anything is
     # seeded, and kb-root/ not existing yet is one of the things it reports.
     return kb_pipeline.show_confirmation(find_git_root(), sources=args.source, charter=charter)
-
-
-def _handle_open_build(args: argparse.Namespace) -> int:
-    from kb_tools import kb_pipeline
-
-    try:
-        charter = read_charter_values(args.charter_values)
-    except (OSError, ValueError) as exc:
-        to_stderr(f"[{OP_OPEN_BUILD}] error: {exc}")
-        return EXIT_ENVIRONMENT_UNFIT
-    # The git root, and not the KB root: this is the call that brings kb-root/
-    # into being, so requiring it would refuse every fresh build.
-    return kb_pipeline.open_build(find_git_root(), charter=charter, runner=args.runner)
 
 
 def _handle_install_targets(args: argparse.Namespace) -> int:
@@ -1263,6 +1187,48 @@ def _handle_advance_step(args: argparse.Namespace) -> int:
 
 def _handle_validate_build(args: argparse.Namespace) -> int:
     return run_validate(kb_root=args.kb_root)
+
+
+def _run_lock_field(value: object) -> str:
+    """One reported field: empty where there is nothing to name, never more than a line.
+
+    The format's whole promise to a shell is one ``key=value`` per line, and a
+    lock file is a file on disk somebody may have written by hand — so a value
+    carrying a newline or a tab is folded to spaces here rather than allowed to
+    invent a line a caller would read as a key it does not know.
+    """
+    return "" if value is None else re.sub(r"\s", " ", str(value))
+
+
+def _handle_show_run_lock(args: argparse.Namespace) -> int:
+    """Print the run lock's state as ``key=value`` lines. The answer is the output.
+
+    Read-only in the strong sense: it does not take the lock, does not clear a
+    stale one, and writes nothing anywhere — breaking a stale lock is the
+    driver's own recovery and stays there, so a caller learns the state here and
+    acts on it itself.
+
+    The judgement is ``runlog.lock_state``'s and is never restated: this reports
+    what that function returns, which is why no pid test lives on this side of
+    the boundary.
+
+    ``find_git_root``, because that is the root the driver's own lock is anchored
+    at — and because a caller asking about the lock is typically one that is
+    about to delete ``kb-root/`` or has already, so requiring it would refuse
+    exactly the question this op exists to answer.
+
+    The import is local, as ``kb_pipeline``'s and ``kb_write.ops``' are:
+    ``kb_driver`` imports this module, so the dependency resolves in that one
+    direction at call time.
+    """
+    from kb_tools.kb_driver import runlog
+
+    path = runlog.repo_lock_path(find_git_root())
+    state = runlog.lock_state(path)
+    reported = {"state": state.state, "pid": state.pid, "run_id": state.run_id, "started": state.started, "lock": path}
+    for key in RUN_LOCK_KEYS:
+        print(f"{key}={_run_lock_field(reported[key])}")
+    return 0
 
 
 def _handle_render_claim_graph(args: argparse.Namespace) -> int:
@@ -1374,30 +1340,25 @@ def _add_values_option(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _add_charter_values_option(parser: argparse.ArgumentParser, *, required: bool) -> None:
-    """``--charter-values``, carrying the charter text, on the two build-opening ops.
+def _add_charter_values_option(parser: argparse.ArgumentParser) -> None:
+    """``--charter-values``, carrying the charter text, on ``show-confirmation``.
 
     The metadata ops' transport under a name of its own. The file's grammar is
     theirs — ``[[entry]]`` tables, prose in a ``'''`` literal block — but its
     vocabulary, its one-entry rule and its exit ladder are not, and
     :data:`VALUES_FLAG` advertises all three: an op spelling that flag promises
     a batch and the 7/8 write ladder, and this op has neither. It is also not
-    ``start-build``'s ``--charter``, which takes the path of a charter that
-    already exists; this takes the words of one that does not.
-
-    Required where the charter is written, optional where it is only quoted
-    back for the user to check.
+    ``start-build``'s :data:`CHARTER_FLAG`, which names a charter that already
+    stands on disk; this carries the words of one, and writes nothing.
     """
     parser.add_argument(
         CHARTER_VALUES_FLAG,
         type=Path,
-        required=required,
         metavar="FILE",
         help=f"path to the TOML values file whose one [[{ENTRY_TABLE}]] table carries "
-        f"{CHARTER_KEY} = '''<the charter's own words>'''; the op owns where the charter lands, "
-        f"so no path to a charter file is passed anywhere. Write this file under "
-        f"{SCRATCH_DIRNAME}/ — it is the call's input, and an uncommitted file anywhere else "
-        f"fails the clean-worktree check",
+        f"{CHARTER_KEY} = '''<the charter's own words>''', quoted back a line at a time for the "
+        f"user to check. Write this file under {SCRATCH_DIRNAME}/ — it is the call's input, and "
+        f"an uncommitted file anywhere else fails the clean-worktree check",
     )
 
 
@@ -1557,20 +1518,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="path to one source the build reads, repeated once per source; each is echoed "
         "resolved, and one that does not exist is a blocking item",
     )
-    _add_charter_values_option(show_confirmation, required=False)
+    _add_charter_values_option(show_confirmation)
     show_confirmation.set_defaults(handler=_handle_show_confirmation)
-
-    open_build_help = (
-        "open the build: seed the spine, write the charter where the build keeps it, and record "
-        "the start boundary — one act, in that order, with nothing left behind if any part of it "
-        "fails. Exit 0 open, 1 the seed's refresh or verify failed, 2 preflight blocked or the "
-        "values were refused, 3 the KB already holds content so this is a revision and not a "
-        "fresh build, 5 the build is already started"
-    )
-    open_build = add_parser(OP_OPEN_BUILD, help=open_build_help, description=open_build_help)
-    _add_charter_values_option(open_build, required=True)
-    _add_runner_option(open_build)
-    open_build.set_defaults(handler=_handle_open_build)
 
     show_status_help = (
         "print the build's stage checklist and the current stage's action card, read back "
@@ -1603,10 +1552,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     start_build = add_parser(OP_START_BUILD, help=start_build_help, description=start_build_help)
     start_build.add_argument(
-        "--charter",
+        CHARTER_FLAG,
         help=(
             "repo-relative path to the build charter, recorded in the start commit's body. Optional: "
-            "a build with no charter records without one, and the commit's body then names none"
+            "a build with no charter records without one, and the commit's body then says so in "
+            "words rather than standing empty"
         ),
     )
     start_build.set_defaults(handler=_handle_start_build)
@@ -1637,6 +1587,20 @@ def build_parser() -> argparse.ArgumentParser:
         "as vacuous; a unit asserting the state is valid for the next stage runs unchanged",
     )
     advance_step.set_defaults(handler=_handle_advance_step)
+
+    show_run_lock_help = (
+        "report whether a driver run holds this repository's run lock: live with the holder named, "
+        "stale where the recorded holder is gone, absent where no lock file stands. Judged by the "
+        "driver's own liveness test, so a caller never writes a second one. Writes nothing and "
+        "clears nothing — a stale lock is reported, never broken. Its answer is its output and not "
+        "its exit status: all three states exit 0, and its one nonzero code is 2, a repo root that "
+        f"will not resolve. Output is one key=value line per field — {', '.join(RUN_LOCK_KEYS)}, in "
+        "that order, all of them on every answer, the value empty where there is nobody to name — so "
+        "a shell reads it with `while IFS='=' read -r key value` and needs neither a JSON tool nor a "
+        "branch per state"
+    )
+    show_run_lock = add_parser(OP_SHOW_RUN_LOCK, help=show_run_lock_help, description=show_run_lock_help)
+    show_run_lock.set_defaults(handler=_handle_show_run_lock)
 
     validate_build_help = (
         "walk a built KB tree and check its structure — every non-root document up-linked to its own "

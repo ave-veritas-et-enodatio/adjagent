@@ -113,16 +113,9 @@ retire; an item that conflicts with one of them is the defect.
 
     **Not gating.** `[chunks.rigor-scale]` stays as it is, with its one consumer, as the seam this builds on.
 
-11. **The build mode is detected, and a build that would destroy work stops loudly.** `build_mode` defaults to `"fresh"` today and is an explicit config choice, never inferred from what is on disk. Tree derivation on the fresh path is documented as *idempotent over an existing tree by overwrite*, and it runs before the claim-graph conformance gate ever sees the tree — so a default-config launch against a worked-on KB overwrites hand-authored leaves first, and the point-14 double-run guard, which only refuses re-running the claim-graph builder over its own output, never gets the chance to object. The destructive path is the default and nothing detects the case.
+11. **A re-launch over a finished build still exits 0 rather than stopping loudly.** The destructive half of this item has landed: there is no build-mode setting, an invocation that finds `start` unrecorded is opening a build, and `pre.kb-root` refuses one over a populated `kb-root/`. What is left is the case an empty ledger cannot describe — a build whose ledger is *complete*, re-launched. Every stage is recorded, so the walk skips all of them and reports success, which is right for a repeat invocation and wrong for someone who meant to rebuild: the driver cannot tell a safe rebuild from one over work the KB has since gained, and the honest answer is to refuse and name an explicit override rather than to report a build it did not run.
 
-    **Ruled 2026-09-09: detect it, and refuse rather than overwrite.** Four states, from what the repository already records:
-
-    - **No `kb-root/`** — fresh. Proceed.
-    - **`kb-root/` present, ledger incomplete** — an interrupted build. Resume; this is the one case where continuing over an existing tree is correct, and `kb_pipeline.recorded_stages` already reads the commit trail that says so. The ledger need not record which sources built the tree: `config.run.sources` has two consumers and both sit inside tree derivation, so once that stage is recorded the tree is whole and no later stage reads the list. A resume given different `--source` flags cannot mix corpora — it disregards them, which is correct and worth one line of output saying so.
-    - **`kb-root/` present, ledger complete** — stop loudly. A finished build plus a re-launch is either a revision, which has its own path, or a rebuild over work the KB may now hold; the driver cannot tell which, so it refuses and names the explicit override.
-    - **`kb-root/` present, no ledger** — stop loudly. Unknown provenance is not a fresh build.
-
-    **What makes the third case unresolvable is worth stating, because it is the deeper gap:** nothing records which phase a KB is in. `kb_tools/SPEC.md` now states that the first hand-authored leaf body or hand-minted claim inverts canonicality permanently, and that fact lives only in git history — no frontmatter key, no `kb-root/CLAUDE.md` field, no `.index/` artifact carries it. A driver that could read the phase could distinguish a safe rebuild from a destructive one; lacking that, refusing is the only honest answer.
+    **What makes that case unresolvable is worth stating, because it is the deeper gap:** nothing records which phase a KB is in. `kb_tools/SPEC.md` now states that the first hand-authored leaf body or hand-minted claim inverts canonicality permanently, and that fact lives only in git history — no frontmatter key, no `kb-root/CLAUDE.md` field, no `.index/` artifact carries it. A driver that could read the phase could distinguish a safe rebuild from a destructive one; lacking that, refusing is the only honest answer.
 
 12. **One-hop cross-volume links.** A multi-volume corpus cites its own siblings by citation key — the seven-volume corpus used for early development carried `\citep{mertensPart2}` ten times and `\citep{mertensPart4}` six. Today that reaches the KB as author-year prose where a bibliography resolves it and as nothing where one does not, so a reader resolving "Part 2" goes key → `references.md` → author-year entry → title → match a volume title by eye. The standing quality eval measured the consequence on the mechanical baseline: **zero cross-domain links anywhere** in a five-part mutually-citing corpus, with that textual route recorded as the only path that works.
 
@@ -176,11 +169,12 @@ retire; an item that conflicts with one of them is the defect.
       with the field: **state that decides control flow either goes in the commit or is declared.**
       Scratch that survives a reset is scratch that can lie about what has already happened.
     - Guards: refuse on a dirty worktree, and refuse a stage that is not recorded.
-    - **Sequencing.** A `Runner`-attribute-reversion finding
-      — instance attributes written in one stage's rows and read by a later stage revert to their
-      constructor defaults on a resuming process, `build_mode` and `_runner_file` among them. A
-      rewind-and-rerun *is* a resuming process, so this command would fire that routinely rather
-      than occasionally. Fix that first or the new operation inherits it.
+    - **Sequencing: the prerequisite this item named has landed.** A `Runner` no longer carries
+      resumption state in an instance attribute — a rewind-and-rerun *is* a resuming process, so
+      this command would have fired that reversion routinely rather than occasionally. What stands
+      in its place is `run.RUNNER_ATTRIBUTES`, the closed attribute set and the criterion that
+      admits one, checked at construction and at every stage transition; a rewind command added
+      later inherits the guard rather than the defect.
 
     Until it exists the manual path is two steps, and the second is the one that gets forgotten:
     `git reset --hard <stage-commit>^`, then remove that stage's scratch by hand.

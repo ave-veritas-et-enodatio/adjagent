@@ -97,6 +97,15 @@ def test_write_assigned_refuses_a_path_that_leaves_the_repo(tmp_path: Path) -> N
 # ---------------------------------------------------------------------------
 
 
+def test_sequence_scripts_successive_rounds_and_repeats_its_last(tmp_path: Path) -> None:
+    """How a cap loop is scripted: ``sequence(red, red, green)`` goes green on round three."""
+    scenario = replay.sequence(replay.clean("red"), replay.clean("green"))
+
+    answers = [returned_text(scenario(context_for(tmp_path, step="ov.docs", call_index=index))) for index in range(3)]
+
+    assert answers == ["red", "green", "green"]
+
+
 def test_by_step_answers_the_row_the_brief_names(tmp_path: Path) -> None:
     scenario = replay.by_step({"p4.synthesize": replay.clean("burn-down"), "p5.review": replay.clean("findings")})
 
@@ -169,7 +178,7 @@ def test_the_dry_run_invoker_is_the_green_run(tmp_path: Path) -> None:
     brief = tmp_path / "001-p5.review.md"
     brief.write_text("brief\n", encoding="utf-8")
 
-    invocation = invoker.run(argv=("claude", "-p"), cwd=tmp_path, env={}, brief_path=brief)
+    invocation = invoker.run(argv=("claude", "-p"), cwd=tmp_path, env={}, prompt_path=brief)
     text = returned_text(replay.Response(lines=tuple(line.rstrip("\n") for line in invocation.lines())))
 
     assert invoker.calls == 1

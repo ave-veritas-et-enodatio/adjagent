@@ -11,21 +11,22 @@ answered the way an operator answers them, and the artifacts are validated
 where the step table says they must be. The one substitution is the one the
 flag names: ``replay.py`` stands in for the model.
 
-**The consumer is a revision build, not a fresh one, and under ``--dry-run``
-that is load-bearing.** A revision enters against a KB that is already built and
-``kb-verify`` green, so the head's tool rows — which derive the tree and author
-the claim graph over it — do not apply to it, and its head stages record on
-their coverage alone. That is what this file is for: the tail, walked by the
-shipped entry point with only the model replaced.
+**The consumer is a resume, not a launch, and under ``--dry-run`` that is
+load-bearing.** Its tree is already built and ``kb-verify`` green, and its head
+stages are already recorded in the ledger — which is the only thing that says an
+invocation is continuing a build rather than opening one, there being no mode to
+configure. So the head's tool rows are not walked here: a recorded stage is
+never re-walked. That is what this file is for: the tail, walked by the shipped
+entry point with only the model replaced.
 
 ``--dry-run`` replaces the calls **this driver dispatches** and nothing else, so
 it does not reach a model spawned inside a tool the driver invokes. Those rows
-are ``claims-discovered``'s and ``depends-attributed``'s, both
-``Condition.FRESH``: a revision build never applies them, so every call left in
-this walk is the driver's own and ``replay.py`` stands in for all of them. A
-*fresh* build wanting to spend nothing wants ``--no-inference``, which drops
-those rows rather than replaying them — exercised in ``test_kb_driver_head.py``
-and by this file's own no-inference cases at the end.
+are ``claims-discovered``'s and ``depends-attributed``'s, and a walk resuming
+past their stages never reaches them — so every call left in this walk is the
+driver's own and ``replay.py`` stands in for all of them. A build that must walk
+those stages and spend nothing wants ``--no-inference``, which drops the rows
+rather than replaying them — exercised in ``test_kb_driver_head.py`` and by this
+file's own no-inference cases at the end.
 
 **That is what makes a green here worth something.** ``p3a.gate`` is a real
 composite gate over a real corpus; reaching ``phase-5`` means the synthetic
@@ -65,19 +66,30 @@ SLUGS = ("acme-widgets", "acme-widgets-derivations")
 #: and a test carrying its own list would go on passing without it.
 ALL_STAGES = kb_pipeline.STAGE_IDS
 
-#: The run overlay, beside the charter it accompanies.
+#: The run overlay: the launch's own input, written into the gitignored scratch
+#: tree so that the one file a session writes before launch cannot dirty the
+#: worktree ``start``'s preflight is about to read.
 CONFIG_NAME = "driver-run.toml"
-CONFIG_PATH = str(Path(config.DEFAULT_CHARTER_FILE).parent / CONFIG_NAME)
+CONFIG_PATH = f"{kb_pipeline.SCRATCH_RELROOT}/{CONFIG_NAME}"
 
-#: ``build_mode`` is fixed here rather than settled by a barrier: the
-#: consumer's tree is already built and green before the driver ever sees it,
-#: so there is no fresh-or-revision question left for an operator to answer.
+#: Where this consumer's charter stands — read off the config rather than
+#: spelled, so the fixture cannot disagree with the driver about where a build
+#: looks for one. Tracked content, unlike the overlay above: the ``start``
+#: boundary names this path permanently.
+CHARTER_FILE = config.load(None, run_overrides={"sources": SOURCES}).run.charter_file
+
 DRIVER_CONFIG = f"""\
 [run]
 sources = {json.dumps(list(SOURCES))}
 permission_mode = "acceptEdits"
-build_mode = "revision"
 """
+
+#: The stages this consumer arrives with already behind it, and the ones the
+#: driver is here to walk. Sliced from the pipeline's own vocabulary rather
+#: than transcribed, so a stage inserted into the head joins the recorded set
+#: instead of being walked for real against a fixture that cannot answer it.
+HEAD_STAGES = kb_pipeline.STAGE_IDS[: kb_pipeline.STAGE_IDS.index("phase-3a")]
+TAIL_STAGES = kb_pipeline.STAGE_IDS[kb_pipeline.STAGE_IDS.index("phase-3a") :]
 
 #: The tree the pandoc front end hands off: two volume directories, two leaves
 #: each — the least that distinguishes "one domain's worth of rows landed" from
@@ -136,8 +148,8 @@ def _run_ok(*args: str, cwd: Path) -> None:
     assert result.returncode == 0, f"{args}:\nstdout:\n{result.stdout}\nstderr:\n{result.stderr}"
 
 
-def _make_consumer(root: Path) -> Path:
-    """A committed, preflight-clean, ``kb-verify``-green consuming repo — a revision build's entry state.
+def _make_consumer(root: Path, *, opened: bool = True) -> Path:
+    """A committed, preflight-clean, ``kb-verify``-green consuming repo — a resume's entry state.
 
     The toolchain arrives in ``.claude/`` the one way a consuming project ever
     receives it — by running the installer, ``gen-defs.py install``, which
@@ -147,15 +159,23 @@ def _make_consumer(root: Path) -> Path:
     fixture rather than passing behind a link.
 
     The runner include line is installed directly — ``kb_util install-targets``
-    is what a real revision consumer already carries from its own prior build,
-    since ``seed.graph-init`` (which installs it on a fresh seed) is not a row this
-    walk reaches. That is also what makes ``just kb-refresh`` and ``just
+    is what a consumer resuming into the tail already carries from the head of
+    its own build, since ``seed.graph-init`` (which installs it) is not a row
+    this walk reaches. That is also what makes ``just kb-refresh`` and ``just
     kb-verify`` real commands in this repo.
 
     The KB tree is authored here directly rather than surveyed and distilled:
     that is the pandoc front end's job now, run before this driver ever sees
     the repo, and standing it up as a fixture is what makes it available to
     stand in for.
+
+    ``opened`` records the head in the ledger, which is what makes an invocation
+    against this repo a resume — the driver reads position from the recorded
+    stages and from nothing else, so a consumer whose tree stands and whose
+    ledger is empty is not a resume but a launch, and a launch over a populated
+    ``kb-root/`` is exactly what ``pre.kb-root`` refuses. The two cases that
+    want a barrier of the ``start`` stage pass ``opened=False`` and stop before
+    that row.
     """
     root.mkdir()
     _git(root, "init", "-q")
@@ -181,6 +201,14 @@ def _make_consumer(root: Path) -> Path:
 
     (root / ".gitignore").write_text(f"{kb_util.SCRATCH_DIRNAME}/\n", encoding="utf-8")
 
+    # The charter goes down before the seed commit, because it is tracked
+    # content: left uncommitted it would fail the clean-worktree check
+    # ``start``'s preflight makes, and a consumer whose charter is untracked is
+    # one whose ledger entry outlives the file it names.
+    charter = root / CHARTER_FILE
+    charter.parent.mkdir(parents=True, exist_ok=True)
+    charter.write_text("# Build charter\n\nEverything in the two domains.\n", encoding="utf-8")
+
     kb_root = kb_util.kb_root(root)
     kb_root.mkdir(parents=True, exist_ok=True)
     _write_derived_tree(kb_root)
@@ -197,14 +225,24 @@ def _make_consumer(root: Path) -> Path:
     _git(root, "add", "-A")
     _git(root, "commit", "-qm", "refresh: .index/ matches the authored tree")
 
-    charter = root / config.DEFAULT_CHARTER_FILE
-    charter.parent.mkdir(parents=True, exist_ok=True)
-    charter.write_text("# Build charter\n\nEverything in the two domains.\n", encoding="utf-8")
-    # The run overlay lands beside the charter, under the same gitignored tree
-    # and written by the same confirmation — so neither of the two files the
-    # session writes before launch can dirty the worktree preflight is about to
-    # read.
-    (charter.parent / CONFIG_NAME).write_text(DRIVER_CONFIG, encoding="utf-8")
+    overlay = root / CONFIG_PATH
+    overlay.parent.mkdir(parents=True, exist_ok=True)
+    overlay.write_text(DRIVER_CONFIG, encoding="utf-8")
+
+    if opened:
+        # With the charter the run resolves, so the recorded boundary names the
+        # same path the driver's own `start.record` would have named it.
+        _run_ok(
+            sys.executable,
+            "-m",
+            "kb_tools.kb_util",
+            kb_util.OP_START_BUILD,
+            kb_util.CHARTER_FLAG,
+            str(CHARTER_FILE),
+            cwd=root,
+        )
+        for stage in HEAD_STAGES[1:]:
+            _run_ok(sys.executable, "-m", "kb_tools.kb_util", kb_util.OP_ADVANCE_STEP, "--stage", stage, cwd=root)
     return root
 
 
@@ -212,6 +250,12 @@ def _make_consumer(root: Path) -> Path:
 def consumer(tmp_path: Path) -> Path:
     """A consuming repo of this test's own, for a case that drives it somewhere."""
     return _make_consumer(tmp_path / "consumer")
+
+
+@pytest.fixture
+def unopened_consumer(tmp_path: Path) -> Path:
+    """The same repo with an empty ledger — the only state a ``start`` row is walked in."""
+    return _make_consumer(tmp_path / "unopened", opened=False)
 
 
 def drive_without(consumer: Path, *args: str, run_dir: Path) -> subprocess.CompletedProcess[str]:
@@ -274,10 +318,32 @@ def boundary_commits(consumer: Path) -> list[str]:
     return log.stdout.split()
 
 
+def recorded_charter(consumer: Path) -> str | None:
+    """The charter path the ``start`` boundary recorded, or ``None`` where it named none.
+
+    Read out of the commit body rather than off the config, because the ledger is
+    the durable record and the only place a build that was handed a charter is
+    told from one that was not.
+    """
+    body = subprocess.run(
+        ["git", "log", f"--grep=^{kb_pipeline.LEDGER_PREFIX} {kb_pipeline.FIRST_STAGE_ID} ", "--format=%b"],
+        cwd=consumer,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    ).stdout.strip()
+    if body == kb_pipeline.NO_CHARTER_BODY:
+        return None
+    assert body.startswith(kb_pipeline.CHARTER_BODY_FIELD), body
+    return body.removeprefix(kb_pipeline.CHARTER_BODY_FIELD).strip()
+
+
 def write_config(consumer: Path, name: str, body: str) -> str:
-    """A second run overlay beside the charter, for a case the default cannot express."""
-    (consumer / config.DEFAULT_CHARTER_FILE).parent.joinpath(name).write_text(DRIVER_CONFIG + body, encoding="utf-8")
-    return str(Path(config.DEFAULT_CHARTER_FILE).parent / name)
+    """A second run overlay in the scratch tree, for a case the default cannot express."""
+    relpath = f"{kb_pipeline.SCRATCH_RELROOT}/{name}"
+    (consumer / relpath).write_text(DRIVER_CONFIG + body, encoding="utf-8")
+    return relpath
 
 
 def execute_in_process(
@@ -316,7 +382,10 @@ def execute_in_process(
 # ---------------------------------------------------------------------------
 
 
-ANSWERS = ("--decide", "start.proceed=yes")
+#: A resume raises no barrier of the ``start`` stage, so nothing here supplies
+#: one: a ``--decide`` this walk never raises would be reported unconsumed, and
+#: that report is one of the things asserted below.
+NO_ANSWERS: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -346,7 +415,7 @@ def clean_run(tmp_path_factory: pytest.TempPathFactory) -> CleanRun:
     root = tmp_path_factory.mktemp("clean-run")
     consumer = _make_consumer(root / "consumer")
     runs = root / "runs"
-    result = drive(consumer, *ANSWERS, run_dir=runs)
+    result = drive(consumer, *NO_ANSWERS, run_dir=runs)
     return CleanRun(
         consumer=consumer,
         result=result,
@@ -381,7 +450,7 @@ def test_every_stage_runs_green_under_dry_run(clean_run: CleanRun) -> None:
     assert set(DERIVED_DOCUMENTS) <= walked
     for relative in DERIVED_DOCUMENTS:
         assert (kb_root / relative).read_text(encoding="utf-8").endswith("\n\nContent.\n"), relative
-    # What the walk added is the meta-documents and the stamped orientation
+    # What the walk added is the overview document and the stamped orientation
     # docs, every one of them at the root: no volume directory gained a file.
     assert {path for path in walked - set(DERIVED_DOCUMENTS) if "/" in path} == set()
 
@@ -435,8 +504,14 @@ def test_a_replayed_run_leaves_a_cadence_record_for_every_call(clean_run: CleanR
     assert all(record["duration_ms"] is not None and record["cost_usd"] is not None for record in records)
 
 
-def test_an_unanswered_barrier_still_stops_a_replayed_run(consumer: Path, tmp_path: Path) -> None:
-    """Under ``--dry-run``: the barriers are real, and the record is the message body."""
+def test_an_unanswered_barrier_still_stops_a_replayed_run(unopened_consumer: Path, tmp_path: Path) -> None:
+    """Under ``--dry-run``: the barriers are real, and the record is the message body.
+
+    The unopened repo, because ``start.proceed`` is a row of the ``start``
+    stage and a resume skips every one of them — an empty ledger is the only
+    state in which this barrier is raised at all.
+    """
+    consumer = unopened_consumer
     result = drive(consumer, run_dir=tmp_path / "runs")
 
     assert result.returncode == baton.EXIT_BARRIER, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
@@ -449,13 +524,34 @@ def test_an_unanswered_barrier_still_stops_a_replayed_run(consumer: Path, tmp_pa
     assert "# Barrier: start / proceed" in record.read_text(encoding="utf-8")
 
 
+def test_the_recorded_charter_resolves_after_scratch_is_deleted_wholesale(consumer: Path) -> None:
+    """The charter has one home and staging cannot reach it.
+
+    A build's charter is resolved from ``[run] charter_file``, whose default is
+    the tracked path ``kb_pipeline.CHARTER_RELPATH``, and the ``start``
+    boundary's body names what the build was told (``charter: <path>``, or
+    ``kb_pipeline.NO_CHARTER_BODY`` where it was told nothing). So the question a
+    wiped scratch tree asks is answerable from the ledger alone: staging deletes
+    ``.claude-temp/`` wholesale, and the path recorded there must still resolve.
+
+    A function-scoped consumer rather than the shared clean run, because this
+    case destroys part of the repository it reads.
+    """
+    shutil.rmtree(consumer / kb_util.SCRATCH_DIRNAME)
+
+    recorded = recorded_charter(consumer)
+
+    assert recorded is not None, "the start boundary named no charter to resolve"
+    assert (consumer / recorded).is_file(), f"{recorded} did not survive the wipe"
+
+
 # ---------------------------------------------------------------------------
 # Resume
 # ---------------------------------------------------------------------------
 
 
 def test_the_run_resumes_from_every_stage_boundary(consumer: Path, tmp_path: Path) -> None:
-    """At every boundary: a fresh invocation reads its position and advances.
+    """At every boundary: a new invocation reads its position and advances.
 
     Built by walking one stage further each time, so that each invocation meets
     a ledger a previous one left — the position a killed run actually leaves,
@@ -465,22 +561,28 @@ def test_the_run_resumes_from_every_stage_boundary(consumer: Path, tmp_path: Pat
     no run can reach, and what it then tests is stale-artifact handling rather
     than resume.
 
-    Every invocation re-reads the ledger, re-derives its round numbers from
-    disk, and re-walks the domain partition off ``kb-root/`` — which is the
-    machinery a resume actually leans on.
+    **No invocation carries a mode and none needs one.** Position is the
+    recorded-stage set and nothing else, so each of these continues where the
+    last one stopped on the strength of the ledger alone — the head stages the
+    fixture recorded included, which is why the first invocation here starts at
+    the tail rather than re-deriving a tree that already stands.
+
+    Every invocation re-reads the ledger, opens each stage's rounds at
+    ``run.FIRST_ROUND``, and re-walks the domain partition off ``kb-root/`` —
+    which is the machinery a resume actually leans on.
     """
-    for index, stage in enumerate(ALL_STAGES):
+    for index, stage in enumerate(TAIL_STAGES):
+        walked = ALL_STAGES[: len(HEAD_STAGES) + index + 1]
         result = execute_in_process(
             consumer,
             tmp_path / f"runs-{index:02d}",
             scenario=replay.green_run(),
             run_id=f"20260901T1200{index:02d}-1",
-            decisions=["start.proceed=yes"],
-            stages=ALL_STAGES[: index + 1],
+            stages=walked,
         )
 
         assert result.exit_code == baton.EXIT_OK, f"the invocation ending at {stage}: {result.detail}"
-        assert recorded_stages(consumer) == set(ALL_STAGES[: index + 1]), f"resume did not advance to {stage}"
+        assert recorded_stages(consumer) == set(walked), f"resume did not advance to {stage}"
 
     assert recorded_stages(consumer) == set(ALL_STAGES)
     assert len(boundary_commits(consumer)) == len(ALL_STAGES)
@@ -491,7 +593,9 @@ def test_the_run_resumes_from_every_stage_boundary(consumer: Path, tmp_path: Pat
 # ---------------------------------------------------------------------------
 
 
-def test_every_run_mode_exit_code_in_the_design_is_reached(consumer: Path, tmp_path: Path) -> None:
+def test_every_run_mode_exit_code_in_the_design_is_reached(
+    consumer: Path, unopened_consumer: Path, tmp_path: Path
+) -> None:
     """The whole run-mode ladder, each code reached by the thing that causes it.
 
     One test rather than nine scattered ones, because the claim is about the
@@ -510,6 +614,16 @@ def test_every_run_mode_exit_code_in_the_design_is_reached(consumer: Path, tmp_p
     Flagged rather than worked around: it is a real gap in this rung's coverage
     of the ladder, not a case this file forgot to write.
 
+    **``EXIT_COVERAGE`` (19) is excluded on the watch codes' terms, not on 15's.**
+    It says a stage's own declared output was not on disk when its boundary was
+    recorded, and this fixture's whole premise is a tree that is there and a
+    ``kb-verify`` that is green — the state a coverage refusal is the absence of.
+    Reaching it here would mean dismantling the fixture between a row and its
+    record. It is reached instead in ``test_kb_driver_baton.py``, where a head
+    record row is refused by the real ``kb_pipeline`` through the ledger adapter,
+    so the ladder's coverage holds across two files as it already does for 21
+    and 22.
+
     Each entry names the cause, not the mechanism: what a reader needs from
     this table is what makes a build exit 14 rather than 11.
     """
@@ -519,6 +633,12 @@ def test_every_run_mode_exit_code_in_the_design_is_reached(consumer: Path, tmp_p
         assert code not in reached, f"{cause} and {reached[code]} both reached {code}"
         reached[code] = cause
 
+    def _copy(source: Path, name: str) -> Path:
+        target = tmp_path / "repos" / name
+        target.parent.mkdir(exist_ok=True)
+        shutil.copytree(source, target)
+        return target
+
     def fresh(name: str) -> Path:
         """A pristine copy of the consuming repo, so no case inherits another's ledger.
 
@@ -526,19 +646,27 @@ def test_every_run_mode_exit_code_in_the_design_is_reached(consumer: Path, tmp_p
         nothing. Sharing one repository would make this a test of the order the
         cases happen to be written in.
         """
-        target = tmp_path / "repos" / name
-        target.parent.mkdir(exist_ok=True)
-        shutil.copytree(consumer, target)
-        return target
+        return _copy(consumer, name)
 
-    # 0 — every walked stage recorded.
-    green = execute_in_process(
-        fresh("ok"), tmp_path / "ok", scenario=replay.green_run(), decisions=["start.proceed=yes"], stages=("start",)
-    )
+    def unopened(name: str) -> Path:
+        """The same, with an empty ledger — for the two causes that live in ``start``.
+
+        ``start``'s rows are walked only where the stage is unrecorded, so a
+        barrier of that stage and preflight's own refusal are reachable from
+        this copy and from no other.
+        """
+        return _copy(unopened_consumer, name)
+
+    # 0 — every walked stage recorded. The validation gate rather than `start`,
+    # which this consumer arrives with behind it: a stage walked for real and
+    # recorded is what the code means.
+    green = execute_in_process(fresh("ok"), tmp_path / "ok", scenario=replay.green_run(), stages=(TAIL_STAGES[0],))
     note(green.exit_code, "a walk whose every stage recorded")
 
     # 10 — a barrier with no answer supplied.
-    stopped = execute_in_process(fresh("barrier"), tmp_path / "barrier", scenario=replay.green_run(), stages=("start",))
+    stopped = execute_in_process(
+        unopened("barrier"), tmp_path / "barrier", scenario=replay.green_run(), stages=("start",)
+    )
     note(stopped.exit_code, "an unanswered barrier")
     assert stopped.pair == barriers.START_PROCEED
 
@@ -547,7 +675,6 @@ def test_every_run_mode_exit_code_in_the_design_is_reached(consumer: Path, tmp_p
         fresh("cap"),
         tmp_path / "cap",
         scenario=replay.by_step({**replay.SCENARIOS, "p5.review": replay.clean(replay.verdict(critical=1))}),
-        decisions=["start.proceed=yes"],
         stages=ALL_STAGES,
     )
     note(capped.exit_code, "a capped loop that exhausted its cap")
@@ -558,7 +685,6 @@ def test_every_run_mode_exit_code_in_the_design_is_reached(consumer: Path, tmp_p
         fresh("contract"),
         tmp_path / "contract",
         scenario=replay.by_step({**replay.SCENARIOS, "p5.review": replay.clean("a return carrying no verdict")}),
-        decisions=["start.proceed=yes"],
         stages=ALL_STAGES,
     )
     note(malformed.exit_code, "a step that could not produce its declared output shape twice")
@@ -569,7 +695,6 @@ def test_every_run_mode_exit_code_in_the_design_is_reached(consumer: Path, tmp_p
         wedge_repo,
         tmp_path / "wedge",
         scenario=replay.by_step({**replay.SCENARIOS, "p5.review": replay.stall()}),
-        decisions=["start.proceed=yes"],
         stages=ALL_STAGES,
         config_path=write_config(
             wedge_repo, "impatient.toml", "\n[timeouts]\nsilence_seconds = 1\n\n[retry]\ntransport_attempts = 1\n"
@@ -583,15 +708,16 @@ def test_every_run_mode_exit_code_in_the_design_is_reached(consumer: Path, tmp_p
     # and the one no other case exercises.
     bounded_repo = fresh("bounded")
     note(
-        _cli_exit(bounded_repo, tmp_path / "bounded", extra=("--through", "build started")),
+        _cli_exit(bounded_repo, tmp_path / "bounded", extra=("--through", "validation gate")),
         "a walk bounded short of the last stage",
     )
     # The bound is honoured and the ledger is left resumable at it: the stage
     # named is recorded, and nothing past it is.
-    assert recorded_stages(bounded_repo) == {kb_pipeline.FIRST_STAGE_ID}
+    assert recorded_stages(bounded_repo) == set(HEAD_STAGES) | {TAIL_STAGES[0]}
 
-    # 14 — the environment is not fit: preflight refuses a dirty worktree.
-    unfit_repo = fresh("env")
+    # 14 — the environment is not fit: preflight refuses a dirty worktree. An
+    # unopened copy, preflight being a `start` row.
+    unfit_repo = unopened("env")
     (unfit_repo / "stray.tex").write_text("untracked\n", encoding="utf-8")
     unfit = execute_in_process(unfit_repo, tmp_path / "env", scenario=replay.green_run(), stages=("start",))
     note(unfit.exit_code, "preflight refusing the environment")
@@ -609,7 +735,7 @@ def test_every_run_mode_exit_code_in_the_design_is_reached(consumer: Path, tmp_p
     held.write_text(json.dumps({"pid": os.getpid(), "run_id": "held"}), encoding="utf-8")
     note(_cli_exit(locked_repo, locked), "another driver run alive in this repository")
 
-    expected = set(baton.RUN_MODE_EXIT_CODES) - {baton.EXIT_INTERNAL}
+    expected = set(baton.RUN_MODE_EXIT_CODES) - {baton.EXIT_INTERNAL, baton.EXIT_COVERAGE}
     assert set(reached) == expected, "\n".join(f"{code}: {cause}" for code, cause in sorted(reached.items()))
 
 
@@ -631,8 +757,6 @@ def _cli_exit(consumer: Path, runs: Path, *, config_path: str = CONFIG_PATH, ext
             config.DRY_RUN_FLAG,
             "--run-dir",
             str(runs),
-            "--decide",
-            "start.proceed=yes",
             *extra,
         ],
         cwd=consumer,
@@ -662,7 +786,7 @@ def test_a_build_spending_no_inference_finishes_and_records_that_it_did(consumer
     only that the two do not collide. What this asserts is that the build closed
     out with no invoker substituted at all.
     """
-    result = drive_without(consumer, *ANSWERS, config.NO_INFERENCE_FLAG, run_dir=tmp_path / "runs")
+    result = drive_without(consumer, *NO_ANSWERS, config.NO_INFERENCE_FLAG, run_dir=tmp_path / "runs")
 
     assert result.returncode == baton.EXIT_OK, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     assert recorded_stages(consumer) == set(ALL_STAGES)
@@ -679,45 +803,53 @@ def test_a_build_spending_no_inference_finishes_and_records_that_it_did(consumer
         for stage in ALL_STAGES
     }
 
-    # A revision build applies none of the head's rows, so phase-5 is the one
-    # stage that loses any here — and it names the rows it lost rather than
-    # counting them.
+    # This walk resumes past the head, so the two meta-documentation stages are
+    # the ones it records here that lose any row — the draft and the review being
+    # a stage each, one model call each — and each boundary names the rows it lost
+    # rather than counting them. The head's boundaries were written by the
+    # fixture, without the flag, which is why they say nothing about it.
     noted = [stage for stage, body in bodies.items() if config.NO_INFERENCE_FLAG in body]
-    assert noted == ["phase-5"]
-    for step_id in steps.inference_rows("phase-5", build_mode="revision"):
-        assert step_id in bodies["phase-5"]
+    assert noted == ["overview-drafted", "phase-5"]
+    for stage in noted:
+        for step_id in steps.inference_rows(stage):
+            assert step_id in bodies[stage], stage
 
 
 def test_the_meta_documents_are_absent_and_the_stage_records_anyway(consumer: Path, tmp_path: Path) -> None:
-    """The coverage ruling, observed end to end at the boundary it was made for.
+    """The coverage ruling, observed end to end at the boundaries it was made for.
 
-    ``phase-5``'s postcondition asks whether the two meta-documents were
-    written — an assertion that *this stage did its work*, and there is nothing
-    to assert of a build whose phase-5 rows were dropped. The stage records with
-    that unit vacuous, and the document really is not there.
+    ``overview-drafted``'s postcondition asks whether the overview document was
+    written, and ``phase-5``'s asks the same of what it then reviewed — an
+    assertion that *this stage did its work*, and there is nothing to assert of
+    a build whose rows were dropped. Both stages record with that unit vacuous,
+    and the document really is not there.
 
-    **``README.md`` and not both**: ``phase-3a``'s ``stamp_readiness_docs``
-    writes ``CONVENTIONS.md`` when absent, an earlier stage's own work and no
-    part of this one's. So the unit that would have refused this build is the
-    README's alone, which is worth asserting rather than assuming — a rule that
-    excused the wrong one would still look green here.
+    **``README.md`` and nothing beside it**: ``phase-3a``'s
+    ``stamp_readiness_docs`` writes ``CONVENTIONS.md`` when absent, an earlier
+    stage's own work and no part of this one's — which is why it is not in the
+    set this walks. So the unit that would have refused this build is the
+    README's alone, which is worth asserting rather than assuming: an excused
+    unit and an absent one look the same from the exit code.
     """
-    result = drive_without(consumer, *ANSWERS, config.NO_INFERENCE_FLAG, run_dir=tmp_path / "runs")
+    result = drive_without(consumer, *NO_ANSWERS, config.NO_INFERENCE_FLAG, run_dir=tmp_path / "runs")
 
     assert result.returncode == baton.EXIT_OK, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     kb_root = kb_util.kb_root(consumer)
     assert [name for name in kb_pipeline.META_DOCS if not (kb_root / name).is_file()] == ["README.md"]
-    assert "phase-5" in recorded_stages(consumer)
+    assert {"overview-drafted", "phase-5"} <= recorded_stages(consumer)
 
 
 def test_the_validity_gate_still_runs_at_every_boundary_that_declares_one(consumer: Path, tmp_path: Path) -> None:
     """The half of the ruling that may not be relaxed, asserted where it would be lost.
 
-    ``_check_verify_gates`` is ``depends-attributed``'s postcondition as well as
-    ``phase-3a``'s, and ``depends-attributed`` is a stage this build drops a row
-    from. A rule keyed on the stage rather than on the check would have excused
-    it there and dropped a validity gate. It is not excused: a KB that cannot
-    pass the verifiers cannot record either stage, whatever the build spent.
+    ``_check_verify_gates`` guards two boundaries — ``depends-attributed``'s and
+    ``phase-3a``'s — and a validity unit is excused by nothing, whatever the
+    build spent: a KB that cannot pass the verifiers cannot record the stage.
+    Asserted here at ``phase-3a``, which is the first boundary declaring one
+    that this walk reaches; ``depends-attributed``'s instance of the same check
+    is behind a resume's recorded set and belongs to a walk that reaches its
+    stage (``kb_tools/tests/test_kb_driver_head.py``, and the integration
+    suite's own head walk).
     """
     kb_root = kb_util.kb_root(consumer)
     broken = kb_root / SLUGS[0] / "overview.md"
@@ -726,10 +858,10 @@ def test_the_validity_gate_still_runs_at_every_boundary_that_declares_one(consum
     )
     _git(consumer, "commit", "-aqm", "a dead link the verifiers will find")
 
-    result = drive_without(consumer, *ANSWERS, config.NO_INFERENCE_FLAG, run_dir=tmp_path / "runs")
+    result = drive_without(consumer, *NO_ANSWERS, config.NO_INFERENCE_FLAG, run_dir=tmp_path / "runs")
 
     assert result.returncode == baton.EXIT_GATE_RED, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
-    assert "depends-attributed" not in recorded_stages(consumer)
+    assert "phase-3a" not in recorded_stages(consumer)
 
 
 def test_the_resume_line_carries_both_mode_flags_and_not_the_bound(consumer: Path, tmp_path: Path) -> None:
@@ -744,7 +876,7 @@ def test_the_resume_line_carries_both_mode_flags_and_not_the_bound(consumer: Pat
     """
     result = drive(
         consumer,
-        *ANSWERS,
+        *NO_ANSWERS,
         config.NO_INFERENCE_FLAG,
         config.THROUGH_FLAG,
         "spine-seed",

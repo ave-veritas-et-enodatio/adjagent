@@ -19,8 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from kb_tools import kb_pipeline, kb_util
-from kb_tools.kb_driver import baton, ledger, runlog, transport
+from kb_tools import inference, kb_pipeline, kb_util
+from kb_tools.kb_driver import baton, ledger, runlog
 from kb_tools.kb_write import ops as write_ops
 
 _THIS_DIR = Path(__file__).resolve().parent
@@ -280,8 +280,13 @@ def test_an_unknown_stage_id_is_refused_as_an_environment_fault(tmp_path: Path) 
     assert outcome.exit_code == baton.EXIT_ENVIRONMENT
 
 
-def test_record_start_without_a_charter_records_the_boundary_and_names_none(tmp_path: Path) -> None:
-    """A charter is optional, so the boundary lands and its body names no charter."""
+def test_record_start_without_a_charter_records_the_boundary_and_names_the_absence(tmp_path: Path) -> None:
+    """A charter is optional, so the boundary lands — and its body says it was given none.
+
+    Not an empty body. That is equally what a caller which dropped the argument
+    leaves behind, and the boundary commit is the only durable place the two can
+    be told apart, so the absence is stated rather than left to be inferred.
+    """
     repo = _seeded_repo(tmp_path / "consumer")
 
     outcome = ledger.record_start(repo, charter="")
@@ -291,7 +296,7 @@ def test_record_start_without_a_charter_records_the_boundary_and_names_none(tmp_
         ["git", "log", "-1", "--format=%B"], cwd=repo, capture_output=True, text=True, check=True
     ).stdout
     assert "start" in subject_and_body
-    assert "charter" not in subject_and_body
+    assert kb_pipeline.NO_CHARTER_BODY in subject_and_body
 
 
 # ---------------------------------------------------------------------------
@@ -335,63 +340,6 @@ def test_relay_can_be_suppressed_for_a_read_that_is_not_a_transition(
 
     assert capsys.readouterr().out == ""
     assert "[kb-build] status:" in outcome.stdout
-
-
-# ---------------------------------------------------------------------------
-# pre.revision-entry
-# ---------------------------------------------------------------------------
-
-
-def test_revision_entry_without_installed_targets_is_exit_14(tmp_path: Path) -> None:
-    repo = _seeded_repo(tmp_path / "consumer", **{"justfile": "default:\n    @true\n"})
-
-    outcome = ledger.revision_entry(repo)
-
-    assert outcome.exit_code == baton.EXIT_ENVIRONMENT
-    assert any(kb_util.OP_INSTALL_TARGETS in line for line in outcome.detail)
-
-
-@pytest.mark.skipif(shutil.which("make") is None, reason="the runner target needs make on PATH")
-def test_revision_entry_proceeds_over_a_kb_with_no_local_schema(tmp_path: Path) -> None:
-    """Entry no longer gates on `.index/SCHEMA.md`.
-
-    This exact repo — targets installed, verify green, no local schema — halted
-    at exit 14 before the seed evaporated, on a file `init` no longer writes.
-    Entry now reaches `kb-verify`, which is what actually answers whether the
-    spine is sound.
-    """
-    repo = _seeded_repo(tmp_path / "consumer", **{"Makefile": _MAKEFILE_GREEN})
-    assert not (repo / "kb-root" / ".index" / "SCHEMA.md").exists()
-
-    outcome = ledger.revision_entry(repo)
-
-    assert outcome.ok, outcome.detail
-    assert outcome.exit_code != baton.EXIT_ENVIRONMENT
-    assert "verifying" in outcome.stdout, "entry halted before reaching kb-verify"
-
-
-@pytest.mark.skipif(shutil.which("make") is None, reason="the runner target needs make on PATH")
-def test_revision_entry_green_runs_the_runners_verify_target(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    repo = _seeded_repo(tmp_path / "consumer", **{"Makefile": _MAKEFILE_GREEN})
-
-    outcome = ledger.revision_entry(repo)
-
-    assert outcome.ok, outcome.detail
-    # The target ran — its report is on the Outcome — but a gate is not a
-    # display transition, so nothing of it reached the relay.
-    assert "verifying" in outcome.stdout
-    assert capsys.readouterr().out == ""
-
-
-@pytest.mark.skipif(shutil.which("make") is None, reason="the runner target needs make on PATH")
-def test_revision_entry_with_a_red_verify_is_exit_11(tmp_path: Path) -> None:
-    repo = _seeded_repo(tmp_path / "consumer", **{"Makefile": _MAKEFILE_RED})
-
-    outcome = ledger.revision_entry(repo)
-
-    assert outcome.exit_code == baton.EXIT_GATE_RED
 
 
 @pytest.mark.skipif(shutil.which("make") is None, reason="the runner target needs make on PATH")
@@ -649,9 +597,9 @@ def test_a_contended_write_op_is_re_run_unchanged_until_it_lands(
     repo = _seeded_repo(tmp_path / "consumer")
     log = _scripted_write_op(tmp_path, monkeypatch, 8, 8, 0)
     # Nothing in this path may reach the model. The dispatch entry point is
-    # `transport.invoke`; if the adapter ever routed a retry through inference,
+    # `inference.invoke`; if the adapter ever routed a retry through inference,
     # this is where it would show.
-    monkeypatch.setattr(transport, "invoke", _no_dispatch)
+    monkeypatch.setattr(inference, "invoke", _no_dispatch)
 
     outcome = ledger.write_op(repo, op=kb_util.OP_SET_RIGOR, args=_WRITE_ARGS)
 
@@ -675,7 +623,7 @@ def test_a_write_op_that_stays_contended_is_bounded_and_names_its_restore(
     """rc 8 forever: the original call plus the bound, then an environment fault."""
     repo = _seeded_repo(tmp_path / "consumer")
     log = _scripted_write_op(tmp_path, monkeypatch, 8)
-    monkeypatch.setattr(transport, "invoke", _no_dispatch)
+    monkeypatch.setattr(inference, "invoke", _no_dispatch)
 
     outcome = ledger.write_op(repo, op=kb_util.OP_SET_RIGOR, args=_WRITE_ARGS)
 

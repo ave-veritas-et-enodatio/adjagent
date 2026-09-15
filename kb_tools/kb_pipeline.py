@@ -27,7 +27,6 @@ obeyed.
 Stdlib only.
 """
 
-import contextlib
 import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
@@ -78,6 +77,16 @@ SCRATCH_RELROOT = f"{kb_util.SCRATCH_DIRNAME}/{kb_util.SCRATCH_BUILD_DIRNAME}"
 # kb-root/ either, which holds the distillation and is walked as authored KB
 # content by refresh and both verifiers.
 CHARTER_RELPATH = "kb-build-charter.md"
+
+#: The ``start`` boundary's body, in its two forms. A charter is optional
+#: (SPEC.md, The Driver's Contract), so the field below names a path on one
+#: build and the absence is the whole body on another — but the absence is
+#: *stated*, never left as an empty body, because an empty body is equally what
+#: a caller that dropped the argument leaves behind and the ledger is the only
+#: durable record either way. A charter written where the build never looked is
+#: found by reading the boundary, not by inferring from silence.
+CHARTER_BODY_FIELD = "charter:"
+NO_CHARTER_BODY = "charter: none — this build was given none and runs on its sources"
 
 
 class PipelineError(RuntimeError):
@@ -132,11 +141,11 @@ class RecordStep:
     parenthetical. The stage id comes from the stage being rendered, never
     from a hand-written string.
 
-    The first stage's record is ``open-build``, which performs it: the seed,
-    the charter and the ``start`` boundary are one act, and the boundary is not
-    separately callable on the path an agent walks. What the card names is the
-    call that records the stage it fronts, so a stage whose record moved into
-    another op renders that op.
+    The first stage records through ``start-build`` and every other through
+    ``advance-step``, which is the whole of the split: the boundary that opens
+    a build takes a charter path instead of a stage id, so it is a different op
+    rather than a different argument. What the card names is the call that
+    records the stage it fronts.
     """
 
     note: str | None = None
@@ -144,7 +153,7 @@ class RecordStep:
 
     def render(self, stage: "Stage", repo_root: Path) -> str:
         if stage.id == FIRST_STAGE_ID:
-            command = _kb_util_command(kb_util.OP_OPEN_BUILD, f"{kb_util.CHARTER_VALUES_FLAG} <values-file>")
+            command = _kb_util_command(kb_util.OP_START_BUILD, f"[{kb_util.CHARTER_FLAG} {CHARTER_RELPATH}]")
         else:
             command = _kb_util_command(kb_util.OP_ADVANCE_STEP, f"--stage {stage.id}")
         if self.note:
@@ -409,9 +418,8 @@ def _check_document_tree(ctx: CheckContext) -> CoverageReport:
     """The tree the document graph writes: an entry point with a volume beside it.
 
     ``kb_util.document_tree_present`` is the same precondition ``graph-init``
-    and ``open-build`` already refuse on, asked here as this stage's coverage —
-    one predicate, three callers, and no second reading of what "a tree is
-    there" means.
+    already refuses on, asked here as this stage's coverage — one predicate,
+    two callers, and no second reading of what "a tree is there" means.
     """
     return CoverageReport.declared(
         (
@@ -573,22 +581,44 @@ def _check_verify_gates(ctx: CheckContext) -> CoverageReport:
 OVERVIEW_DOC = "README.md"
 
 #: The KB's operating contract, seeded from its packaged template at the
-#: readiness stamp below.
+#: readiness stamp below — :data:`READINESS_DOCS`' document, and no later
+#: stage's. ``phase-5``'s reviewer is still handed its path and may fault what
+#: it says; what no boundary after ``phase-3a`` asks is whether it exists,
+#: because the stamp has already written it and a check there is satisfied
+#: before the stage it guards has run.
 CONVENTIONS_DOC = "CONVENTIONS.md"
 
-#: phase-5's two documents, declared here so the stage's units and anything
-#: else naming them read one definition.
-META_DOCS = (OVERVIEW_DOC, CONVENTIONS_DOC)
+#: What the meta-documentation stages must produce, declared here so the
+#: stages' units and anything else naming them read one definition. One
+#: document, and it is the one carrying a slot no read of the KB fills: the
+#: overview's opening passage is a seat's answer, where every word of
+#: :data:`CONVENTIONS_DOC` is canned text an earlier stage stamped.
+META_DOCS = (OVERVIEW_DOC,)
 
 
 def _check_meta_docs(ctx: CheckContext) -> CoverageReport:
+    """The meta-document is on disk. Two boundaries share it, for two halves of one job.
+
+    ``overview-drafted`` writes the overview document and ``phase-5`` reviews
+    what it wrote, so the question at both boundaries is the same question — the
+    document is there — and the answer is the same computation. Existence is
+    not quality here any more than anywhere else: whether the review improved it
+    is the reviewer's ruling and reaches the run as severities, never as a unit.
+    Nor is it whether a fix round changed anything: that comparison needs the
+    bytes a round composed against the bytes standing at the moment it composed
+    them, and by this boundary the second is gone
+    (``kb_driver.run._assemble_overview``).
+    """
     kb = kb_util.kb_root(ctx.repo_root)
     return CoverageReport.declared(
         tuple(
             _file_unit(unit_id=name, path=kb / name, detail="this document was never written", asserts_own_work=True)
             for name in META_DOCS
         ),
-        unit_class="no meta-documentation document was written",
+        # One unit, so it is its own class: :func:`_named_missing` names a sole
+        # unit either way, which leaves a ``unit_class`` beside it a sentence
+        # nothing can render.
+        degenerate=True,
     )
 
 
@@ -600,14 +630,40 @@ def _check_meta_docs(ctx: CheckContext) -> CoverageReport:
 # stage to pick up.
 
 #: The KB's orientation document, and the home of its scope pin — charter prose
-#: the build run writes there as soon as the build is open (`kb_tools/SPEC.md`,
-#: Project Scoping). Named rather than spelled twice: it is also the name
-#: `stamp_readiness_docs` seeds through :data:`READINESS_DOCS`, and only where
-#: no file already stands there.
+#: the build run writes there (`kb_tools/SPEC.md`, Project Scoping). Named
+#: rather than spelled twice: it is also the name `stamp_readiness_docs` seeds
+#: through :data:`READINESS_DOCS`, pin and orientation text together, and only
+#: where no file already stands there.
 SCOPE_PIN_DOC = "CLAUDE.md"
 
 READINESS_DOCS = (SCOPE_PIN_DOC, CONVENTIONS_DOC)
 PROJECT_NAME_FIELD = "{project-name}"
+
+#: The scope pin's slot in :data:`SCOPE_PIN_DOC`'s template. The stamp fills it
+#: with what the build's charter states, so the document that says it carries
+#: the pin carries one.
+SCOPE_PIN_FIELD = "{scope-pin}"
+
+#: What fills :data:`SCOPE_PIN_FIELD` on a build that was given no charter. A
+#: charter is optional (SPEC.md, The Driver's Contract), so this is a legitimate
+#: build and not a failure — but the pin is the charter's text, and a build with
+#: no charter has none to write. The absence is stated in the document rather
+#: than left as a blank section, for the reason a dropped step is named at its
+#: boundary: a document nobody pinned and one whose pin went missing are not the
+#: same fact, and only the build can tell them apart.
+NO_CHARTER_PIN = (
+    "This build was given no charter, so nothing was recorded about which corpus it "
+    "distills beyond the sources it was run on. Nothing here is waiting on a tool: a "
+    "reader who knows the scope should write it into this section."
+)
+
+#: Every slot an installed template declares. The spelling is kebab-case in
+#: braces (root CONVENTIONS.md, the identifier class). The stamp matches this
+#: against the fields it can fill and refuses a template carrying one it cannot
+#: — so a slot renamed on one side of the substitution and not the other is a
+#: refusal rather than a literal ``{scope-pin}`` shipped into a consumer's KB,
+#: which is a corrupted document that reads as a written one.
+TEMPLATE_SLOT_RE = re.compile(r"\{[a-z][a-z0-9]*(?:-[a-z0-9]+)*\}")
 
 # kb_tools/installed/ holds the artifacts this toolchain writes into a
 # consuming KB rather than anything rendered here. The directory name is the
@@ -625,12 +681,46 @@ def installed_template(name: str) -> Path:
     return Path(__file__).resolve().parent / INSTALLED_DIR / f"{name}.tmpl"
 
 
+def scope_pin_text(repo_root: Path) -> str:
+    """What this KB distills, as the build's own charter states it.
+
+    The charter is the only place a build is told what it is for, so the pin is
+    that text and nothing composed around it: no inference writes this document
+    and there is nothing here for one to write — the words are the project's own
+    (SPEC.md, Project Scoping).
+
+    A recorded charter that is no longer on disk raises rather than degrading to
+    :data:`NO_CHARTER_PIN`. The two are different facts, and writing the absence
+    over a charter the ledger names would put a false statement in the one
+    document a reader trusts for scope.
+    """
+    relpath = recorded_charter(repo_root)
+    if relpath is None:
+        return NO_CHARTER_PIN
+    charter = repo_root / relpath
+    if not charter.is_file():
+        raise PipelineError(
+            f"the {FIRST_STAGE_ID} boundary records a charter at {relpath}, and no file "
+            f"stands there — {SCOPE_PIN_DOC} cannot be stamped with a scope pin this "
+            f"build cannot read. Restore that file and record this stage again."
+        )
+    return charter.read_text(encoding="utf-8").strip() or NO_CHARTER_PIN
+
+
 def stamp_readiness_docs(ctx: CheckContext) -> list[str]:
     """Write the KB's readiness docs from their packaged templates.
 
     Only-if-absent: a project that has authored its own CLAUDE.md or CONVENTIONS.md
-    keeps it. ``{project-name}`` is substituted from the repo directory name —
-    the only per-project fact these canned documents carry.
+    keeps it. ``{project-name}`` is substituted from the repo directory name, and
+    ``{scope-pin}`` from the build's charter — the per-project facts these
+    otherwise canned documents carry.
+
+    **Why the pin lands here and not when the build opens.** ``kb-root/`` holds
+    nothing outside ``.index/`` until the document graph writes the tree, so a
+    write into it at build-open would carry the pin at the cost of turning
+    ``kb_util.kb_root_state`` from ``spine-only`` into ``populated`` — the exact
+    reading ``pre.kb-root`` refuses a fresh build on. By this stage the tree is
+    populated already and the stamp cannot change that answer.
 
     Neither file is the corpus-invariant channel: those live in
     ``invariants.md``, which is what the toolchain parses for framework nodes.
@@ -648,7 +738,23 @@ def stamp_readiness_docs(ctx: CheckContext) -> list[str]:
                 f"the packaged readiness template {source} is missing; this "
                 f"kb_tools install is incomplete — re-install the agent definitions."
             )
-        text = source.read_text(encoding="utf-8").replace(PROJECT_NAME_FIELD, ctx.repo_root.name)
+        text = source.read_text(encoding="utf-8")
+        # Per template, and the pin read only for a template that takes one: a
+        # stamp that writes nothing must not fail over a charter it never needs.
+        fields = {PROJECT_NAME_FIELD: ctx.repo_root.name}
+        if SCOPE_PIN_FIELD in text:
+            fields[SCOPE_PIN_FIELD] = scope_pin_text(ctx.repo_root)
+        # Checked on the template, never on the result: a charter is arbitrary
+        # prose and may legitimately carry braces of its own.
+        unfilled = [slot for slot in TEMPLATE_SLOT_RE.findall(text) if slot not in fields]
+        if unfilled:
+            raise PipelineError(
+                f"{source.name} carries the slot(s) {', '.join(sorted(set(unfilled)))}, which "
+                f"nothing here fills; the fields this stamp substitutes are {', '.join(fields)}. "
+                f"Writing it would put the slot's own text into {name} as though it were prose."
+            )
+        for field, value in fields.items():
+            text = text.replace(field, value)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
         reports.append(f"{name}: written from {source.name}")
@@ -741,6 +847,24 @@ class Stage:
 # are written against these exact strings — so an id is never renamed in
 # place; a change means a new id and a migration. Card text is the same kind
 # of contract: agent definitions are trimmed against it, not the reverse.
+#
+# **A stage is as small as the most expensive thing in it that must not be
+# repeated** (SPEC.md, The Driver's Contract). A boundary is a stage, so a stage
+# holding two steps that spend inference would leave the first one's result
+# behind a step that can fail, and a resume re-spends what had already been
+# earned. That is what decides where the tail's boundaries fall:
+# `overview-drafted` is the overview document written, and `phase-5` is the
+# review cycle over it — one stage each, because the draft and the review are two
+# model calls and neither may pay for the other's failure. Splitting them is also
+# what retired the alternative, which was to trust the draft's scratch file on
+# re-entry: an output no boundary accounts for is discarded, and a boundary
+# immediately behind the draft means there is nothing left to trust.
+#
+# The rule is enforced over the step table rather than restated here
+# (`kb_driver.steps`, and `test_kb_driver_steps.py`'s assertion that no failable
+# row stands between an inference-spending row and its boundary). A stage that
+# grows a second such row fails that assertion; it is not a judgement call made
+# again at each insertion.
 STAGES: tuple[Stage, ...] = (
     Stage(
         "start",
@@ -752,12 +876,18 @@ STAGES: tuple[Stage, ...] = (
                 "--source <path> [--source ...]",
                 f"[{kb_util.CHARTER_VALUES_FLAG} <values-file>]",
             ),
-            f"whatever the user then says that is not an answer to an unsettled fact is charter text: put it, "
-            f"and any charter the invocation carried, into a values file under {SCRATCH_RELROOT}/ in their own "
-            f"words ({kb_util.CHARTER_KEY} = '''...''' in one [[{kb_util.ENTRY_TABLE}]] table)",
+            f"whatever the user then says that is not an answer to an unsettled fact is charter text: write it, "
+            f"and any charter the invocation carried, to {CHARTER_RELPATH} in their own words — that is the "
+            f"path the record below names, and a build given no charter records that it was given none",
             StageStatusStep(),
             RecordStep(),
-            f"dispatch the first coordinator carrying root + {CHARTER_RELPATH}",
+            # Nothing is dispatched at this boundary and nothing is handed on:
+            # the driver walks the next stage itself. The line this replaced
+            # instructed a reader to dispatch a coordinator, which is a route
+            # the build does not have — there is no coordinator seat, and a
+            # card naming one sends its reader to look for it.
+            "nothing is dispatched here: the run walks straight on into the next stage, whose own card is "
+            "what prints next",
         ),
         coverage=_check_charter_written,
         user_gate=True,
@@ -853,14 +983,25 @@ STAGES: tuple[Stage, ...] = (
         pre_commit=stamp_readiness_docs,
     ),
     Stage(
+        "overview-drafted",
+        "overview drafted",
+        card=(
+            "confirm docent commands present; absence -> escalate",
+            f"the stage assembles {OVERVIEW_DOC} from the index and one passage tech-writer answers with",
+            StageStatusStep(),
+            RecordStep(),
+        ),
+        coverage=_check_meta_docs,
+        work_is_inference=True,
+    ),
+    Stage(
         "phase-5",
         "meta-documentation",
         card=(
             CappedLine(
-                f"the stage assembles {OVERVIEW_DOC} from the index and one passage tech-writer answers with"
-                "; tech-writer-reviewer, fix-cycle cap {phase_5_fix_cap}; findings persisting -> escalate"
+                "tech-writer-reviewer reviews the documents the stage before this one wrote, tech-writer "
+                "answers each round's findings; fix-cycle cap {phase_5_fix_cap}; findings persisting -> escalate"
             ),
-            "confirm docent commands present; absence -> escalate",
             StageStatusStep(),
             RecordStep(),
             "return: build finished, all stages [x]",
@@ -940,6 +1081,30 @@ def recorded_stages(repo_root: Path) -> set[str]:
     return {match.group(1) for match in found if match is not None and match.group(1) in _STAGE_BY_ID}
 
 
+def recorded_charter(repo_root: Path) -> str | None:
+    """The charter path the ``start`` boundary recorded, or ``None`` where it recorded none.
+
+    The ledger is the durable answer and the only one: the charter reaches
+    ``start-build`` as an argument and is written into that boundary's body
+    (:data:`CHARTER_BODY_FIELD`), so a later stage asks the commit trail rather
+    than guessing a path or re-reading a command line it never saw. A build
+    given none recorded :data:`NO_CHARTER_BODY`, which is a stated absence and
+    comes back as ``None`` — distinct from a boundary nobody has recorded yet,
+    which is also ``None`` because neither has a charter to name.
+    """
+    result = kb_util.run_git(repo_root, "log", "-1", f"--grep=^{LEDGER_PREFIX} {FIRST_STAGE_ID} |", "--format=%b")
+    if result is None or result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        # The absence is spelled with the same field name, so it is matched
+        # first: `NO_CHARTER_BODY` is a whole statement and not a path.
+        if line.strip() == NO_CHARTER_BODY:
+            return None
+        if line.startswith(CHARTER_BODY_FIELD):
+            return line[len(CHARTER_BODY_FIELD) :].strip() or None
+    return None
+
+
 def current_stage(recorded: set[str]) -> Stage | None:
     """The stage to act on — the first unrecorded one — or None when complete.
 
@@ -998,10 +1163,9 @@ def _print_report(
     recorded: set[str],
     *,
     advisory: str | None = None,
-    baton: str | None = None,
     stage_status: Sequence[str] = (),
 ) -> None:
-    """The full render: status, checklist, coverage, action card, baton, contract line.
+    """The full render: status, checklist, coverage, action card, contract line.
 
     The checklist block stays contiguous and is the only thing matching
     ``^\\[[x* ]\\] ``; every other line carries a word-prefix instead, so a
@@ -1021,8 +1185,6 @@ def _print_report(
     if stage is not None:
         for line in card_lines(stage, repo_root):
             print(line)
-    if baton is not None:
-        print(baton)
     # Stated at read-time, every time: the observed failure was an agent
     # referencing collapsed tool output instead of embedding this render.
     print(f"{_TAG} {CONTRACT_LINE}")
@@ -1068,8 +1230,8 @@ def _unseeded_advisory(repo_root: Path) -> str | None:
 def show_status(repo_root: Path) -> int:
     """Render the checklist for ``repo_root``. Read-only; always exit 0.
 
-    This is also the resume detector: a present-but-incomplete ledger is the
-    mechanically detectable third state beside fresh and revision.
+    This is also the resume detector: a present-but-incomplete ledger is what
+    says an invocation is continuing a build rather than opening one.
 
     ``repo_root`` is a git root, not necessarily a seeded one: the ledger
     lives in the commit trail, so a KB that does not exist yet is *status*
@@ -1296,8 +1458,12 @@ def start_build(repo_root: Path, charter: str) -> int:
     commit is by definition the build's first, so a second one would be a
     contradiction rather than a repetition.
 
-    ``charter`` empty is a build carrying none: the boundary is recorded with
-    no body, since the body's whole content here is the charter it names.
+    ``charter`` empty is a build carrying none, and the boundary says so in
+    words rather than carrying an empty body. A charter is optional (SPEC.md,
+    The Driver's Contract) so an absence is a legitimate state — but an empty
+    body is also what a caller that silently dropped the argument leaves, and
+    the ledger is the only durable place the two can be told apart. A reader
+    who wrote a charter the build never picked up learns it here.
     """
     recorded = recorded_stages(repo_root)
     if FIRST_STAGE_ID in recorded:
@@ -1313,8 +1479,8 @@ def start_build(repo_root: Path, charter: str) -> int:
     if refusal is not None:
         return _refuse(repo_root, recorded, stage, report, refusal)
     _report_vacuous_units(report)
-    _record(repo_root, stage, body=f"charter: {charter}" if charter else "")
-    _print_report(repo_root, recorded_stages(repo_root), baton=f"{_TAG} next: dispatch the coordinator")
+    _record(repo_root, stage, body=f"{CHARTER_BODY_FIELD} {charter}" if charter else NO_CHARTER_BODY)
+    _print_report(repo_root, recorded_stages(repo_root))
     return EXIT_OK
 
 
@@ -1369,11 +1535,10 @@ def advance_step(repo_root: Path, stage_id: str, note: str | None = None, no_inf
 
 # --- the build's opening gate ----------------------------------------------
 #
-# One read before the gate and one write after it, and no sequence between them
-# for a caller to execute out of order. The read renders the whole confirmation
-# — every fact the answer turns on — as a message to be relayed unchanged; the
-# write performs everything the answer releases, in the one order that works,
-# and leaves nothing behind if it cannot finish.
+# One read in front of the gate: the whole confirmation — every fact the answer
+# turns on — as a message to be relayed unchanged. It writes nothing, and what
+# the answer releases is `start-build`, which is already an op of its own; no
+# second call opens a build.
 #
 # The render is read by a person and by the agent relaying it at once, so it is
 # plain declaratives throughout: a line here is either a fact about this
@@ -1381,16 +1546,8 @@ def advance_step(repo_root: Path, stage_id: str, note: str | None = None, no_inf
 
 CONFIRMATION_TAG = "[confirmation]"
 CHARTER_TAG = "[charter]"
-OPEN_BUILD_TAG = "[open-build]"
 
 _CONFIRMATION_FIELD_WIDTH = 14
-
-#: The parts ``open-build`` performs, in order. A failure names the one it
-#: stopped at, because "the build did not open" leaves a caller re-running the
-#: whole act to find out how far it got.
-SEED_PART = "the spine seed"
-CHARTER_PART = "the charter"
-RECORD_PART = "the start record"
 
 
 def _confirmation(text: str) -> str:
@@ -1422,26 +1579,26 @@ def _source_lines(sources: Sequence[Path]) -> tuple[list[str], int]:
 
 
 def _determination_line(repo_root: Path) -> str:
-    """The kb-root tri-state, stated as a fact rather than read as fresh-or-revision.
+    """The kb-root tri-state, and what the state means for an invocation opening a build.
 
-    Before kb_docgraph existed, the spine was seeded first, so a populated
-    kb-root/ could only mean a prior build's content and fresh-or-revision
-    followed straight from the tri-state. Under the current order kb_docgraph
-    writes the document tree first, so a populated kb-root/ is what every fresh
-    build's confirmation now sees before any claim-graph metadata exists — the
-    same inverted precondition :func:`graph_init_kb` (kb_util) already had to
-    correct in its own guard. Nothing here can tell "a tree with no claim-graph
-    metadata yet" apart from "a tree a finished build already stamped" by
-    reading kb-root/ content alone, so that reading is asked of the user
-    instead (:func:`_unsettled_lines`) rather than asserted from tree content.
+    Two of the three are ordinary. The third is not: a build is opened over an
+    absent or spine-only ``kb-root/`` and refused over a populated one, the
+    document graph writing the tree whole — so the consequence is stated here,
+    where a reader still has the chance to act on it, rather than met as a
+    refusal on the next command. Continuing a build already under way is the
+    other case and reads this line as history: the ledger's recorded stages
+    below say which of the two this repository is in.
     """
     state = kb_util.kb_root_state(repo_root)
-    if state == "absent":
+    if state == kb_util.KB_ROOT_ABSENT:
         detail = f"{kb_util.KB_DIRNAME}/ does not exist yet"
-    elif state == "spine-only":
+    elif state == kb_util.KB_ROOT_SPINE_ONLY:
         detail = f"{kb_util.KB_DIRNAME}/ exists but holds nothing outside {kb_util.INDEX_DIRNAME}/"
     else:
-        detail = f"{kb_util.KB_DIRNAME}/ holds a document tree"
+        detail = (
+            f"{kb_util.KB_DIRNAME}/ holds a document tree — a build opened over it is refused, "
+            f"since the document graph would overwrite it; a build already under way resumes into it"
+        )
     return _confirmation_field("kb-root", detail)
 
 
@@ -1478,39 +1635,32 @@ def _unsettled_lines(repo_root: Path) -> list[str]:
     """The per-project facts the confirmation settles, each with what holds if it is not answered.
 
     A default nobody states is a decision made silently, which is what these
-    lines exist to prevent. The runner entry appears only where there is
-    something to settle: a repository already carrying a justfile or a Makefile
-    has its answer.
+    lines exist to prevent. An entry appears only where there is something to
+    settle — a repository already carrying a justfile or a Makefile has its
+    runner answer — and the heading goes with the entries: a heading over
+    nothing reads as a question the user is being asked to answer. What becomes
+    of the rest of the answer holds either way, so the charter line always
+    prints.
     """
-    lines = [_confirmation("Unsettled. Each is followed by what this build does if you say nothing:")]
+    items: list[str] = []
     if kb_util.detected_runner(repo_root) is None:
         created = kb_util.runner_filename(kb_util.DEFAULT_RUNNER)
-        lines.append(
+        items.append(
             _confirmation(
                 f"  Task runner — this repository has neither a justfile nor a Makefile, and the KB's "
                 f"maintenance commands arrive as one include line in one of them. Default: a {created} "
                 f"is created carrying that line."
             )
         )
-    lines.append(
-        _confirmation(
-            "  Canonical direction — which side wins when the sources and the knowledge base "
-            "disagree. Default: the sources are canonical and the KB is derived from them."
-        )
+    heading = (
+        [_confirmation("Unsettled. Each is followed by what this build does if you say nothing:")] if items else []
     )
-    if kb_util.kb_root_state(repo_root) == "populated":
-        lines.append(
-            _confirmation(
-                "  Fresh or revision — whether the document tree above carries no claim-graph "
-                "metadata yet, or a finished build already stamped it. kb-root/ content alone "
-                "cannot tell the two apart once the tree is built before the spine is. Default: "
-                "fresh — the seed and the start record both no-op or refuse rather than duplicate "
-                "work over a spine already initialised, so treating this as fresh is safe even "
-                "where it is not."
-            )
-        )
-    lines.append(_confirmation("Anything else you say is charter text, and reaches the build in your own words."))
-    return lines
+    opening = "Anything else" if items else "Anything"
+    return [
+        *heading,
+        *items,
+        _confirmation(f"{opening} you say is charter text, and reaches the build in your own words."),
+    ]
 
 
 def show_confirmation(repo_root: Path, *, sources: Sequence[Path], charter: str | None) -> int:
@@ -1569,102 +1719,11 @@ def show_confirmation(repo_root: Path, *, sources: Sequence[Path], charter: str 
     # call that does not exist or spell one the consumer does not run.
     print(
         _confirmation(
-            f"next: the answer and the charter go to "
-            f"{_kb_util_command(kb_util.OP_OPEN_BUILD, f'{kb_util.CHARTER_VALUES_FLAG} <values-file>')}"
+            f"next: write the charter to {CHARTER_RELPATH} where the answer carries one, then record "
+            f"the boundary with "
+            f"{_kb_util_command(kb_util.OP_START_BUILD, f'[{kb_util.CHARTER_FLAG} {CHARTER_RELPATH}]')}"
         )
     )
-    return EXIT_OK
-
-
-def _unstage(repo_root: Path) -> None:
-    """Drop whatever the record's sweep staged, leaving the index at HEAD.
-
-    Undoing the files a failed act wrote is only half of putting a repository
-    back: ``_record`` sweeps with ``git add -A`` before it commits, so a commit
-    that fails leaves every one of those paths staged, and a worktree with a
-    staged deletion is not the clean one the retry's preflight requires. Safe to
-    do wholesale precisely because that preflight already passed — the index
-    matched HEAD when this call began, so resetting to HEAD restores it rather
-    than discarding work someone else had staged.
-    """
-    kb_util.run_git(repo_root, "reset", "-q")
-
-
-def _open_build_failed(part: str, detail: str, code: int) -> int:
-    """Report which part stopped the act, and that nothing of it is left."""
-    kb_util.to_stderr(
-        f"{OPEN_BUILD_TAG} stopped at {part} — {detail} "
-        f"Nothing this call wrote is left behind: the repository stands as it did before it ran."
-    )
-    return code
-
-
-def open_build(repo_root: Path, *, charter: str, runner: str | None) -> int:
-    """Seed the spine, write the charter, record the start — one act or none.
-
-    The order is the only one that works and so is not a caller's to get right:
-    the seed runs first, because it refuses a ``kb-root/`` holding no document
-    tree and a missing prerequisite is better reported before a charter is
-    written than after; the charter is written second, because the record's
-    postcondition is that it exists; and the record runs last, sweeping both into
-    the build's first commit.
-
-    Every write is undone if a later part cannot complete, so a failed call
-    leaves the repository as it found it and the retry is the identical call.
-    What is not undone is what was already there: a KB seeded by an earlier run,
-    a runner file this call did not create.
-
-    Exit codes: ``0`` open; ``1`` the seed's refresh or verify failed;
-    :data:`EXIT_GIT_FAILURE` preflight blocked the seed, or git would not
-    record; :data:`kb_util.EXIT_NO_DOCUMENT_TREE` ``kb-root/`` holds no document
-    tree, so there is nothing to open a claim-graph build over;
-    :data:`EXIT_ALREADY_STARTED` the build is already started.
-    """
-    recorded = recorded_stages(repo_root)
-    if FIRST_STAGE_ID in recorded:
-        kb_util.to_stderr(
-            f"{OPEN_BUILD_TAG} this build is already started — nothing written. "
-            f"Use '{kb_util.OP_ADVANCE_STEP}' to record the next stage."
-        )
-        _print_report(repo_root, recorded)
-        return EXIT_ALREADY_STARTED
-
-    charter_path = repo_root / CHARTER_RELPATH
-    with contextlib.ExitStack() as undo:
-        # Registered first, so it runs last: the files come out of the worktree,
-        # then the index is put back. A no-op on every failure before the record
-        # is attempted, nothing having been staged yet.
-        undo.callback(_unstage, repo_root)
-        seed_rc = kb_util.graph_init_kb(repo_root, runner, undo=undo)
-        if seed_rc == kb_util.EXIT_NO_DOCUMENT_TREE:
-            return _open_build_failed(
-                SEED_PART,
-                f"{kb_util.KB_DIRNAME}/ holds no document tree, so there is nothing to build a "
-                f"claim graph over; run the document-graph front end over the sources first, "
-                f"then re-issue this call.",
-                seed_rc,
-            )
-        if seed_rc != EXIT_OK:
-            return _open_build_failed(SEED_PART, "the report above says what failed.", seed_rc)
-
-        try:
-            charter_path.write_text(charter, encoding="utf-8")
-        except OSError as exc:
-            return _open_build_failed(CHARTER_PART, f"{charter_path} could not be written: {exc}", EXIT_GIT_FAILURE)
-        undo.callback(charter_path.unlink)
-        print(f"{OPEN_BUILD_TAG} charter: {len(charter.encode('utf-8'))} bytes written to {CHARTER_RELPATH}")
-
-        try:
-            record_rc = start_build(repo_root, CHARTER_RELPATH)
-        except PipelineError as exc:
-            return _open_build_failed(
-                RECORD_PART, f"the boundary could not be committed ({str(exc).rstrip()}).", EXIT_GIT_FAILURE
-            )
-        if record_rc != EXIT_OK:
-            return _open_build_failed(RECORD_PART, "the report above says what was refused.", record_rc)
-        undo.pop_all()
-
-    print(f"{OPEN_BUILD_TAG} the build is open: spine seeded, charter written, start recorded.")
     return EXIT_OK
 
 

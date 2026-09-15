@@ -80,6 +80,74 @@ prep-test-data-arxiv ids=ARXIV_IDS:
 prep-test-data-arxiv-candidates:
     @just prep-test-data-arxiv "{{ARXIV_CANDIDATE_IDS}}"
 
+# Read-only ask, factored out of stage-arxiv-paper so any future recipe that
+# `rm -rf`s a `.claude-temp/` or `kb-root/` under a staged repository owes the
+# same check and can call this one rather than pasting it. `dir`'s own
+# `.claude/agents/kb_tools` is what a driver run there would have been
+# launched against (the PYTHONPATH pattern every driver-invoking recipe in
+# this file already uses), so that installed copy is asked, not this
+# repository's own.
+#
+# Liveness has one definition and it lives in `kb_driver.runlog` — this
+# recipe reads `kb_util show-run-lock`'s report of it and judges no pid
+# itself; the answer rides that command's stdout, not its exit status.
+#
+# Two cases below both proceed as one: a `dir` with no toolchain installed
+# yet, and one whose installed toolchain's argparse rejects `show-run-lock`
+# outright because it predates the op (`stage-arxiv-paper` reinstalls the
+# current toolchain only *after* this guard runs, so every already-staged
+# `dir` is briefly in exactly this state the first time a new op lands). Both
+# are "this install cannot tell me whether a run is live", never "no lock" —
+# an installed toolchain that recognises the op and fails for any other
+# reason (a real resolution failure) still refuses. The two are told apart by
+# argparse's own behaviour: an unrecognised subcommand or flag is rejected by
+# the parser itself, before any op runs, and that rejection always opens with
+# a `usage:` line — the op's own failures never do. Reading that line is
+# asking the CLI's own public error-reporting shape, not a second definition
+# of anything `kb_driver.runlog` owns.
+[private]
+[doc("refuse if a live driver run holds dir's run lock, naming the holder; silent no-op on a stale or absent lock, on a dir with no toolchain installed yet, or on a toolchain too old to recognise show-run-lock")]
+guard-run-lock dir: venv
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="{{dir}}"
+    if [[ ! -d "${dir}/.claude/agents/kb_tools" ]]; then
+        exit 0
+    fi
+    set +e
+    output="$(cd "${dir}" && PYTHONPATH=.claude/agents "{{VENV_PYTHON}}" -m kb_tools.kb_util show-run-lock 2>&1)"
+    rc=$?
+    set -e
+    if [[ "${rc}" -ne 0 ]]; then
+        if [[ "${output}" == usage:* ]]; then
+            # argparse itself rejected the invocation before show-run-lock's
+            # own handler ever ran — the installed toolchain predates the op
+            # and cannot answer this question at all, same as none installed.
+            exit 0
+        fi
+        printf 'error: show-run-lock could not resolve a repository root under %s (exit %s):\n%s\n' "${dir}" "${rc}" "${output}" >&2
+        exit 1
+    fi
+    state=""
+    pid=""
+    run_id=""
+    started=""
+    lock=""
+    while IFS='=' read -r key value; do
+        case "${key}" in
+            state) state="${value}" ;;
+            pid) pid="${value}" ;;
+            run_id) run_id="${value}" ;;
+            started) started="${value}" ;;
+            lock) lock="${value}" ;;
+        esac
+    done <<< "${output}"
+    if [[ "${state}" == "live" ]]; then
+        printf 'error: a driver run is live in %s (pid %s, run_id %s, started %s; lock: %s) — wait for it to finish or stop it before staging.\n' \
+            "${dir}" "${pid}" "${run_id}" "${started}" "${lock}" >&2
+        exit 1
+    fi
+
 [doc("stage one arXiv paper as a throwaway consumer: git init, unpack, install the agent set, stub Makefile; every --* flag forwards verbatim to the root install recipe")]
 stage-arxiv-paper id *args:
     #!/usr/bin/env bash
@@ -98,6 +166,11 @@ stage-arxiv-paper id *args:
     # Unpacking again would be slower and would discard the property that
     # every restage of a paper starts from bytes git has already vouched for.
     if [[ -d "${dir}/.git" ]] && git -C "${dir}" rev-parse -q --verify cleared > /dev/null; then
+        # Asked before either destructive step: the reset below would remove
+        # `dir`'s own `.claude/agents/kb_tools` (committed only at the `staged`
+        # tag, which `cleared` predates), and the `rm -rf` would destroy the
+        # very run evidence a live build is writing.
+        just guard-run-lock "${dir}"
         git -C "${dir}" reset --hard cleared > /dev/null
         rm -rf "${dir}/.claude-temp" "${dir}/kb-root"
     else
@@ -281,6 +354,7 @@ kb-driver-dryrun: venv
     consumer="${fixture_root}/consumer"
     run_parent="${fixture_root}/runs"
     scratch_rel=".claude-temp/kb-build"
+    charter_rel="kb-build-charter.md"
     config_name="driver-run.toml"
 
     rm -rf "${fixture_root}"
@@ -319,11 +393,18 @@ kb-driver-dryrun: venv
     printf '@book{synthetic,\n  author = {A. Fixture},\n  title = {Nothing Cited},\n  year = {2026}\n}\n' \
         > "${consumer}/synthetic.bib"
 
+    # The charter is tracked content at the durable path the driver resolves one
+    # at, so it goes down before this commit: the start boundary names its path
+    # permanently, and scratch is deleted wholesale by staging. An uncommitted
+    # one would also fail the clean-worktree check start's preflight makes.
+    printf '# Build charter\n\nEverything in the two volumes.\n' > "${consumer}/${charter_rel}"
+
     git -C "${consumer}" add -A
     git -C "${consumer}" commit -qm seed
 
+    # The run overlay is the launch's own input and stays in gitignored scratch,
+    # so writing it cannot dirty the worktree preflight is about to read.
     mkdir -p "${consumer}/${scratch_rel}"
-    printf '# Build charter\n\nEverything in the two volumes.\n' > "${consumer}/${scratch_rel}/build-charter.md"
     printf '[run]\nsources = ["VolumeOne.tex", "VolumeTwo.tex"]\npermission_mode = "acceptEdits"\n' \
         > "${consumer}/${scratch_rel}/${config_name}"
 
@@ -760,7 +841,7 @@ kb-driver-harvest:
     fi
     run_dir="$(cat "${run_parent}/LATEST")"
     if [[ ! -f "${run_dir}/exit.json" ]]; then
-        printf 'error: %s/exit.json is missing — the run may have been killed before it could write one; inspect %s/run.log.\n' "${run_dir}" "${run_dir}" >&2
+        printf 'error: %s/exit.json is missing — every ending the driver survives writes one, so this is a SIGKILL or a full disk; inspect %s/run.log.\n' "${run_dir}" "${run_dir}" >&2
         exit 1
     fi
 

@@ -30,7 +30,7 @@ DOCUMENTS = {
     "entry-point.md": "entry-point",
     "vol/index.md": "index",
     "vol/alpha.md": "leaf",
-    "vol/deeper/index.md": "leaf-as-index",
+    "vol/deeper/index.md": "index",
     "vol/deeper/beta.md": "leaf",
 }
 
@@ -253,9 +253,9 @@ def test_the_document_walk_is_the_one_that_excludes_the_authored_non_documents(f
         assert name not in facts["document-tree"]
 
 
-def test_the_leaf_count_spans_both_leaf_kinds(facts: dict[str, str]) -> None:
-    """A `leaf-as-index` is a leaf: it hosts a claim-bearing body like any other."""
-    assert facts["leaf-count"] == "3"
+def test_the_leaf_count_is_the_leaves_and_not_the_documents(facts: dict[str, str]) -> None:
+    """An index is navigation, never a leaf — the slot counts translated source."""
+    assert facts["leaf-count"] == "2"
 
 
 def test_the_tree_renders_each_index_above_what_it_indexes(facts: dict[str, str]) -> None:
@@ -267,7 +267,7 @@ def test_the_tree_renders_each_index_above_what_it_indexes(facts: dict[str, str]
             "  index.md  (index)",
             "  alpha.md  (leaf)",
             "  deeper/",
-            "    index.md  (leaf-as-index)",
+            "    index.md  (index)",
             "    beta.md  (leaf)",
         ]
     )

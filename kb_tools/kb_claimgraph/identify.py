@@ -226,20 +226,19 @@ def check_block_coverage(claims: Sequence[Claim], inventory: Inventory) -> None:
 
 
 def unmarked_documents(tree: Tree, inventory: Inventory) -> tuple[str, ...]:
-    """Every document the author marked nothing in — C-inf's whole surface.
+    """Every leaf the author marked nothing in, as ``stage-C-identify`` counts them.
 
-    Mechanical: the complement of stage B's hosting set, narrowed to the two
-    kinds a claim declaration is asked of. An index whose body hosts a block is
-    a ``leaf-as-index`` and so is never in here; an index whose body hosts none
-    is not asked for a declaration by anything, so a stage reading it for claims
-    would have nowhere to put them.
+    Mechanical: the complement of stage B's hosting set, narrowed to the one
+    kind a claim declaration is asked of. An index is asked for no declaration
+    by anything, so a stage reading one for claims would have nowhere to put
+    them. This is a report line and not C-inf's ask surface, which is
+    :func:`conform.pass_two_gate`.
     """
     hosting = inventory.hosting_documents()
     return tuple(
         path
         for path in sorted(tree.documents)
-        if path not in hosting
-        and document_kind(path, has_children=bool(tree.children[path]), hosts_claim=False) in DECLARING_KINDS
+        if path not in hosting and document_kind(path, has_children=bool(tree.children[path])) in DECLARING_KINDS
     )
 
 

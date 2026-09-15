@@ -26,14 +26,12 @@ PIPELINE_LAYOUT_CONSTANTS: tuple[str, ...] = ()
 
 # The driver-only allow-list. Each member is the driver's alone because no card
 # renders it and no postcondition checks it, so it has no second reader to
-# drift from: the charter path scratch carries during the run; the findings
-# grammar, whose round numbers the driver's own loops reconstruct from these
-# filenames; and the overview passage, which the driver persists and then
-# substitutes — what a postcondition checks is the document assembled from it,
-# under `kb-root/`, which is no part of this layout.
+# drift from: the findings grammar, whose round numbers the driver's own loops
+# reconstruct from these filenames; and the overview passage, which the driver
+# persists and then substitutes — what a postcondition checks is the document
+# assembled from it, under `kb-root/`, which is no part of this layout.
 DRIVER_ONLY_LAYOUT = frozenset(
     {
-        steps.CHARTER,
         steps.FINDINGS,
         steps.OVERVIEW_PROSE,
     }

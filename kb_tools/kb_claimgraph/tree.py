@@ -138,26 +138,23 @@ class Tree:
 
 
 #: The closed ``kind:`` vocabulary, used as specified rather than collapsed.
-#: Three of the four are pure path shape. ``leaf-as-index`` is the one that is
-#: not: it needs to know whether an index's own body hosts a claim-bearing
-#: block, which is stage B's scan and nothing a path can answer.
+#: All three are pure path shape: nothing about a document's own body enters
+#: the label, because a document with children carries no body of its own.
 KIND_ENTRY_POINT = "entry-point"
 KIND_INDEX = "index"
 KIND_LEAF = "leaf"
-KIND_LEAF_AS_INDEX = "leaf-as-index"
 
-#: The two kinds that must declare their claims or their absence — the pair the
-#: tier-1 coverage check is keyed on.
-DECLARING_KINDS: frozenset[str] = frozenset({KIND_LEAF, KIND_LEAF_AS_INDEX})
+#: The kind that must declare its claims or their absence — what the tier-1
+#: coverage check is keyed on. A set because its readers ask membership of a
+#: ``kind:`` field that may hold anything.
+DECLARING_KINDS: frozenset[str] = frozenset({KIND_LEAF})
 
 
-def document_kind(path: str, *, has_children: bool, hosts_claim: bool) -> str:
+def document_kind(path: str, *, has_children: bool) -> str:
     """The structural-position label of one document."""
     if path == kb_index_lib.ENTRY_POINT_FILENAME:
         return KIND_ENTRY_POINT
-    if not has_children:
-        return KIND_LEAF
-    return KIND_LEAF_AS_INDEX if hosts_claim else KIND_INDEX
+    return KIND_INDEX if has_children else KIND_LEAF
 
 
 def resolve(source: str, target: str) -> str:

@@ -12,8 +12,8 @@ consumers):
 
 | Module | Role |
 |---|---|
-| `kb_util.py` | Repo/KB path construction (the consuming repo's root is discovered by walking up from the cwd to `.git` with `kb-root/` beside it — never from `__file__`, which points wherever this toolchain happens to have been installed rather than at the repo being worked on; the KB directory name is single-sourced here, not hardwired across tools) **and** maintenance-command hints (`just`/`make` `kb-refresh`/`kb-verify`, detected from the root's runner file) for remediation output + tests. Also the build front-end CLI, one subcommand per op — `preflight` / `graph-init` / `install-targets` / `uninstall-targets` / `show-confirmation` / `open-build` / `show-status` / `show-stage-status` / `start-build` / `advance-step` / `validate-build` / `insert-claim-entry` / `insert-support-entry` / `insert-experiment-entry` / `insert-work-entry` / `set-work-strength` / `set-applicability` / `set-rigor` / `set-rationale` / `add-depends-on` / `set-frontmatter` / `mark-claim-in-leaf` / `set-on-point-fraction` / `render-citation`; see Runner Targets and the Build Ledger, below, and The Write API (`kb_write/`), below. One CLI by ruling: the validator, the reading verb, the two build-opening ops, every member of `kb_write.ops.OPS` and the one read-only metadata op in `READ_OPS` are members of this op set, not second entry points. Each subcommand declares its own options, so a companion belonging to one op cannot be spelled on another. (`survey-sources`, `validate-skeleton` and `render-manifest` fronted the deleted LaTeX-reading survey and are gone with it — kb_survey, Retained, above.) |
-| `kb_pipeline.py` | The build pipeline's state machine: the ordered stage table (the single source of the stage vocabulary), the git-commit-trail ledger, the checklist render, and the build's opening gate. Driven through `kb_util`'s ledger ops (`show-status` / `show-stage-status` / `start-build` / `advance-step`) and its two opening ops (`show-confirmation` / `open-build`). |
+| `kb_util.py` | Repo/KB path construction (the consuming repo's root is discovered by walking up from the cwd to `.git` with `kb-root/` beside it — never from `__file__`, which points wherever this toolchain happens to have been installed rather than at the repo being worked on; the KB directory name is single-sourced here, not hardwired across tools) **and** maintenance-command hints (`just`/`make` `kb-refresh`/`kb-verify`, detected from the root's runner file) for remediation output + tests. Also the build front-end CLI, one subcommand per op — `preflight` / `graph-init` / `install-targets` / `uninstall-targets` / `show-confirmation` / `show-status` / `show-stage-status` / `start-build` / `advance-step` / `show-run-lock` / `validate-build` / `insert-claim-entry` / `insert-support-entry` / `insert-experiment-entry` / `insert-work-entry` / `set-work-strength` / `set-applicability` / `set-rigor` / `set-rationale` / `add-depends-on` / `set-frontmatter` / `mark-claim-in-leaf` / `set-on-point-fraction` / `render-citation`; see Runner Targets and the Build Ledger, below, and The Write API (`kb_write/`), below. One CLI by ruling: the validator, the reading verbs, the build-opening read, every member of `kb_write.ops.OPS` and the one read-only metadata op in `READ_OPS` are members of this op set, not second entry points. Each subcommand declares its own options, so a companion belonging to one op cannot be spelled on another. `show-run-lock` reports the driver's run lock — live, stale or absent, with the holder named — for callers outside `kb_driver/`; the judgement is `runlog.lock_state`'s and the op restates none of it, writes nothing, clears nothing, and answers on stdout rather than through its exit status. (`survey-sources`, `validate-skeleton` and `render-manifest` fronted the deleted LaTeX-reading survey and are gone with it — kb_survey, Retained, above.) |
+| `kb_pipeline.py` | The build pipeline's state machine: the ordered stage table (the single source of the stage vocabulary), the git-commit-trail ledger, the checklist render, and the build's opening gate. Driven through `kb_util`'s ledger ops (`show-status` / `show-stage-status` / `start-build` / `advance-step`) and the read that stands in front of the opening gate (`show-confirmation`). |
 | `kb_schema.py` | The build-band ladder, the `clm`/`exp`/`sup` id grammar (`[a-z0-9]{6}` body), the collision-checked id minter, and the one id grammar that is **not** minted — `work-` plus a citation key, derived by `work_id` from the key rather than drawn, which is why `work` sits outside `ID_KINDS` (every consumer of that tuple is asking about minting). Also the **node-kind vocabulary**, `NODE_KINDS` — every value a `node_type` takes, which answers the other question: what exists, rather than what gets minted. A census, a breakdown, a union or an ordering iterates it; a site that *branches* per kind keeps naming kinds and wraps its table in `kind_table`, which refuses one that is not total over the vocabulary at the moment it is defined. `FRAMEWORK_KINDS` is the bedrock subset and `node_kind_plural` the one statement of a kind's report label. The definition of each vocabulary, not a copy of one. |
 | `kb_links.py` | Low-level Markdown link-scanning primitives (code-span neutralization, inline-link regex, file crawl, skip-dir rules) shared by the link checker and the query CLI's reverse-find. Primitives only; classification/gating stays in the checker. `blank_fenced_lines` is the toolchain's one fence scanner, and it reads a fence the way SPEC.md point 9 spells one: any indentation, **any depth of blockquote marker**, a close on the same character at least as long, carrying nothing after it but emphasis markers. Each condition is a measured failure, and the last two are the same document twice — a display-maths fence inside a labelled blockquote (point 12) that no column-anchored scanner opens, so `[T_{P,Q}g](z)` is read as an inline link to a file named `z`, and that same fence's close written `` ```* `` because the emphasised theorem statement around it terminates on the delimiter's own line. A fence opened inside a blockquote closes with the blockquote — fenced content takes no lazy continuation, so an unprefixed line is outside both — which is what bounds an unclosed quoted fence to its block instead of blanking the file to its end and reporting the silence as a clean scan. `strip_code` additionally blanks **inline** maths, which the gfm writer spells `` $`…`$ `` and hard-wraps mid-span, so a continuation line's `\bigl[…\bigr](\xi)` is not read as a link to a file named `\xi`; the `$` required at both ends is what makes a multi-line blank safe where a bare code span is not — an odd backtick in prose cannot open one and take real broken links with it. |
 | `pandoc.py` | The one module that knows how LaTeX is read: `to_ast` / `to_markdown` / `from_ast` / `version`, and nothing else in the package names the `pandoc` binary or builds an argv for it. It owns one three-way decision: `--citeproc` and one `--bibliography` per file where any bibliography stands, and `CITATION_KEYS_ONLY_FLAG` where none does — one condition, three flags, so a caller cannot set two and land back in silent deletion. `bibliographies` is a **set of files and not a choice among them**: pandoc takes the flag repeatedly and merges what it is given, and citeproc renders only the entries a source cites, so an uncited extra is inert. The order is the caller's and is preserved, a key two files define resolving to the first. Filters precede `--citeproc` in the argv and pandoc applies them in order, which is what lets the filter mark a citation before citeproc resolves it (measured against pandoc 3.11, not read off the manual). The single enumerated exception to SPEC.md's stdlib-only invariant, and a different kind of one than the vendored parser it replaced — a system binary this module assumes present rather than a copy the repository ships (SPEC.md, Corpus Invariants). `PandocMissingError` is what a caller gets instead of a bare `FileNotFoundError`. `PandocBibliographyError` is the second named failure and the only one a caller may continue past — a `--bibliography` the reader could not parse, discriminated on pandoc's own exit code (25, against an unparseable source's 64) rather than on message text, so widening the recovery to a real failure takes an exit code and not a reworded string; the code says *a* file failed and not which, so pandoc's own complaint is the only thing naming it. `PandocIncludeError` is the third, and the one failure raised at **exit 0**: an `\input` target the reader could not load takes its file's content out of the parse entirely, so it reaches neither side of either partition check and a silent run produces a paper without its body (SPEC.md point 8, the known hole). It is matched on pandoc's own sentence because no exit code and no artifact records it — the stderr line is the only evidence there is — and `_UNLOADABLE_INCLUDE_RE` is narrowed to that sentence plus a source position of its own shape, the position's filename optional because this module's sources arrive on stdin and pandoc names no file for one. It carries every unloaded target with the line that named it. See The Document Graph (`kb_docgraph/`), below. |
@@ -34,7 +34,8 @@ Pipeline scripts:
 | `kb_claimgraph/` | The KB's navigable Markdown tree in, the claim-graph metadata spine authored into it — the conformance gate, the claim-site inventory, claim identification, dependency attribution, assembly, the write passes and the refresh/verify gate, over two passes: the declared graph mechanically, then the discovered graph's edges additively over it. Reads the tree as its **sole input** and writes every metadata byte through `kb_write`. See The Claim Graph (`kb_claimgraph/`), below. |
 | `kb_survey/` | Three stdlib-only modules retained from the toolchain's pre-pandoc LaTeX reader: the manifest schema, a second (unused-by-`kb_docgraph`) skeleton derivation, and the tree validator `kb_docgraph` itself calls. Nothing here reads LaTeX any more. See kb_survey, Retained, below. |
 | `kb_driver/` | The build sequencer — walks a step table itself rather than briefing an agent to walk it. It sequences a KB build end to end: the head, where the two front ends below produce the tree and the claim graph over it, and the tail, where that product is validated, reviewed and documented. Contract in SPEC.md, The Driver's Contract; module roles below. |
-| `installed/` | Artifacts written **into** a consuming KB, never rendered here: `CLAUDE.md.tmpl` and `CONVENTIONS.md.tmpl`, stamped into `<kb-root>/` at `phase-5`, each only if absent. Neither is the source of the file of the same name beside this table. |
+| `inference/` | One headless `claude` call, for any tool here that wants one: spawn, stream capture, the two bounds, the process-group kill, and the **one** classification of how a call ended (`Outcome`). Both callers read that classification through it — `kb_driver`, which spawns a seat per step, and `kb_claimgraph.ask`, which asks one a question — so a defect fixed in how a call is graded is fixed for both at once, which two implementations of it were not: `SPAWN_FAILURE` and `RESULT_ERROR` existed on the driver's side alone, and on the other a missing binary read as a defect in the tool and a call the CLI ended at exit 0 while marking the result errored was graded `OK` with its error text validated as the answer. **What is here is what both callers share, and no more**: retry, a re-ask, where a bound's value comes from, one-call-at-a-time, and boundary checks carrying an application's exit codes are the caller's, because a tool asking a seat something is not a build and has no barriers, no ledger and no cards. A second `init` is the same line drawn through one fact — the count is here, what it *means* is `call.py`'s, since one call is one turn for the driver's step model and for nothing else. Two entry points one level apart: `invoke`, argv and prompt file in, the whole `CallResult` back; `call_claude` / `seat.ask_seat`, named parameters in, the response text and the outcome back. The prompt crosses the `Invoker` seam as a **file**, which is what lets a substituted invoker tell one call from the next by what the caller composed — `replay.py`'s scenarios answer per step off the brief's own filename. Stdlib only, and it configures no logging handler: a run attaches its own to `inference.LOGGER_NAME` (`runlog.configure`). |
+| `installed/` | Artifacts written **into** a consuming KB, never rendered here: `CLAUDE.md.tmpl` and `CONVENTIONS.md.tmpl`, stamped into `<kb-root>/` by `kb_pipeline.stamp_readiness_docs`, `phase-3a`'s pre-commit hook, each only if absent. `CLAUDE.md.tmpl`'s `{scope-pin}` slot is filled there from the build's recorded charter (SPEC.md, Project Scoping). Neither is the source of the file of the same name beside this table. |
 | `tests/` | Unit tests over synthetic fixtures (the project's test target). |
 
 ### The Write API (`kb_write/`)
@@ -67,7 +68,7 @@ enforceable rather than aspirational:
 | Module | Role |
 |---|---|
 | `convert.py` | Stage 1: one volume root, a source pre-pass (`strip_environment_declarations`, over `\newenvironment` — it must run *before* pandoc parses, because pandoc expands a declared environment during parsing and by the time any filter runs the author's name for it is gone), a second source reading (`theorem_display_names`, over `\newtheorem` — the preamble is consumed, so the internal-name→display-name mapping reaches the filter only if the caller reads it off the source; a babel translation macro resolves to its stem, and any other display name carrying a backslash is dropped rather than put on a label line), then two pandoc calls under one shared Lua filter and the same mapping — `to_ast` for the index, `to_markdown` (`-s`, so the metadata channel survives) for the content. Both get the mapping because check A compares the AST's own text against the rendering's, and a label word on one side only reads as a drop. The scan is the volume root's own text, so a preamble reached by `\input` yields no mapping and every block falls back to its internal name. The working directory is set to the volume's own on every call, because pandoc resolves `\input` against the invoking process's directory rather than the source file's. **One pandoc failure is recoverable here and the rest are stops**: a `--bibliography` the reader cannot parse is the input SPEC.md point 10 says a corpus may not have, so both conversions are re-run with none — both, because stage 2 zips them and check A compares one's text against the other's — and the files travel out on `Volume.unreadable_bibliographies` for `build.py` to report. The retry drops the **whole** set rather than a guess at the offender, pandoc's exit code naming none of them. The catch is on `pandoc.PandocBibliographyError` and never on the base type, so an unparseable source still stops. `pandoc.PandocIncludeError` is caught too and is not a recovery: it is re-raised as itself carrying the volume root, because the source travels to pandoc on stdin and its complaint names a line with no file, so a run over seven roots would otherwise report the loss against none of them. **Neither source pre-pass refuses, and the standing rule is why**: both read author markup held to no fixed standard, so a form the scan cannot read is an ordinary input rather than an exception — nothing mechanical is provably wrong and the unit that cannot be read can be named. `strip_environment_declarations` is brace-balanced and comment-aware, a `%` ending a line inside a declaration as it does anywhere else: LyX writes `\newenvironment{elabeling}[2][]%` and puts the body groups on the lines beneath, which a whitespace-only scan stops at and calls malformed. A declaration it still cannot read is left where it was written and travels out on `Volume.unreadable_declarations` for `build.py` to report on its own `declaration-read` line — a `FACT` naming the line of the volume root each one opens on, and stated in a zero form too, because a tree whose blocks lost their names reads exactly like a corpus that distinguished no block — and the scan carries on from the end of that keyword. What that costs is the environment's own blocks: pandoc expands them as the author defined them, so their content reaches the tree and neither partition check goes false, but they arrive as ordinary content rather than as labelled blockquotes carrying a name (SPEC.md point 12). |
-| `outline.py` | Stage 2: the AST's `Header` sequence zipped against the rendering's own headings — asserted aligned, in count, level and text, before either is used — builds the tree. Level and label come from the AST (a heading's `\label` has nowhere to land in gfm); text comes from the rendering, never re-rendered from an AST slice. Frontmatter is parsed and classified here too (`CONTENT_KEYS`/`APPARATUS_KEYS`): `abstract` and `title` are content, `address`/`author`/`date`/`bibliography` are apparatus and dropped. The list enumerates and SPEC.md point 13's criterion classifies: `address` is `amsart`'s author affiliation and the only one of that class's seven other byline macros pandoc 3.11 lifts into `meta` at all, so the rest are absent because nothing emits them rather than because the criterion is unsure of them. `split_bibliography` lifts citeproc's reference list out of the rendering *before* the split at headings and `_references_document` makes it `<volume>/references.md`, the volume index's last child (SPEC.md point 10); the marker is the Div's own `id="refs"` plus its `csl-bib-body` class, the labels it declares move to it with its content, and the words stay on both sides of check B because this is a relocation, not an elision. See The Derived Skeleton, below. |
+| `outline.py` | Stage 2: the AST's `Header` sequence zipped against the rendering's own headings — asserted aligned, in count, level and text, before either is used — builds the tree. Level and label come from the AST (a heading's `\label` has nowhere to land in gfm); text comes from the rendering, never re-rendered from an AST slice. Frontmatter is parsed and classified here too (`CONTENT_KEYS`/`APPARATUS_KEYS`): `abstract` and `title` are content, `address`/`author`/`date`/`bibliography` are apparatus and dropped. The list enumerates and SPEC.md point 13's criterion classifies: `address` is `amsart`'s author affiliation and the only one of that class's seven other byline macros pandoc 3.11 lifts into `meta` at all, so the rest are absent because nothing emits them rather than because the criterion is unsure of them. `split_bibliography` lifts citeproc's reference list out of the rendering *before* the split at headings and `_references_document` makes it `<volume>/references.md`, the volume index's last child (SPEC.md point 10); the marker is the Div's own `id="refs"` plus its `csl-bib-body` class, the labels it declares move to it with its content, and the words stay on both sides of check B because this is a relocation, not an elision. `_lift_own_prose` is the sibling relocation: a section's own prose ahead of its first subsection becomes a first child leaf titled by `OWN_PROSE_TITLE`, splitting the section's labels the same way — see The Derived Skeleton, below, for both. |
 | `judge.py` | The heuristic seam: `judge(tree) -> Verdict` accepts every input today; `recut(tree, verdict) -> Tree` is reached only from the reject branch and raises if invoked. See The Derived Skeleton's judgment seam, below. |
 | `partition.py` | The build's own checks: the two checks below (The Partition Checks), the maths-survival count, the anchor-landing check, and the image-asset report. |
 | `walk.py` | Reads pandoc's JSON AST. Word-granular — every word a `Str`, every gap a `Space` — so everything here walks rather than phrase-matches: the `Header` sequence, every cross-reference-bearing identifier (a `Div`/`Figure`/`Span` id, an equation's in-source `\label`), `meta` walked *recursively by node type* rather than enumerated by container (`author` is a `MetaList`; a walk that handles only `MetaBlocks`/`MetaInlines` skips it without a word), and every `Math` element's LaTeX. **A `Header` inside a `BlockQuote` is not in that sequence** (SPEC.md point 12): the filter has already reshaped an author-distinguished block into one, and an author's `\paragraph{Step 1.}` inside a proof is a step of that proof. `text.headings` leaves the same heading quoted where it sits, so the two sequences stage 2 zips are one rule read on two representations rather than two rules that agreed until a proof carried a heading. Only the heading reads differently inside a quote — a `Span` id still reaches `anchored_labels` from there, which is exactly where point 12 puts `<span id="thm:bif">` — and the heading's own label maps to the enclosing section, so a `\ref` to it lands on the document the block reached. `math_texts` takes the content metadata keys from its caller and walks no others: `blocks` in full plus `outline.CONTENT_KEYS`, which is where point 9 meets point 13 (an abstract's maths is counted, a byline's `^{1}` affiliation marker is not, having no document to reach). The classification stays in `outline.py`; a second reading of it here is a second thing to move when point 13's list moves. |
@@ -85,9 +86,27 @@ among the levels that volume actually uses, so `{1,4}` becomes tree levels
 `{1,2}` rather than a tree carrying two empty interior levels. `entry-point.md`
 lists every volume; each volume owns a directory named from its own title (or
 its filename stem, where it declares none); a heading with descendants is
-`<slug>/index.md`, one without is `<slug>.md`; a volume's own lead-in material
-— before its first heading — is the volume index's body, so an index node's
-own extent is never dropped. Path segments are slugged from titles, collisions
+`<slug>/index.md`, one without is `<slug>.md`; a volume's own lead-in material,
+and every section's own prose ahead of its first subsection, becomes a first
+child leaf of that node under a supplied `Overview` heading
+(`outline.OWN_PROSE_TITLE`), so an index node's own extent is relocated rather
+than dropped and no index carries source of its own — the index keeps its own
+heading, so every index reads the same whether or not its section wrote a
+lead-in. A node with nothing below its heading has nothing to lift and gets no
+leaf, the answer `_references_document` already gives an empty bibliography.
+`OWN_PROSE_TITLE` is accounted in `_supplied_titles` once per leaf
+`_lift_own_prose` emits: a supplied title is listed exactly as many times as a
+segment carries it, which is what keeps the lift a relocation rather than a
+word the split invented — check B's word totals move by one word per leaf
+emitted, on both sides at once, and the check gates on the two differences
+being empty rather than on the totals matching. The lift also splits a
+section's labels: a heading's own identifier (`outline.header_labels`) stays
+with the heading and so with the index, while a label the lead-in prose
+declares on its own account — a Div or Span id, an equation's in-source
+`\label` — follows the prose to the leaf; in a built tree, `#preliminaries`
+stays on `preliminaries/index.md` while `thm:mainrect`, declared in the
+Introduction's lead-in, resolves to `introduction/overview.md`. Path segments
+are slugged from titles, collisions
 resolved by sibling ordinal, and the slugger reserves `kb_index_lib`'s
 `EXCLUDE_NAMES` / `EXCLUDE_DIRS` and the `index` stem, so a derived path can
 never be one leaf discovery would not see. `DepthError` stops the build when
@@ -214,7 +233,7 @@ seeding half a spine itself.
 
 | Module | Role |
 |---|---|
-| `tree.py` | The readings every stage shares: the document set with its down-link and up-link relations, the blockquote-prefix strip a scan over an author-distinguished block runs first, and the two readings of what `kb_write` inserts, both read off `kb_write.render` rather than re-typed: `METADATA_OPENERS`, what each artifact opens with, and `strip_markers`, which takes an appended marker back off a line of authored content. Also the `kind:` derivation — three values off path shape, `leaf-as-index` off whether an index's own body hosts a claim-bearing block. |
+| `tree.py` | The readings every stage shares: the document set with its down-link and up-link relations, the blockquote-prefix strip a scan over an author-distinguished block runs first, and the two readings of what `kb_write` inserts, both read off `kb_write.render` rather than re-typed: `METADATA_OPENERS`, what each artifact opens with, and `strip_markers`, which takes an appended marker back off a line of authored content. Also the `kind:` derivation — three values off path shape alone: `entry-point.md` by name, a document with children an `index`, one without a `leaf`. |
 | `conform.py` | **Stage A**, the conformance gate over the Document-Tree Contract. Writes nothing and stops on the first failed assertion naming the point. Ordered by dependency rather than by the contract's numbering: point 7 first, because every relation below it is derived from links and a dead link is a phantom child; point 14 last, because a fresh tree passes everything above it. Point 14's cleanliness check is pass 1's **double-run guard**. Its one unchecked clause is point 14's `.index/` ban, which describes what `kb_docgraph` leaves behind and not what `graph-init` legitimately creates between the two stages. `pass_two_gate` is pass 2's entry condition: the same structural checks, and in place of the cleanliness check a per-document partition by `determination` — awaiting, hosting claims, or carrying an authored reason no later pass may overturn. |
 | `inventory.py` | **Stage B**, the claim-site inventory: labelled blockquotes with their name, identifier, title-and-locator span off the display line, and extent (point 12); display-maths fences and the `\label` tokens in them (point 9); rewritten cross-references with their resolved target, the author's own label off the anchor's third attribute, and which block they sit inside where they sit inside one (point 7) — the label because an `eqref` resolves to its document with an empty fragment, point 9 leaving an equation's `\label` inside the maths fence rather than as an addressable id, so it is the only thing naming which equation (717 of 717 `eqref` anchors over the staged corpus carry no fragment); and the citations the tree renders recognisably (point 10). **A citation reports which of point 10's three states it ended in, and the discriminator is the span rather than the build.** `Citation.state` is a `CitationState` — `resolved`, `unanswered`, `key-only` — read off the span's own two halves: `data-cites` holds the keys and the span's text holds what became of them, so a span whose text is exactly `(key1; key2)` was offered no bibliography, and where citeproc ran a key marked `**key?**` is one it could not answer while its neighbours in the same group resolved. That makes the state **per key**, which a multi-work `\citep` needs and a build-wide condition cannot give; "the tree renders no reference list" is *not* the test for "no bibliography was offered", since a bibliography answering none of the cited keys emits none either and that is the other state. The reference list's entries are `Work` records rather than citations — the list is the volume's and carries each work once — which is what stops a one-work corpus being reported as two. `build.py`'s `stage-B-citations` line carries one count per state (`inline-resolved` / `inline-unanswered` / `inline-key-only`, every state present so an unreached one reads zero) plus `reference-list` for the works. **The two tables hold display names, which is what point 12's label line carries.** A `\newtheorem` internal handle is arbitrary — a survey of 35 arXiv papers found 43 of them, 36 outside any table, the tail aliases (`Cor`, `Lem`, `Pro`), starred variants (`lem*`) and other languages (`Teo`, `oss`) — while the display names concentrate onto thirteen words; `claimbox` is classified as the `Result` it declares itself to be, and needs no entry of its own. Where no display name was declared the label carries the internal one (amsthm's `proof`) and the tables carry that word too. Matching folds case, the label carrying the author's own capitalisation. The tables are still closed, and a name outside them is **recorded rather than refused**: the block is admitted as not-claim-bearing — `Block.claim_bearing` reads `CLAIM_BEARING` alone, so an unclassified name is outside it by construction — and the name is counted into `Census.unclassified`, which `build.py` reports on its own `stage-B-unclassified` line. What the closed table guards against is silence, not omission: nothing classifies an unknown name as claim-bearing, so no claim enters the graph on a guess, and a named counted omission is the census line a reader greps where a halted build reports one bit. `NOT_CLAIM_BEARING` has no branch reading it and is not obviated — subtracting it is what separates a name somebody classified as not stating a result from a name nobody has classified, and only the second is reported. This is what keeps the stage usable off the corpus it was calibrated on: the survey's residue is some fifteen one-offs (`Setup`, `Axiom`, `Fact`, `Hypothesis`) and it skews away from results, so an unclassified name defaulting to not-claim-bearing is both safe and usually right. A blockquote with no label line is ordinary quoted prose, not an unclassified block. A Tier-2 marker an earlier pass appended sits on the end of a quoted line, so it neither ends a blockquote nor joins the content read off it, which is what lets pass 2 re-scan a tree pass 1 has written markers into. **A block's title and its locator are one span of its display line, and point 12's optional argument is not required to supply it.** Where the author wrote one the span is `**Theorem 2** (The governance bifurcation).` and the title is the argument; where they wrote none — the norm outside corpora written with tooling that prompts for a title, and two of three unguided arXiv `math.*` papers stopped here before it was read — the span is the environment's printed word and its number, `**Lemma 3**.`, and the title is that with its emphasis markers off. Nothing composes a title from the block's content: a bare *Lemma 3* is a poorer heading in `ask.py`'s enumeration than an author's sentence, and it is the one the page carries. **A span that runs inside another block's display line grows through its own content until it does not**, because `\newtheorem*` renders every block of an unnumbered environment under the same word and a locator matching two blocks binds a claim to the wrong site silently; growth is decided against the document's other display lines rather than against the spans already handed out, so both of two alike blocks grow and neither depends on which comes first. The title grows with the span, a register entry being bound back to its site by title in `graph.read`. **The span is one span read for two purposes, and only the locator is bytes**: `Block.display` is matched against the document and nothing normalises it, while `Block.title` is read by a person — a register heading, an entry in `ask.py`'s enumeration — so `_readable` takes point 10's citation markup off it and keeps what that markup renders. An author titling a block `[\citet{gibbons2020}]` titled it with a `<span class="citation" data-cites="…">`, which is the reader's markup rather than the author's words; the substitution runs through `CITATION_SPAN_RE`, the same reading of that markup the citation inventory is built on. **Two shapes stay unreadable, and each costs its own block rather than the build**: a display line not opening with the printed name in bold at all — an environment declared in a class file rather than the volume root, so the reader prints no name and no number and the content begins with the author's sentence — and one running inside another block's to its last word, where no span names one block rather than the other. Such a block carries no title and no locator, `Block.claim_bearing` is false for it on that second condition as well as on the name, it enters the graph as no claim, and it is counted into `Census.unreadable` — reported per document on `build.py`'s own `stage-B-unreadable` line, which is what keeps the absence from being silent. This is the same trade the unclassified name takes one sentence above: a halt is right where two mechanical artifacts disagree or where a loss would reach no check at all, and here neither holds — one authored block is unreadable, and stopping charges every other document of the tree for it. **A sixth reading says which claim each proof establishes** (`Inventory.proofs`), and it is a reading rather than a consumer's derivation because two passes direct a reference by it — stage D a `\ref`, the off-graph endcap a `\cite` — and a binding derived twice could disagree about the corpus with no third artifact to settle it. It binds *blocks* to blocks, so it is usable before the first id is minted, which is what lets the endcap run in the declared pass; it runs after the per-document loop because a proof may name its subject in another document and therefore needs every document's blocks first. The two arms and everything the binding misses are in the `attribute.py` row, which is where the ruling that a proof establishes the claim it belongs to is argued and measured. |
 | `label.py` | The sentence-labelled render C-inf's ask shows, and the map from a label back to the document. One sentence per line with the wraps collapsed, the paragraph breaks kept, each line opening with `S<n>` — and **no label for the up-link or the frontmatter block**, which is what retires the navigation exclusion rather than checking it: what the render does not offer, a locator cannot name. A paragraph here is exactly a run of lines a slice can span, because `ops.excerpt_lines` joins each body line's collapsed text with single spaces and a blank line puts two into its haystack. A display-maths fence is not special — measured over the survey corpus, only 6 of 74 carry a blank line before them and 59 open mid-sentence, so a fence sits inside its own paragraph and a span crossing one is findable; the render only leaves its lines unsegmented. `Span.excerpt` is the tool's own slice, and `widen` is the sequence of wider spans within one paragraph. |
@@ -296,15 +315,28 @@ satisfy, not because either sits on a live path from source to KB today.
 `kb_driver/` sequences the stages, dispatches each seat, checks what came
 back, and records the ledger, per SPEC.md's driver contract. Every brief it
 composes is forbidden from naming a stage id or the record verb — enforced
-by a lint over the templates. Its step table runs eight stages, in two halves:
+by a lint over the templates. Its step table runs nine stages, in two halves:
 
 - **The head**, where the build produces what it will then be judged on —
   `document-graph` (the tree, from the run's own `--source` list),
   `spine-seed` (`graph-init` over that tree), `claims-declared`,
   `claims-discovered` and `depends-attributed` (the three `kb_claimgraph`
   invocations, in that order).
-- **The tail**, over the product — `phase-3a` (validation gate) and `phase-5`
-  (meta-documentation) — after `start`, which opens the build.
+- **The tail**, over the product — `phase-3a` (validation gate),
+  `overview-drafted` (the overview document written) and `phase-5` (the review
+  cycle over it) — after `start`, which opens the build.
+
+**Where a stage boundary falls is decided by what must not be repeated, and the
+step table is where that is checked.** A stage is as small as the most expensive
+thing in it (SPEC.md, The Driver's Contract), so every row with
+`steps.Step.spends_inference` stands immediately in front of its stage's ledger
+row and nothing failable stands between the two — which is why the tail is two
+stages rather than one, the draft and the review being a model call each. The
+property is asserted over `steps.STEPS` in `test_kb_driver_steps.py` rather than
+re-argued at each insertion, and a stage that grew a second such row fails there.
+Its consequence for a resume is the discard rule: position comes from the ledger
+alone, so an artifact no boundary accounts for is re-earned rather than adopted,
+which costs one row's work and never more.
 
 **Every head row is a tool row.** Each invokes a module and reads an exit code,
 so none briefs a seat, none writes a brief, and the only barrier the head raises
@@ -321,15 +353,24 @@ declared pass left awaiting; stage D authors edges over the claims discovery
 minted. The seed is a stage of its own rather than a row of `start` because its
 preflight refuses a dirty worktree, and the tree the stage before it has just
 written is exactly that — the `document-graph` boundary commit is what clears
-it. (`open-build`, the agent verb, still seeds inside the `start` act: it is
-run against a tree that already stands, so the same ordering holds there by a
-different route.)
+it.
 
-**Every head tool row is `Condition.FRESH`.** A revision build enters against a
-KB `pre.revision-entry` has already found `kb-verify` green, so the head's
-product is there; re-deriving the tree over it would overwrite the very
-documents the spine is stamped into. In a revision build the head's stages
-record on their coverage alone.
+**No row is conditional, and a launch is the only thing a guard has to
+recognise.** There is one kind of build and one kind of continuation
+(SPEC.md, The Driver's Contract): an invocation that finds `start`
+unrecorded is opening a build, and one that finds it recorded is resuming,
+re-derived from the ledger every time (`Runner._recorded`) and configured
+nowhere — `config.RunSection` carries no mode field, and `[run] build_mode`
+is refused at load as a retired key (`config.RETIRED_RUN_KEYS`). What keeps `dg.build` from re-deriving the tree over
+the documents a spine is stamped into is therefore the ledger — a recorded stage
+is not re-walked — plus one guard for the case the ledger cannot speak to: a
+`kb-root/` this build did not write. `pre.kb-root` is that guard, the last row of
+`start` before the first write, reading `kb_util.kb_root_state`: `absent` and
+`spine-only` proceed (`.index/` is derived space with no authored byte to lose),
+`populated` is exit 14 naming the state and the tree. It sits in `start` rather
+than beside `dg.build` because that is what makes it a *launch* guard: a resume
+skips the whole stage, so a build interrupted between `dg.build` and its record
+re-derives its own half-written tree rather than being refused entry to it.
 
 **`--no-inference` drops rows and bounds nothing.** `steps.Step.spends_inference`
 is the derived union of the two routes a row can cost a model call by — a
@@ -346,12 +387,12 @@ silently wrong on the first insertion after it.
 swaps the `Invoker` for `replay.py` and reaches only what this driver
 dispatches; `claims-discovered` and `depends-attributed` spend theirs inside
 `kb_claimgraph`'s own `ask.SeatAsk` seam (`ask.ModelIdentifier` and
-`ask.ModelSelector`), which no invoker of this driver replaces. So a *fresh*
-build under `--dry-run` alone still reaches those two for real. Both rows are
-`Condition.FRESH`, so a **revision** build applies neither and `--dry-run`
-alone is honest there — which is why the suite that walks the whole table under
-it is a revision build, and why `kb-testing`'s `kb-driver-dryrun` recipe, whose
-consumer is a fresh entry, passes `--no-inference` beside it.
+`ask.ModelSelector`), which no invoker of this driver replaces. So a build under
+`--dry-run` alone still reaches those two for real wherever it walks them; the
+walk that does not reach them is one resuming past their stages, which is why
+the suite that drives the whole table under it enters against a ledger whose
+head is already recorded, and why `kb-testing`'s `kb-driver-dryrun` recipe,
+whose consumer is a launch, passes `--no-inference` beside it.
 
 **What the build says about it is a boundary commit's body.** `run._stage_note`
 supplies `advance-step`'s `--note` for a stage that lost rows and the empty
@@ -372,14 +413,14 @@ layer's to anticipate (The Build Pipeline's Coverage Checks, below).
 | Module | Role |
 |---|---|
 | `steps.py` | The ordered step table — the only place that says what happens next. Rows carry the call unit, seat, template, declared artifacts, parses, barriers, and capped series. Stage order and cap values are imported from `kb_pipeline`, never restated. |
-| `run.py` | The sequencer: stage iteration, the capped loops, resume, and exit selection. Position comes from the ledger; round numbers are reconstructed from the findings filenames on disk, never counted. |
-| `call.py` / `transport.py` | Policy and mechanism of one call — retry, the one re-ask, contract validation, the absoluteness of every path the call carries in either direction, and the three persistence routes; spawn, stream capture, silence watchdog, kill/reap. |
+| `run.py` | The sequencer: stage iteration, the capped loops, resume, and exit selection. **It carries no resumption state.** `run.RUNNER_ATTRIBUTES` is the closed set of attributes a `Runner` may hold and states the criterion that admits one — the stage boundary: a resume re-enters at one, so a value a row writes is read stale by a later invocation exactly where its reader runs in a different stage, and an attribute is admissible only where the invocation fixes it, where every reader runs in the writer's own stage (`_seq`, `_rounds`), or where the walk re-derives it before any row reads it (`_recorded`, from the ledger). Closure is checked at construction and at every stage transition; which ground a name stands on is stated in the registry, because no check can read it. Anything else is re-derived at the point of use — `seed.graph-init` asks `kb_util.detected_runner` whether this repository carries a runner file, rather than taking `pre.preflight`'s answer two stages back, which a resume skipping `start` left at its constructor default and which is why `spine-seed.runner-choice` could not fire on a resume at all. A `--decide` answer no barrier asked for is reported rather than dropped, by `run._report_unconsumed` through `runlog.notify` — stderr and `run.log`, the values in the message text, `notify` being the stderr counterpart of `relay` so a notice about the invocation stays off the stream a session pastes from. Position comes from the ledger, and so does a findings loop's round count — not by reading one back, but because there is none to read: the ledger's entries are the stage vocabulary, a stage is recorded once, and its entry is written after its last round, so a stage the walk reaches has no round recorded and the loop opens at `run.FIRST_ROUND`. How many rounds it then ran is an attribute of that stage's own boundary commit (`run._stage_note`), which is the whole record of them. A findings filename still carries its round, so two rounds' findings are two files, but no counter is derived from a name — which is what keeps a file a dying process left from reading as a completed round and spending a fix cap of one on a crash. |
+| `call.py` | This driver's **policy** over one call — retry, the one re-ask, contract validation, the absoluteness of every path the call carries in either direction, one call at a time, the spawn boundary (exit 15), and the three persistence routes. The mechanism under it — spawn, stream capture, silence watchdog, kill/reap, and the classification of how the call ended — is `kb_tools.inference`'s, shared with the tool path and holding none of the above (Module Inventory, above). The driver-persists route writes through `kb_survey.manifest.write_text_atomic` — a temp beside the target and a rename, the toolchain's one such writer rather than a second copy of it — because every reader of a declared artifact asks presence and non-emptiness and nothing else, so a file left half-written under its final name reads as work that finished. |
 | `prompt_templates.py` + `prompt-templates/*.tmpl` | Prompt composition: strict slot fill in both directions, shared fragments injected by the composer, and the template lint (the enforcement mechanism SPEC.md's driver contract names). A slot is `@!slot-name!@` — the marker grammar `gen-defs.py` renders the agent definitions with, delimiters and name class alike, so one syntax serves both model-facing surfaces and a brace in a body is only a brace. The name is strict kebab (`prompt_templates.SLOT_NAME`), which is what lets a write op's slot be the op token verbatim: `@!insert-claim-entry!@` expands to an invocation ending in the string it is spelled with. **A namespace routes the slot, and the name never does**: `@!dyn.<name>!@` is filled from the caller's per-call data and from nowhere else, `@!<name>!@` from the composer's own sources — the constants pool, a fragment, a caller-selected alternative, the calling row — and from nowhere else. `prompt_templates.DYNAMIC_PREFIX` sits outside the name class rather than widening it, so a namespace is never mistaken for a name; the composer keys every mapping by the spelling, which is why the two cannot shadow one another and why each direction's failure names the mistake — a `dyn.` slot the caller supplied no value for, or a composer slot it supplied one for — instead of leaving an unfilled slot and an unused value to be read together. The templates are edited by agents holding no repository context, and a hole indistinguishable from prose invites the helpful edit that inlines the literal it stands for, which is the divergence the slot exists to prevent. Bodies are the prompt engineer's. **The directory layout is the declaration**: `prompt-templates/` holds exactly what something dispatches and `prompt-templates/fragments/` exactly what something splices into one, so a reader tells the two apart by where a file sits rather than by decoding its name. Every file under `fragments/` is registered in exactly one of two vocabularies — `FRAGMENT_SLOTS`, which the composer resolves because a template named the slot, and `ALTERNATIVE_SLOTS`, which registers per slot the choices a caller may name — and the correspondence is checked in both directions. An alternative resolves the way a fragment does, one level deep with its own slots lifted into the required set and nesting refused; what a caller hands in is the chosen name, or `None` where the slot registers the empty fill, never the chosen body's prose. `template_paths` walks the whole tree, fragments included, because the lint and the model-facing sweeps are questions about prose and a fragment's prose reaches a model as a template's does; nothing is made dispatchable by appearing there, a row naming only its own `template`. The templates are the shelf; a *composed* brief lands under the run directory's own `briefs/`, and the claim-graph asks' composed prompts under that build's workspace. |
 | `envelope.py` | The formats read back from inference — the wave envelope (members, `gaps`, deviations), the `VERDICT` line, and the design document's `SCOPE` line — and the record toolkit they and `kb_claimgraph.ask` are built from: marker-pair extraction, the decode, the closed-and-total key check, and the **prose blocks beside the JSON**. Nothing a seat composes travels inside the JSON: structure cannot carry a backslash and words can, and a corpus of mathematics makes that the ordinary case rather than the edge — `\sigma` is not a JSON escape and fails loudly, `\beta` is one and decodes to a backspace, failing later and silently. Each composed value travels in a numbered `KB-DRIVER-PROSE` block taken verbatim between its delimiters, so no escape grammar exists in the transport at all; `members.status` is the literal `ok` or such a block, which moves where the phrase travels without closing it into a vocabulary. Every level declares which keys carry structure and which carry prose (`LEVELS`), and `check_levels` proves the two a partition of the key vocabulary at import. Parse only, never quality. `envelope_block` composes what `parse_envelope` reads, so a caller stating an envelope does not restate the format. |
-| `barriers.py` / `baton.py` | The typed barrier registry (`barriers.REGISTRY` — one entry per `(stage, kind)` pair, each with its admissible answers) and the relay card every terminating invocation prints. Two of the exit codes are reachable both from a raised barrier and from a stage that failed mechanically, and only the first has a question or an answer; `BatonContext.pair` is what tells them apart, and the second gets a card that asks nothing and offers no `--decide` resume. Whichever card is rendered, the failing op's own report lines ride its detail (`ledger._failure_detail`) — a card naming only the return code is one an operator can only act on by re-running the stage by hand. |
+| `barriers.py` / `baton.py` | The typed barrier registry (`barriers.REGISTRY` — one entry per `(stage, kind)` pair, each with its admissible answers) and the relay card every terminating invocation prints. Two of the exit codes are reachable both from a raised barrier and from a stage that failed mechanically, and only the first has a question or an answer; `BatonContext.pair` is what tells them apart, and the second gets a card that asks nothing and offers no `--decide` resume. **`BatonContext.mode` is the second such selector, and the mode-scoped ladders are why one is needed**: `0` is the code both modes reach, and a run's `0` is a finished build where a watch's is a live one whose recorded set just grew, so the watch table's own card for it directs another poll rather than a completion report — a code with no entry in a mode's table reads the shared one, and the mode a card was rendered under is the mode function's statement rather than a guess from the code (`watch.mode`). The stage-record refusal is on the other side of the same distinction: `kb_pipeline` exit 6 says a stage's own declared output was absent at record time, which no brief and no seat is party to, so it carries `baton.EXIT_COVERAGE` and a card that resumes once that output stands rather than `EXIT_CONTRACT`'s, whose subject is a dispatched call that could not produce its declared shape. Whichever card is rendered, the failing op's own report lines ride its detail (`ledger._failure_detail`) — a card naming only the return code is one an operator can only act on by re-running the stage by hand. |
 | `ledger.py` | Subprocess adapter over the sanctioned `kb_util` ops — the ledger verbs, the validator (`validate_build`; latent, per its own docstring — no current row calls it, see kb_survey, Retained, above), the metadata write ops `write_op` fronts — and the `kb-refresh` / `kb-verify` targets, plus the one place a tool exit becomes a driver exit. |
 | `config.py` / `runlog.py` / `watch.py` | The run overlay (TOML), the run directory and its logs, and the poll-a-backgrounded-run mode. |
-| `replay.py` | The `--dry-run` invoker: synthetic stream-json through the real capture and parse path. Installed rather than test-only, so a consumer can smoke-test the state machine without spending inference on the calls this driver dispatches. It replaces those and no others, so the entry it is honest alone from is a revision build, where the two claim-graph rows do not apply. |
+| `replay.py` | The `--dry-run` invoker: synthetic stream-json through the real capture and parse path. Installed rather than test-only, so a consumer can smoke-test the state machine without spending inference on the calls this driver dispatches. It replaces those and no others, so the walk it is honest alone over is one resuming past the two claim-graph rows, whose model it cannot reach. |
 
 **CLI surface** — `PYTHONPATH=.claude/agents python3 -m kb_tools.kb_driver <mode>`,
 from the consuming repo's root:
@@ -447,7 +488,23 @@ tables for its pair, and is consumed once per process; an answer whose
 barrier was never raised is reported rather than silently dropped.
 `--run-dir` overrides `[log] run_dir` and should point **outside** the
 consuming repo, because a restage wipes `.claude-temp/` and the run
-directory is the evidence.
+directory is the evidence. It is settled at load like every other flag, so
+`config.log.run_dir` is the effective parent and `config.invocation` renders
+it back wherever it is not the default — both commands a card offers name it,
+the resume through the invocation and the watch through a field of its own,
+since a run whose evidence sits elsewhere is one a bare `watch` reads a stale
+`LATEST` for and reports as terminated.
+
+**A run's report is written on every exit, the ones nobody planned included.**
+`run.write_report` puts `cadence.jsonl` and `exit.json` in the run directory on
+the way out of every ending — a barrier, a red gate, a boundary check, a
+terminating signal (`runlog.terminating_signals`), an exception no handler
+names — because `exit.json` is the one channel a backgrounded session has for
+learning how a run ended, and the endings whose own card calls that directory
+the bug report were the ones leaving none in it. A signal exits `128 + n`, the
+shell's convention rather than a rung of either ladder: nothing in the build
+decided that ending, so the fallback card is the true one for it and a
+borrowed code would state a verdict no stage reached.
 
 **The charter is optional.** `pre.charter` resolves once whether one stands at
 `[run] charter_file`, and that one answer reaches every consumer: the `start`
@@ -467,8 +524,8 @@ names every slot of the driver's vocabulary that carries one, and
 carrying the named absence where the slot admits none. Measured: `phase-5`'s
 review, handed `kb-root/README.md`, searched for a directory of that name
 rather than resolving it, reviewed a different repository's knowledge base and
-returned three critical findings about it, stopping a build at seven stages of
-eight. **The remedy is the removed ambiguity and not a prohibition on the
+returned three critical findings about it, stopping a build at seven of the
+then eight stages. **The remedy is the removed ambiguity and not a prohibition on the
 consequence** — a brief instructing a seat not to look outside the tree is
 prose against a model above temperature zero, where a path with one legal
 reading is a fact, and a precondition fires before a model is involved at all.
@@ -476,7 +533,7 @@ reading is a fact, and a precondition fires before a model is involved at all.
 **Requiredness is the slot's, and it decides one thing: whether the named
 absence is an answer.** `steps.REQUIRED_PATH_SLOTS` holds the three whose
 subject an earlier stage has already produced — `kb-root`, the tree the head
-wrote; `readme-path`, what `p5.docs` assembles in the row immediately before
+wrote; `readme-path`, what `ov.docs` assembles in the stage immediately before
 the review; `conventions-path`, what `phase-3a`'s `stamp_readiness_docs` seeds
 two stages earlier — so an absent one is that stage having failed quietly.
 `steps.OPTIONAL_PATH_SLOTS` holds `remediation-source-path`, which a first
@@ -523,7 +580,7 @@ condition is `verdict.critical > 0`, so a review clean of critical findings
 passes on its first pass and spends no fix round, and a warning and a note travel
 past the gate unrepaired (SPEC.md, The Driver's Contract). The condition that
 summed `critical + warning` is what stopped a live build of arXiv `2609.10318v1`
-at seven stages of eight: its reviewer returned `critical=0 warning=1 note=0`
+at seven of the then eight stages: its reviewer returned `critical=0 warning=1 note=0`
 and then `critical=0 warning=1 note=2`, never once calling anything critical,
 and the lone warning spent the fix round and then escalated. **The cap
 keeps its work all the same**: what `PHASE_5_FIX_CAP` bounds is the
@@ -533,6 +590,18 @@ CONVENTIONS.md records under "a `kb_claimgraph` stage never exits on a model's
 opinion". It is still one, so a critical finding buys one repair attempt and then
 `phase-5.cap-exhausted`, whose `stop` answer ends the run at the barrier with the
 stage unrecorded, as every stopping answer in `barriers.REGISTRY` does.
+
+**A fix round is judged where it composes, not at the boundary.**
+`run._assemble_overview` holds both the bytes the round composed and the bytes
+standing in `README.md` when it composed them, and a round that produces the
+second answered its review with nothing: exit 17, the round refused before the
+re-review that would spend the cap on a document nobody moved. The boundary
+cannot make that call — `_check_meta_docs` runs once, after the last round, by
+which point the overview differs from `HEAD` because the draft created it, and a
+no-op fix and a real one are the same observation from there. The draft itself is
+exempt: re-composing what stands is what `ov.docs` does on a resume past a lost
+boundary, where the answer on disk is work no boundary accounts for and earning
+it again byte for byte is the discard working.
 
 **What stopped halting is reported, by `run._report_round`.** One line per round,
 at INFO, carrying `critical`, `warning` and `note` and naming the findings
@@ -576,15 +645,16 @@ part of every build, but enforces no size budget over it: SPEC.md's "the entry
 point is the one document with a size budget" currently names a document
 nothing in the toolchain sizes.
 
-Two suites cover the walk, and they enter from the two states a build can start
-from. `kb_tools/tests/test_kb_driver_dryrun.py` drives every stage through the
+Two suites cover the walk, and they enter from the two states an invocation can
+find. `kb_tools/tests/test_kb_driver_dryrun.py` drives the tail through the
 shipped entry point against a throwaway consumer whose tree is already built and
-green — a revision entry — with `replay.py` standing in for the model.
-`kb_tools/tests/test_kb_driver_head.py` drives the head against a consumer
-holding its LaTeX sources and no `kb-root/` at all — a fresh entry, launched the
-way the launch line specifies one — and stops before `claims-discovered`,
+green and whose head stages are already recorded — a resume — with `replay.py`
+standing in for the model. `kb_tools/tests/test_kb_driver_head.py` drives the
+head against a consumer holding its LaTeX sources and no `kb-root/` at all — a
+launch, made the way the launch line specifies one — and stops before
+`claims-discovered`,
 because that stage's model is not the driver's to replace. That is the same
-place `--no-inference` stops a fresh build, arrived at by the same property
+place `--no-inference` stops such a build, arrived at by the same property
 rather than by agreement.
 
 ### The Derived Index (`<kb-root>/.index/`)
@@ -665,7 +735,7 @@ canonical corpus into the KB's tree, and `kb_claimgraph` (The Claim Graph
 (`kb_claimgraph/`), above) authors the claim-graph spine over it: two mechanical
 CLIs, not agents, with no seat dispatched at any point in either. `kb_driver`
 runs both — as the five stages of the build's head — and then sequences the
-validation and meta-documentation tail over what they produced: eight stages,
+validation and meta-documentation tail over what they produced: nine stages,
 `start` through `phase-5` (SPEC.md, The Driver's Contract; The Driver, above).
 The orchestrator is a program, not a seat: it walks a static step table,
 dispatches each row to the seat that row names, and stops at a barrier rather
@@ -674,8 +744,8 @@ nothing else. **No stage remediates a gate's findings**: `phase-3a` runs the
 verifiers and either records or stops, because what each of them faults is
 mechanically-produced content a mechanism already checks. One pair of seats is
 dispatched in the whole run:
-- `tech-writer` + `tech-writer-reviewer` — write and review `README.md` and
-  `CONVENTIONS.md` at `phase-5`.
+- `tech-writer` + `tech-writer-reviewer` — write `README.md` at
+  `overview-drafted` and review it, with `CONVENTIONS.md`, at `phase-5`.
 
 Nothing in the build reviews KB content. Adversarial review of leaf fidelity
 and of navigability was a hedge against agent-authored leaves; the head is
@@ -783,10 +853,9 @@ PYTHONPATH=.claude/agents python3 -m kb_tools.kb_util uninstall-targets
 
 (An existing justfile wins over a Makefile; `--runner just|make` forces the
 choice, and on install creates the runner file when it doesn't exist. `--runner`
-is declared on `graph-init`, `open-build`, `install-targets` and
-`uninstall-targets`
+is declared on `graph-init`, `install-targets` and `uninstall-targets`
 and on no other op, so naming it elsewhere is a usage error rather than a
-silently ignored flag. The two ops that seed part company with the two that
+silently ignored flag. The op that seeds parts company with the two that
 only install here: given a repo carrying neither runner file and no
 `--runner`, a seed creates the default runner's file —
 `kb_util.DEFAULT_RUNNER`, a Makefile today — while `install-targets`
@@ -836,8 +905,8 @@ claim-graph stage has stamped one — an assertion about phase 2's output,
 asked before phase 2 runs. `graph_init_kb` calls
 `verify_kb_metadata.main` with `--skip-frontmatter-presence`, an explicit,
 single-named flag bound to that one check; every other metadata check stays
-live, because each is keyed on a classified document (`kind: leaf` /
-`leaf-as-index`) and nothing classifies as one on a tree with no frontmatter
+live, because each is keyed on a classified document (`kind: leaf`)
+and nothing classifies as one on a tree with no frontmatter
 at all, so each passes vacuously rather than needing its own exclusion. Every
 other caller of `verify_kb_metadata` — the runner's `kb-verify` target,
 `phase-3a`'s gate — keeps frontmatter-presence as a real check; the exclusion
@@ -845,22 +914,18 @@ narrows what this one fused pass claims, from "this KB is complete" to "this
 spine is correctly installed over the tree that is there," and is not a
 weakening of the check itself.
 
-This is the same seed `open-build` runs (below), and the seed is the whole
-of what the two share: `graph-init` stands alone, its work stays wherever it
-got to, and re-running it is a no-op over what already landed. Composed into
-`open-build` it also hands back an undo for the tree's authored documents and
-for the claim-graph sheet: refresh splices derived fields into their
-frontmatter and mints the sheet beside them, and a failed all-or-nothing call
-has to leave the worktree clean for its own retry.
+The seed is not undoable and needs none: it stands alone, its work stays
+wherever it got to, and re-running it is a no-op over what already landed. The
+boundary commit that follows it is what makes it durable — the seed's own
+writes are uncommitted until the `spine-seed` record sweeps them up (Driving
+the Build Ledger, below).
 
 **The seed writes no format contract, and a KB holds no copy of one.** The
 write API renders every metadata byte, so there is nothing a per-build
 contract copy could say that a seat is free to act on. A project's own scope
 is pinned in `<kb-root>/CLAUDE.md` instead — the file carrying the rest of
 the KB's per-project orientation; who writes it and when is in SPEC.md,
-Project Scoping. The revision path's entry checks are therefore two: the
-runner's `kb-verify` target installed, and `kb-verify` green. Nothing gates
-on a file's mere presence.
+Project Scoping. Nothing gates on a file's mere presence.
 
 Because preflight gates on a clean worktree, a seed's own output must be
 committed before `graph-init` is run again in the same repo.
@@ -881,12 +946,10 @@ PYTHONPATH=.claude/agents python3 -m kb_tools.kb_util preflight
 its restoring action: the resolved git root, both docent commands under
 `.claude/commands/`, `.claude-temp/`'s gitignore coverage, and a clean
 worktree. `FACT` items never gate: the kb-root tri-state (`absent` |
-`spine-only` | `populated`) — reported plainly rather than read as
-fresh-or-revision, `kb_docgraph` writing the document tree before any
-claim-graph metadata exists makes `populated` the ordinary fresh case, not a
-revision signal; whether this build is actually a revision is a user
-confirmation with nothing on disk to settle it — the detected runner file,
-and whether `.claude-temp/kb-build/` exists.
+`spine-only` | `populated`, named once as `kb_util.KB_ROOT_STATES`) — reported
+plainly and acted on nowhere here, the one place it decides anything being the
+driver's `pre.kb-root` launch guard (The Driver, above) — the detected runner
+file, and whether `.claude-temp/kb-build/` exists.
 
 Creating `.claude-temp/` when it is missing is the only side effect and is
 not a check; the worktree is read before that mkdir, so preflight can never
@@ -896,25 +959,31 @@ not evidence of a prior build**: a consumer may have filled it with
 unrelated scratch and never run one. Only `kb-root/`, `kb-build:`-prefixed
 commits, and `.claude-temp/kb-build/` indicate build state.
 
-### The Build's Opening Gate (`show-confirmation` / `open-build`)
+### The Build's Opening Gate (`show-confirmation`)
 
-Two calls with the user's answer between them, and no sequence for a caller
-to walk: one read that renders the whole confirmation, one write that
-performs everything the answer releases.
+One read in front of the gate, and **one route through it**: `show-confirmation`
+renders the whole confirmation and writes nothing, and what the user's answer
+releases is `start-build`, which records the `start` boundary (Driving the
+Build Ledger, below). The spine seed is not part of opening a build — it is
+`spine-seed`'s, through `graph-init`, two stages later and over the tree
+`document-graph` has by then written. No op performs the two together. That
+matters because a route stated twice is a route that drifts: `kb_driver` walks
+this one, row for row (`pre.*` → `start.record` → `dg.*` → `seed.*`, The
+Driver, above), and a second door it never walked would be the one nothing
+exercised.
 
 ```sh
 PYTHONPATH=.claude/agents python3 -m kb_tools.kb_util \
     show-confirmation --source <path> [--source <path> ...] [--charter-values <file>]
-    open-build        --charter-values <file> [--runner just|make]
 ```
 
 **`show-confirmation` prints the message, not material for one.** One
 block carrying the resolved root, each source resolved, the KB root, the
-kb-root tri-state stated plainly rather than read as fresh-or-revision (a
-populated tree is `kb_docgraph`'s ordinary output before any claim-graph
-metadata exists, so it no longer implies a revision — where the tri-state is
-`populated`, whether this build is a revision joins the unsettled facts
-below, defaulting to fresh), the charter quoted back a line at a time under
+kb-root tri-state with what it means for an invocation opening a build (a
+`populated` tree is one such an invocation is refused over, stated here where a
+reader can still act on it rather than met as a refusal on the next command; a
+build already under way resumes into the same tree, and the checklist below is
+what says which of the two this repository is in), the charter quoted back a line at a time under
 `[charter]`, the stage checklist, which stages stop for the user (read off
 `Stage.user_gate`, so a gate that moves takes the sentence with it), every
 per-project fact still unsettled with the default that holds if it goes
@@ -925,22 +994,11 @@ confirm, **1** a blocking item stands in the way — a preflight `FAIL`, or a
 source that is not there — **2** the root will not resolve. Its only write
 anywhere is the scratch directory `preflight` creates.
 
-**`open-build` is one act or none.** The spine seed, the charter, and the
-`start` boundary, in that order and by that one call. Every write it makes
-is undone if a later part cannot complete — including the paths the
-record's sweep staged — so a failed call leaves the repository as it found
-it, names the part it stopped at, and the retry is the identical call. What
-it never undoes is what it did not create: a spine an earlier run seeded, a
-runner file already there. Exit **0** open, **1** the seed's refresh or
-verify failed, **2** preflight blocked or the values were refused, **3**
-`kb-root/` holds no document tree, so there is nothing to build a claim graph over,
-**5** the build is already started.
-
-**The charter travels as text, in a values file.** `--charter-values` is
-the metadata ops' transport under a name of its own — `[[entry]]` tables
-with prose in a `'''` literal block, so a charter's backslashes and quotes
-need no escape grammar and never pass through a shell — over a vocabulary
-of one key:
+**The charter this read quotes back travels as text, in a values file.**
+`--charter-values` is the metadata ops' transport under a name of its own —
+`[[entry]]` tables with prose in a `'''` literal block, so a charter's
+backslashes and quotes need no escape grammar and never pass through a
+shell — over a vocabulary of one key:
 
 ```toml
 [[entry]]
@@ -951,28 +1009,37 @@ charter = '''
 
 Exactly one `[[entry]]` is read, one build having one charter; a second
 entry, a second key, or a charter saying nothing is refused naming the
-offence, and nothing is written. This is not `start-build`'s `--charter`,
-which takes the path of a charter that already exists: `open-build` owns
-where the charter lands (`kb_pipeline.CHARTER_RELPATH` — tracked, at the
-repo root, outside both the scratch tree a restage wipes and the
-`kb-root/` refresh and the verifiers walk). Write the values file itself
-under `.claude-temp/`: it is the call's input, and an uncommitted file
-anywhere else fails the clean-worktree check.
+offence, and nothing is written. This flag carries *words*, and is the one
+that writes nothing: the charter this read quotes back is quoted for the user
+to check, and what puts it on disk is whoever answers. `start-build`'s
+`--charter` is the other end — a path to a charter that already stands, and
+`kb_pipeline.CHARTER_RELPATH` is where the build keeps one (tracked, at the
+repo root, outside both the scratch tree a restage wipes and the `kb-root/`
+refresh and the verifiers walk). Write the values file itself under
+`.claude-temp/`: it is the call's input, and an uncommitted file anywhere
+else fails the clean-worktree check the seed runs.
 
-**Both record verbs stay.** `open-build` records the `start` boundary itself
-and does not supersede `start-build`: `open-build` is the agent verb —
-collapsed into one call because a model walking an ordered sequence skipped a
-step in it — and `start-build` is the machine verb, kept because `kb_driver`
-skips none and already knows whether a charter stands and where, so writing a
-values file to pass one would be pure overhead. The two also differ on whether
-a charter is required at all: `open-build` writes one and cannot proceed
-without it, while `start-build` records a boundary and a boundary needs none.
+**A charter is not required to open a build, and the absence is recorded
+rather than merely permitted.** SPEC.md (The Driver's Contract) makes the
+charter optional — a build given none runs on the sources it was given — so
+`start-build` takes `--charter` optionally and refuses nothing when it is
+left off. What it does not do is record silently: the `start` boundary's body
+names the charter where one stands and states
+`kb_pipeline.NO_CHARTER_BODY` where none does. An empty body would be
+indistinguishable from a caller that dropped the argument, and the boundary
+commit is the only durable place the two can be told apart — so a charter
+written somewhere the build never looked is found by reading the ledger
+instead of being inferred from silence.
 
 ### Driving the Build Ledger (`show-status` / `start-build` / `advance-step` / `show-stage-status`)
 
-The build pipeline's state machine, for the coordinator's use — four
-top-level ops, each carrying only the options it takes; the first and last
-read, the two in the middle record:
+The build pipeline's state machine — four top-level ops, each carrying only
+the options it takes; the first and last read, the two in the middle record.
+Three of the four are `kb_driver`'s own: `ledger.py` drives `show-status`,
+`start-build` and `advance-step` as its subprocess adapter (Module Inventory,
+above). `show-stage-status` answers no row in the driver at all — it is a
+diagnostic read for whoever is inspecting the ledger from outside a run,
+since no coordinator process consumes it (SPEC.md, The Driver's Contract):
 
 ```sh
 PYTHONPATH=.claude/agents python3 -m kb_tools.kb_util \
@@ -984,7 +1051,9 @@ PYTHONPATH=.claude/agents python3 -m kb_tools.kb_util \
 
 `--charter` is `start-build`'s alone, and is optional: a build carrying no
 charter records without one, and the boundary commit's body — whose whole
-content here is the charter it names — is then empty. The coverage unit tells
+content here is what the build was told about its charter — then carries
+`kb_pipeline.NO_CHARTER_BODY` rather than standing empty (The Build's Opening
+Gate, above, for why the absence is stated). The coverage unit tells
 the three conditions apart: a *read* holds no record argument and reports the
 unit missing for that reason (below), a record naming no charter is a vacuous
 unit rather than a failed one, and a record naming a path is checked on disk.
@@ -1028,11 +1097,9 @@ still leaves knowing what the right one requires.
 
 Card obligations that would go stale as strings are **generated**: the
 record step expands to the full sanctioned command that records the
-card's own stage — `advance-step --stage <id>`, or `open-build` on the
-`start` card, whose record is performed by the op that opens the build —
-so `advance-step` appears nowhere else an agent reads (`open-build` is the
-one exception, written out in `/kb-build`'s own body as well, because it
-runs before any card has been rendered and so has no card to be read off);
+card's own stage — `advance-step --stage <id>`, or `start-build [--charter
+<path>]` on the `start` card, the one boundary that takes a charter path
+instead of a stage id — so neither op appears anywhere else an agent reads;
 phase-3a's gate line renders through the runner detection, so a justfile
 consumer is told `just kb-refresh` and a Makefile consumer `make
 kb-refresh` — `phase-3a` is the only verify gate the current stage table
@@ -1048,7 +1115,8 @@ has already run that same suite or that same seed — plus
 stage's card is its baton.
 
 **The ledger is the git commit trail** — there is no pipeline metadata
-file, per Durable State doctrine. A boundary is a commit whose subject is
+file (SPEC.md, The Driver's Contract: resumption's state lives in the
+working tree). A boundary is a commit whose subject is
 `kb-build: <stage-id> | <display name>`, with an optional body paragraph
 (the charter path on `start`, the `--note` text elsewhere); `show-status`
 reads them back with `git log --grep`. Recording sweeps with `git add -A`
@@ -1057,8 +1125,7 @@ tracked file changed — the boundary is the point, not the diff.
 Each stage's sweep is also what leaves the worktree clean for the next stage's
 tool, which the head depends on: `graph-init`'s preflight refuses a dirty
 worktree, and the tree the stage before it wrote is exactly that until the
-boundary commit lands. On the `open-build` path the seed instead precedes the
-`start` boundary and that one sweep picks it up.
+boundary commit lands.
 
 Recording is **stage-addressed and declarative**. Re-recording a recorded
 stage is exit 0 with a banner above the checklist and no commit; an
@@ -1068,7 +1135,12 @@ already-started build refuses with exit 5.
 
 Exit 6 is a failed **postcondition**. Every stage carries
 one, and they check that the stage's observable artifacts *exist* — the
-charter file (`start`), `README.md` + `CONVENTIONS.md` (`phase-5`).
+charter file (`start`), `README.md` (`overview-drafted` and
+`phase-5` alike, one check guarding both boundaries).
+`CONVENTIONS.md` is not among them: `phase-3a`'s readiness stamp writes it, so
+a boundary check for it after that stage is satisfied by work neither
+meta-documentation stage did, and a contract no run can fail distinguishes
+nothing.
 `phase-3a` is the exception in depth: its
 postcondition runs all three verify gates rather than looking for a file.
 
@@ -1158,10 +1230,11 @@ gate silently skipped.
 
 `show-status` is read-only, exits 0 in all three world-states, and names
 which holds (`not started` / `in progress` / `complete`). A
-present-but-incomplete ledger is the mechanically detectable resume case —
-the third state beside fresh and revision. It anchors on the git root
+present-but-incomplete ledger is what says an invocation is continuing a
+build rather than opening one — the driver's whole reading of the
+distinction. It anchors on the git root
 alone, because the ledger lives in the commit trail rather than in the KB:
-a fresh build renders its all-undone checklist at confirmation time,
+a build being opened renders its all-undone checklist at confirmation time,
 *before* anything has created `kb-root/`, and the render carries a note
 saying the spine is unseeded. **The two writing ops anchor there too**, for the
 same reason: a build's opening stages are recorded before anything has created
@@ -1171,8 +1244,9 @@ same reason: a build's opening stages are recorded before anything has created
 reconstructing it. It prints a `FACT` line naming the stage and how many
 units it declares, then one `COVERED` or `MISSING` line per unit carrying
 the path that unit is satisfied from — the section-to-path pairing no
-other verb renders, and so where a coordinator obtains the artifact paths
-it dispatches against rather than composing them. The `MISSING` lines are
+other verb renders, which is where an operator debugging a stalled build
+reads the artifact path a check is missing, rather than reconstructing it
+from the stage table by hand. The `MISSING` lines are
 the same lines an `advance-step` refusal renders for the units it names:
 one computation, two callers. It writes nothing, records nothing, renders
 neither checklist nor card (that render is as long as the corpus has

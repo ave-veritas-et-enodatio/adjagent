@@ -138,7 +138,7 @@ def assemble(tree: Tree, inventory: Inventory, claims: Sequence[Claim]) -> Plan:
     documents = []
     for path in sorted(tree.documents):
         positions = tuple(hosted.get(path, ()))
-        kind = document_kind(path, has_children=bool(tree.children[path]), hosts_claim=bool(positions))
+        kind = document_kind(path, has_children=bool(tree.children[path]))
         declares = kind in DECLARING_KINDS
         documents.append(
             DocumentRecord(

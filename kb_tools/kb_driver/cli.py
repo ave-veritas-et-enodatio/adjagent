@@ -44,6 +44,17 @@ answers, so an unknown pair or an inadmissible answer is exit 13 **at load** —
 before a run directory exists and before anything is spawned. A typo cannot
 become a mid-build stop three hours in.
 
+**A run that dies abnormally still leaves its report.** Once the run directory
+exists, every way out of the sequencer writes ``cadence.jsonl`` and
+``exit.json`` (``run.write_report``) — a boundary check that failed, a
+terminating signal, an exception no handler names, alongside the endings the
+walk chose. Those are the endings that most need one: their own card calls the
+run directory the bug report, and ``exit.json`` is the one channel a
+backgrounded session has for learning how a run ended. The exception-to-exit
+mapping is :func:`_terminal`, read by that path and by :func:`main`'s
+last-resort handler alike, so a failure raised inside the run and the same
+failure raised a frame higher cannot report different codes.
+
 Stdlib only.
 """
 
@@ -106,7 +117,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Answer a barrier, taking precedence over config for its pair. Repeatable.",
     )
     p_run.add_argument(
-        "--run-dir",
+        config.RUN_DIR_FLAG,
         type=Path,
         default=None,
         help="Override [log] run_dir: the parent holding LATEST and one directory per run.",
@@ -159,7 +170,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # directly. Required in the kb-testing recipes, whose run directory sits
     # outside the tree the restage wipes.
     p_watch.add_argument(
-        "--run-dir",
+        config.RUN_DIR_FLAG,
         type=Path,
         default=Path(config.DEFAULT_RUN_DIR),
         help="The parent holding LATEST and one directory per run (default: %(default)s).",
@@ -195,9 +206,39 @@ def _run_overrides(args: argparse.Namespace) -> dict[str, object]:
     return overrides
 
 
+def _terminal(exc: BaseException) -> tuple[int, tuple[str, ...]]:
+    """The exit code and ASK lines for an exception that ended an invocation.
+
+    One mapping, two readers: the handler standing between a dying run and its
+    report, and :func:`main`'s last-resort row. A second spelling would let a
+    failure raised inside the sequencer report a different code than the same
+    failure raised a frame higher.
+
+    The unrecognized class is the last row and the one that owes a traceback to
+    the run log: the exception's text reaches the operator through the baton,
+    while the traceback stays in the run directory EXIT_INTERNAL's card calls
+    the bug report.
+    """
+    if isinstance(exc, config.ConfigError):
+        return baton.EXIT_CONFIG, (str(exc),)
+    if isinstance(exc, runlog.LockedError):
+        return baton.EXIT_LOCKED, (str(exc),)
+    if isinstance(exc, runlog.Terminated):
+        return exc.exit_code, (str(exc),)
+    if isinstance(exc, runlog.BoundaryError):
+        return baton.EXIT_INTERNAL, (str(exc),)
+    _log.exception("unhandled exception; exiting %s", baton.EXIT_INTERNAL)
+    return baton.EXIT_INTERNAL, (f"{type(exc).__name__}: {exc}",)
+
+
 def _mode_run(args: argparse.Namespace, ctx: baton.BatonContext) -> tuple[int, baton.BatonContext]:
     del ctx  # the sequencer's result carries the context every run-mode exit needs
-    cfg = config.load(args.config, run_overrides=_run_overrides(args), admissible=barriers.ADMISSIBLE)
+    cfg = config.load(
+        args.config,
+        run_overrides=_run_overrides(args),
+        admissible=barriers.ADMISSIBLE,
+        run_dir=args.run_dir,
+    )
     decisions = [config.parse_decision(spec, admissible=barriers.ADMISSIBLE) for spec in args.decide]
 
     # The lock is anchored at the repository, not at the run directory,
@@ -211,7 +252,10 @@ def _mode_run(args: argparse.Namespace, ctx: baton.BatonContext) -> tuple[int, b
     except kb_util.RepoRootError:
         repo_root = None
 
-    parent = args.run_dir if args.run_dir is not None else cfg.log.run_dir
+    # `config.load` has already settled the flag against `[log] run_dir`, so the
+    # effective parent is read off the config rather than resolved a second time
+    # here — the resume line is rendered from that same value.
+    parent = cfg.log.run_dir
     run_id = runlog.new_run_id()
     lock = nullcontext() if repo_root is None else runlog.run_lock(runlog.repo_lock_path(repo_root), run_id=run_id)
     with lock:
@@ -253,18 +297,35 @@ def _mode_run(args: argparse.Namespace, ctx: baton.BatonContext) -> tuple[int, b
                 extra={"context": {"run_id": run_id}},
             )
 
-        result = run.execute(
-            config=cfg,
-            paths=paths,
-            decisions=decisions,
-            invoker=replay.dry_run_invoker() if cfg.run.dry_run else None,
-            repo_root=repo_root,
-        )
+        try:
+            with runlog.terminating_signals():
+                result = run.execute(
+                    config=cfg,
+                    paths=paths,
+                    decisions=decisions,
+                    invoker=replay.dry_run_invoker() if cfg.run.dry_run else None,
+                    repo_root=repo_root,
+                )
+        except BaseException as exc:  # noqa: BLE001 — see below
+            # The run directory exists from here on, so an ending the walk did
+            # not choose still writes the report a planned one does. Catching
+            # the base class is what covers the endings nobody planned — a
+            # signal, a boundary check, a defect — and this is the layer that
+            # turns an exception into an exit code, so there is nothing above
+            # it that a re-raise would inform.
+            exit_code, detail = _terminal(exc)
+            run.write_report(paths, exit_code=exit_code)
+            return exit_code, baton.BatonContext(
+                invocation=cfg.invocation,
+                run_dir=str(paths.run_dir),
+                run_dir_parent=config.run_dir_parent(paths.parent),
+                detail=detail,
+            )
 
         # This is what a session reads after watch reports the driver gone —
         # the terminal code, the barrier record to paste, and the decisions
         # that answered nothing.
-        runlog.write_exit_json(
+        run.write_report(
             paths,
             exit_code=result.exit_code,
             barrier_record=result.barrier_record,
@@ -291,30 +352,29 @@ def main(argv: list[str] | None = None) -> int:
             runlog.relay(baton.render(code))
         return code
 
-    ctx = baton.BatonContext(invocation=config.invocation(getattr(args, "config", None), _run_overrides(args)))
+    # The context for every ending that never reaches a mode's own — a config
+    # refusal, a held lock. The flag is all it can read the run directory from:
+    # the file has not been loaded, and on the paths that get here it never
+    # will be.
+    ctx = baton.BatonContext(
+        invocation=config.invocation(
+            getattr(args, "config", None), _run_overrides(args), run_dir=getattr(args, "run_dir", None)
+        ),
+        run_dir_parent=config.run_dir_parent(getattr(args, "run_dir", None)),
+    )
     try:
         exit_code, ctx = _MODES[args.mode](args, ctx)
-    except config.ConfigError as exc:
-        exit_code = baton.EXIT_CONFIG
-        ctx = replace(ctx, detail=(str(exc),))
-    except runlog.LockedError as exc:
-        exit_code = baton.EXIT_LOCKED
-        ctx = replace(ctx, detail=(str(exc),))
-    except runlog.BoundaryError as exc:
-        exit_code = baton.EXIT_INTERNAL
-        ctx = replace(ctx, detail=(str(exc),))
-    except Exception as exc:  # noqa: BLE001 — the last-resort baton row; see below
+    except BaseException as exc:  # noqa: BLE001 — the last-resort baton row; see below
         # The rule is absolute: no terminating path leaves without a baton.
-        # The three handlers above name the failures the driver understands;
-        # this one exists for the ones it does not — an OSError writing
-        # exit.json, a KeyError in a registry — where a traceback and a bare
-        # exit 1 would leave the relay with no card and nothing to report but
-        # the traceback. The exception text goes to the operator through the
-        # baton; the traceback goes to the run log, so the run directory
-        # EXIT_INTERNAL's baton names is the bug report it claims to be.
-        _log.exception("unhandled exception; exiting %s", baton.EXIT_INTERNAL)
-        exit_code = baton.EXIT_INTERNAL
-        ctx = replace(ctx, detail=(f"{type(exc).__name__}: {exc}",))
+        # `_terminal` names the failures the driver understands and ends with a
+        # row for the ones it does not — an OSError writing exit.json, a
+        # KeyError in a registry — where a traceback and a bare exit 1 would
+        # leave the relay with no card and nothing to report but the traceback.
+        # The base class rather than `Exception`, because a signal that reached
+        # a path outside the run is still a terminating path and still owes a
+        # card.
+        exit_code, detail = _terminal(exc)
+        ctx = replace(ctx, detail=detail)
 
     runlog.relay(baton.render(exit_code, ctx))
     return exit_code

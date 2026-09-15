@@ -32,7 +32,7 @@ def test_the_table_covers_the_whole_stage_vocabulary_and_the_walk_covers_the_tab
     fails it rather than quietly buying a green by not going there.
     """
     assert steps.TABLE_STAGE_IDS == kb_pipeline.STAGE_IDS
-    assert len(steps.TABLE_STAGE_IDS) == 8
+    assert len(steps.TABLE_STAGE_IDS) == 9
 
 
 def test_every_row_of_the_table_is_executed_by_a_handler_or_driven_by_a_loop() -> None:
@@ -77,6 +77,68 @@ def test_every_stage_of_the_table_ends_in_exactly_one_ledger_row(stage: str) -> 
     assert rows
     assert len(recording) == 1
     assert recording[0] is rows[-1]
+
+
+def _walked(stage: str) -> tuple[steps.Step, ...]:
+    """The rows of one stage the linear walk executes, in order.
+
+    A loop-driven row is not one of them: it is executed by the loop row whose
+    handler drives it, so its position in the table is not a position in the
+    walk.
+    """
+    return tuple(step for step in steps.steps_for(stage) if step.id not in run.LOOP_DRIVEN_STEPS)
+
+
+@pytest.mark.parametrize("stage", steps.TABLE_STAGE_IDS)
+def test_no_failable_row_stands_between_an_inference_spending_row_and_its_boundary(stage: str) -> None:
+    """R-C as a property of the table: expensive work that succeeded is never discarded.
+
+    A row that spends inference must be the row immediately before its stage's
+    ledger row — so the only thing that can happen between the spend and the
+    commit that accounts for it is the commit itself. Two corollaries fall out,
+    and both are the point rather than side effects: no stage may hold two such
+    rows, and nothing failable may be appended after one.
+
+    The walk's rows, because a driven cycle is one unit of expensive work: its
+    rounds are not boundaries, there being no ledger entry for a round — the
+    ledger's entries are the stage vocabulary. What the cycle's own boundary
+    accounts for is the cycle, and a run killed inside one re-spends it.
+
+    Static, over the table alone: a timed run would price the guarantee in hours
+    and could only ever observe the shape this asserts.
+    """
+    walked = _walked(stage)
+    spending = [index for index, step in enumerate(walked) if step.spends_inference]
+
+    assert len(spending) <= 1, f"{stage} holds {len(spending)} inference-spending rows, so one of them has no boundary"
+    for index in spending:
+        following = walked[index + 1 :]
+        assert [step.id for step in following] == [walked[-1].id], (
+            f"{walked[index].id} spends inference and {', '.join(step.id for step in following[:-1])} "
+            f"stands between it and its boundary"
+        )
+        assert walked[-1].ledger_op is not None
+
+
+@pytest.mark.parametrize("stage", steps.TABLE_STAGE_IDS)
+def test_a_loop_driven_row_spends_inside_a_loop_row_of_its_own_stage(stage: str) -> None:
+    """The other half: a driven row's boundary is its driver's, so it must share the stage.
+
+    A loop-driven row costs a model call and takes no boundary of its own. That
+    is only sound while the row that drives it stands in the same stage — the
+    cycle and the commit that accounts for it are then one stage's business. A
+    driven row whose driver sat in an earlier stage would spend a call behind a
+    boundary already written.
+    """
+    driven = [step for step in steps.steps_for(stage) if step.id in run.LOOP_DRIVEN_STEPS]
+    if not driven:
+        pytest.skip(f"{stage} drives no loop")
+    drivers = [step for step in _walked(stage) if step.series]
+
+    assert drivers, f"{stage} holds a loop-driven row and no row that drives one"
+    assert all(driver.spends_inference for driver in drivers)
+    for step in driven:
+        assert step.spends_inference, "a driven row that costs nothing needs no cycle to sit in"
 
 
 def test_only_the_first_stage_starts_the_build() -> None:
@@ -216,7 +278,6 @@ def test_the_tables_barrier_pairs_are_each_raised_once() -> None:
 
     assert len(raised) == len(set(raised))
     assert set(raised) == {
-        "start.build-mode",
         "start.proceed",
         "spine-seed.runner-choice",
         "phase-5.cap-exhausted",
@@ -404,42 +465,41 @@ def test_no_ledger_row_spends_inference() -> None:
     assert [step.id for step in steps.STEPS if step.ledger_op is not None and step.spends_inference] == []
 
 
-@pytest.mark.parametrize("build_mode", ["fresh", "revision"])
-def test_a_run_spending_no_inference_drops_exactly_the_rows_that_cost_one(build_mode: str) -> None:
-    """``applies`` is row-level, and the two conditions compose rather than override."""
-    dropped = {
-        step.id
-        for step in steps.STEPS
-        if steps.applies(step, build_mode=build_mode)
-        and not steps.applies(step, build_mode=build_mode, spend_inference=False)
-    }
+def test_a_run_spending_no_inference_drops_exactly_the_rows_that_cost_one() -> None:
+    """``applies`` is row-level, and the row's cost is the whole of what it reads."""
+    dropped = {step.id for step in steps.STEPS if not steps.applies(step, spend_inference=False)}
 
-    assert dropped == {
-        step.id for step in steps.STEPS if step.spends_inference and steps.applies(step, build_mode=build_mode)
-    }
+    assert dropped == {step.id for step in steps.STEPS if step.spends_inference}
+
+
+def test_a_row_applies_to_every_run_that_will_spend_what_it_costs() -> None:
+    """No row is conditional on anything else, and that is the property to hold.
+
+    The table used to let a row name the build mode it belonged to, which is how
+    a build entering against a KB it had not built skipped the rows that would
+    overwrite one. The modes are gone and no second condition replaced them: the
+    ledger decides what is re-walked, and ``pre.kb-root`` decides what may be
+    opened. A row that grew a condition of its own would put a third answer
+    beside those two without either of them knowing.
+    """
+    assert all(steps.applies(step) for step in steps.STEPS)
 
 
 def test_the_rows_a_stage_loses_are_named_by_the_table_and_not_by_a_stage_id() -> None:
-    """``inference_rows`` is the note's source, and it is a per-run answer.
-
-    A revision build's head rows do not apply at all, so it loses none of them
-    — the same ``applies`` deciding both, which is what keeps the note from
-    claiming a row did not run when it was never going to.
-    """
-    fresh = {stage: steps.inference_rows(stage, build_mode="fresh") for stage in steps.TABLE_STAGE_IDS}
-    revision = {stage: steps.inference_rows(stage, build_mode="revision") for stage in steps.TABLE_STAGE_IDS}
+    """``inference_rows`` is the note's source, derived from the rows themselves."""
+    by_stage = {stage: steps.inference_rows(stage) for stage in steps.TABLE_STAGE_IDS}
 
     # `depends-attributed` is deliberately absent: its row spends no inference
     # of its own, because the narrowing settles every edge containment decides
     # whether or not a model is reachable and only the pairs left open need
     # one. The tool is told with its own `--no-inference` and reports what went
     # unasked; no row is dropped, so the stage loses nothing to name.
-    assert {stage for stage, rows in fresh.items() if rows} == {
+    assert {stage for stage, rows in by_stage.items() if rows} == {
         "claims-discovered",
+        "overview-drafted",
         "phase-5",
     }
-    assert {stage for stage, rows in revision.items() if rows} == {"phase-5"}
-    for stage, rows in fresh.items():
+    for stage, rows in by_stage.items():
         assert set(rows) <= {step.id for step in steps.steps_for(stage)}, stage
 
 

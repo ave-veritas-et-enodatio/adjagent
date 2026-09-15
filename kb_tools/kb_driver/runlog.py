@@ -1,12 +1,13 @@
 """Logging, the run-directory layout, and the boundary check.
 
 All driver output goes through this module: JSONL to ``<run-dir>/run.log``,
-tee'd to the console at the same level. Direct ``print()`` is permitted in the
-driver for exactly one thing — relaying tool stdout verbatim — and that
-exception lives here as :func:`relay`, which writes the bytes to stdout
-untouched and records the same text in the JSONL log as evidence. The relay
-baton is printed the same way, for the same reason: a card the session
-must paste cannot carry a log prefix.
+tee'd to the console at the same level. Writing to a console stream directly is
+permitted in the driver for exactly two things, and both live here. :func:`relay`
+is stdout's — relayed tool stdout and the relay baton, written verbatim, because
+a card the session must paste cannot carry a log prefix. :func:`notify` is
+stderr's — a notice about the invocation itself, kept off the stream a session
+pastes from. Each records its own text in the JSONL log as evidence and each
+suppresses the console tee's copy, so the bytes reach a console exactly once.
 
 Run-directory layout — the run directory is a sibling of
 ``.claude-temp/kb-build/``, not a subdirectory: that layout is a contract
@@ -28,6 +29,16 @@ it at the run-directory parent made it per-``--run-dir`` — two invocations
 passing different ``--run-dir`` (which kb-testing is required to do) would take
 different locks and both proceed against one KB.
 
+Whether a lock is live, stale or absent is one judgement — :func:`lock_state` —
+read by the acquire path here and, from outside the driver, by ``kb_util``'s
+read-only ``show-run-lock`` op. A caller that needs the answer asks it; a second
+pid test is a second definition of a live run.
+
+Turning a terminating signal into an ordinary unwind lives here too
+(:func:`terminating_signals`), beside the directory it exists to protect: a run
+killed on the default disposition writes nothing, and what it would have written
+is the only account of itself it leaves.
+
 Stdlib only.
 """
 
@@ -35,6 +46,7 @@ import json
 import logging
 import os
 import re
+import signal
 import sys
 import tempfile
 import uuid
@@ -43,6 +55,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+
+from .. import inference
 
 _LOGGER_NAME = "kb_driver"
 
@@ -62,6 +76,56 @@ class LockedError(RuntimeError):
     def __init__(self, message: str, *, pid: int | None = None) -> None:
         super().__init__(message)
         self.pid = pid
+
+
+#: What a shell reports for a process a signal killed: ``128 + n``.
+SIGNAL_EXIT_BASE = 128
+
+#: The signals a run turns into an unwind — the two an operator or a supervisor
+#: sends. ``SIGKILL`` is absent because it cannot be caught: no code promises a
+#: report after one, and listing it would read as though some did.
+TERMINATING_SIGNALS: tuple[signal.Signals, ...] = (signal.SIGINT, signal.SIGTERM)
+
+
+class Terminated(RuntimeError):
+    """A terminating signal reached a run, raised so the run still unwinds."""
+
+    def __init__(self, signum: int) -> None:
+        super().__init__(f"terminated by signal {signum} ({signal.Signals(signum).name})")
+        self.signum = signum
+
+    @property
+    def exit_code(self) -> int:
+        """``128 + n``: the shell's own convention, deliberately not a driver rung.
+
+        Neither mode's ladder has a code for this and borrowing one would state
+        a verdict nothing in the build reached — a kill is not a driver defect
+        and not a failed stage. An unrecognized code is what the fallback card
+        exists for.
+        """
+        return SIGNAL_EXIT_BASE + self.signum
+
+
+@contextmanager
+def terminating_signals() -> Iterator[None]:
+    """Raise :class:`Terminated` on a terminating signal, restoring the handlers after.
+
+    Scoped to the run rather than installed for the process's life: outside the
+    region the run directory either does not exist yet or is already written, so
+    a handler standing there would only delay a death nobody learns anything
+    from. Restoring is what keeps an in-process caller — the test suite — from
+    inheriting a disposition it never asked for.
+    """
+
+    def _raise(signum: int, frame: object) -> None:
+        raise Terminated(signum)
+
+    previous = [(number, signal.signal(number, _raise)) for number in TERMINATING_SIGNALS]
+    try:
+        yield
+    finally:
+        for number, handler in previous:
+            signal.signal(number, handler)
 
 
 def logger(name: str) -> logging.Logger:
@@ -146,7 +210,7 @@ class RunPaths:
 CALL_STREAM_SUFFIX = ".stream.jsonl"
 
 #: ``<seq>-<step-id>[-reask]-a<attempt>``. The step id contains hyphens
-#: (``pre.revision-entry``) and so does the re-ask marker, so the only reading
+#: (``pre.kb-root``) and so does the re-ask marker, so the only reading
 #: that cannot confuse the two is one anchored at both ends — exactly the
 #: reasoning ``prompt_templates.step_of`` carries for the brief grammar.
 _CAPTURE_NAME = re.compile(r"^(?P<seq>\d+)-(?P<step>.+?)(?P<reask>-reask)?-a(?P<attempt>\d+)$")
@@ -306,15 +370,69 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
+#: The three answers to "does a run hold this lock?". Named because two callers
+#: report them — the acquire path below, and the read-only op that answers the
+#: question for a recipe about to wipe a workspace — and a spelling each would
+#: be two vocabularies for one judgement.
+LOCK_LIVE = "live"
+LOCK_STALE = "stale"
+LOCK_ABSENT = "absent"
+
+
+@dataclass(frozen=True)
+class LockState:
+    """What a lock file says, and whether the holder it names is alive.
+
+    ``state`` is one of :data:`LOCK_LIVE` / :data:`LOCK_STALE` /
+    :data:`LOCK_ABSENT`. The holder fields carry the payload
+    :func:`run_lock` wrote and are all ``None`` wherever there is nobody to
+    name: an absent lock, or a stale one whose payload will not parse, which is
+    a lock nothing can attribute rather than a lock with no holder.
+    """
+
+    state: str
+    pid: int | None = None
+    run_id: str | None = None
+    started: str | None = None
+
+
+def lock_state(path: Path) -> LockState:
+    """Judge ``path`` — live, stale or absent — naming its holder where there is one.
+
+    **The one definition of a holder's liveness.** The acquire path reads it
+    through :func:`_holder` and every caller outside this package reads it
+    directly, so a second pid test anywhere — in another module, in a shell
+    recipe — is a second definition and not a second opinion.
+
+    Reads and judges; it neither takes the lock nor clears a stale one. An
+    unparseable payload is :data:`LOCK_STALE` for the reason the acquire path
+    treats it as one: a lock nobody can be read out of is a lock no run can be
+    shown to hold.
+    """
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return LockState(LOCK_ABSENT)
+    except OSError:
+        return LockState(LOCK_STALE)
+    try:
+        record = json.loads(text)
+        pid = int(record["pid"])
+    except (ValueError, KeyError, TypeError):
+        return LockState(LOCK_STALE)
+    state = LOCK_LIVE if _pid_alive(pid) else LOCK_STALE
+    return LockState(state, pid=pid, run_id=record.get("run_id"), started=record.get("started"))
+
+
 def _holder(path: Path) -> int | None:
     """The live pid holding ``path``, or None if the lock is stale or unreadable."""
-    try:
-        record = json.loads(path.read_text(encoding="utf-8"))
-        pid = int(record["pid"])
-    except (OSError, ValueError, KeyError, TypeError):
+    state = lock_state(path)
+    if state.pid is None:
+        # Nothing could be read out of it. Logged here rather than in the
+        # judgement itself, because this is the caller about to break the lock:
+        # a read-only report of the same state is an answer, not a warning.
         _log.warning("lock file is unreadable; treating it as stale", extra={"context": {"lock": str(path)}})
-        return None
-    return pid if _pid_alive(pid) else None
+    return state.pid if state.state == LOCK_LIVE else None
 
 
 def _publish(path: Path, payload: str) -> bool:
@@ -462,29 +580,42 @@ class _JsonlFormatter(logging.Formatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
+#: Set on a record whose text its writer has already put on a console stream.
+#: The console tee drops those records, so the bytes appear exactly once. The
+#: key keeps the spelling it was written under: run logs on disk already carry
+#: it, and a reader of one is reading a format rather than a name in this file.
+CONSOLE_WRITTEN = "relay"
+
+
 def _not_relayed(record: logging.LogRecord) -> bool:
-    """Keep relayed blocks out of the console tee: :func:`relay` already wrote them."""
+    """Keep out of the console tee what its own writer already put on a console stream."""
     context = getattr(record, "context", None)
-    return not (isinstance(context, dict) and context.get("relay"))
+    return not (isinstance(context, dict) and context.get(CONSOLE_WRITTEN))
 
 
 def configure(*, run_log: Path, level: str) -> logging.Logger:
-    """Attach the JSONL file handler and the console tee. Called once, from ``cli``."""
-    driver_log = logging.getLogger(_LOGGER_NAME)
-    driver_log.setLevel(level)
-    driver_log.propagate = False
-    for handler in list(driver_log.handlers):
-        driver_log.removeHandler(handler)
-        handler.close()
+    """Attach the JSONL file handler and the console tee. Called once, from ``cli``.
 
+    Both logger trees the run writes get them: this driver's, and the shared
+    inference layer's, which configures no handler of its own — a call's spawn,
+    kill and classification lines are this run's evidence wherever the code
+    that emits them lives.
+    """
     file_handler = logging.FileHandler(run_log, encoding="utf-8")
     file_handler.setFormatter(_JsonlFormatter())
-    driver_log.addHandler(file_handler)
-
     console = logging.StreamHandler(sys.stdout)
     console.setFormatter(logging.Formatter(_CONSOLE_FORMAT))
     console.addFilter(_not_relayed)
-    driver_log.addHandler(console)
+
+    driver_log = logging.getLogger(_LOGGER_NAME)
+    for log in (driver_log, logging.getLogger(inference.LOGGER_NAME)):
+        log.setLevel(level)
+        log.propagate = False
+        for handler in list(log.handlers):
+            log.removeHandler(handler)
+            handler.close()
+        log.addHandler(file_handler)
+        log.addHandler(console)
 
     return driver_log
 
@@ -498,4 +629,19 @@ def relay(text: str) -> None:
     """
     sys.stdout.write(text if text.endswith("\n") else text + "\n")
     sys.stdout.flush()
-    _log.info(text, extra={"context": {"relay": True}})
+    _log.info(text, extra={"context": {CONSOLE_WRITTEN: True}})
+
+
+def notify(text: str) -> None:
+    """Write an operator notice to stderr and record it in the run log at WARNING.
+
+    Stderr's counterpart to :func:`relay`, and the stream is the point.
+    Stdout carries what a session pastes — a ledger render, a baton, a failing
+    tool's report — so a remark about the *invocation* goes to the other stream
+    rather than into the middle of a block somebody is about to copy. The
+    console tee drops its copy for :func:`relay`'s reason: the bytes have
+    already reached a console.
+    """
+    sys.stderr.write(text if text.endswith("\n") else text + "\n")
+    sys.stderr.flush()
+    _log.warning(text, extra={"context": {CONSOLE_WRITTEN: True}})

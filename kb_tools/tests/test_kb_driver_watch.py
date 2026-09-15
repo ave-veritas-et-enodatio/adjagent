@@ -262,6 +262,27 @@ def test_growth_relays_the_render_then_its_baton(
     assert out.index(_render(_ADVANCED)) < out.index(f"{baton.PREFIX} PLACE IN YOUR MESSAGE BODY")
 
 
+def test_growth_is_relayed_as_progress_and_never_as_a_finished_build(
+    _consuming_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The driver is alive and a stage landed, which is the only state exit 0 is returned in.
+
+    Run mode's 0 is a finished build and shares the number, so a poll rendering
+    that card told the relay to report a live build — hours from its last stage —
+    as complete. The card this invocation prints is the watch table's.
+    """
+    parent = _run_dir(_consuming_repo, pid=os.getpid())
+    _stub_status(monkeypatch, [_ok(_STARTED), _ok(_ADVANCED)])
+
+    code = cli.main(["watch", "--run-dir", str(parent), "--poll", "1", "--timeout", "600"])
+
+    out = capsys.readouterr().out
+    assert code == baton.EXIT_OK
+    assert "report completion" not in out
+    assert "still running" in out
+    assert f"{baton.PREFIX}   {kb_util.DRIVER_INVOCATION} watch" in out
+
+
 def test_timeout_relays_render_and_the_watch_again_baton(
     _consuming_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

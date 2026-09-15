@@ -1,4 +1,4 @@
-# Fixture: KB inferential-quality evaluation brief (instrument v2)
+# Fixture: KB inferential-quality evaluation brief (instrument v3)
 
 The standing comparison instrument for grading built KBs (claude-tier and
 gemma-tier runs alike). Every evaluation MUST use the prompt body below
@@ -57,14 +57,22 @@ READ-ONLY throughout. Do NOT run `git show`, inspect git tags, or consult any pr
 
 A question whose subject this build does not contain is itself a result: report it as a walk that found nothing, with what you looked at, rather than substituting a nearby question.
 
-**Attribution, per material finding**: read the pipeline's worker definitions in the consuming repo's .claude/agents/ (kb-taxonomy-architect.md, kb-content-distiller.md, kb-latex-specialist.md, and the KB's own invariants.md/CONVENTIONS.md conventions) and classify each finding: (a) INSTRUCTION CLARITY — the guidance was silent or ambiguous on the dimension that went wrong; (b) CAPABILITY — the guidance was explicit and the execution fell short; (c) TASK DIFFICULTY — the call is genuinely contested among reasonable designs. This attribution decides what gets fixed and how, so ground it in the definition text, quoting the relevant passage or noting its absence.
-
-**Output**: write your report to {output-report-path}. Structure: verdict summary first (the overall shape: headroom-above-a-floor vs material-quality-loss, with the count of material findings); then material findings each with severity, the specific alternative call that would have been better, the quality dimension impacted, and the attribution with its grounding; then a section of immaterial observations (calls that could differ without material impact — these are evidence of headroom, list them briefly); then your walk logs as an appendix (the raw evidence). Be the evaluator who would rather report three real findings than thirty defensible ones.
+**Output**: write your report to {output-report-path}. Structure: verdict summary first (the overall shape: headroom-above-a-floor vs material-quality-loss, with the count of material findings); then material findings each with severity, the specific alternative call that would have been better, and the quality dimension impacted; then a section of immaterial observations (calls that could differ without material impact — these are evidence of headroom, list them briefly); then your walk logs as an appendix (the raw evidence). Be the evaluator who would rather report three real findings than thirty defensible ones.
 
 ---- PROMPT BODY ABOVE — MAINTAINER NOTES BELOW, NEVER EXTRACTED ----
 
 ## Changelog
 
+- **v3 — 2026-09-14.** The per-finding attribution step retires. It directed
+  the evaluator to classify each finding against the pipeline's worker
+  definitions — `kb-taxonomy-architect.md`, `kb-content-distiller.md`,
+  `kb-latex-specialist.md` — and the build carries no such seats: it is
+  driver-controlled and mechanical, with one inference ask. The definitions are
+  not misplaced, they are gone as a category, so there is nothing to re-point
+  at and no classification of cause the instrument can ground. Reports from v3
+  on carry no attribution, and do not compare with v1/v2 reports on that column;
+  every other column is unchanged and still compares row for row. Attribution
+  removal only — no other pending revision to this instrument is folded in.
 - **v2 — 2026-09-01.** Fixed walk set replaces per-run invented questions;
   adopted at the gemma series boundary. Walk-set change only — no other
   pending revision to this instrument is folded in.

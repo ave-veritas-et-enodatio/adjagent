@@ -20,7 +20,8 @@ reading of it belong to the caller that knows what it asked for.
 **No ``--model``, ever, and not by discipline.** A seat's model pin lives in
 its own frontmatter, and an explicit ``--model`` overrides it — so the pin is
 authoritative only for as long as the flag is omitted. There is no parameter
-here through which a command prefix could carry one.
+here through which a command prefix could carry one, this layer spelling no
+command at all.
 
 Stdlib only.
 """
@@ -92,7 +93,8 @@ def ask_seat(
     model at all.
 
     Raises :class:`ValueError` for an unusable seat name or prompt; every way a
-    call that started can end is a returned :class:`~.claude.Outcome`.
+    call can end, a command that could not be spawned included, is a returned
+    :class:`~.claude.Outcome`.
     """
     _check_seat_name(seat)
     directory = Path.cwd() if cwd is None else cwd

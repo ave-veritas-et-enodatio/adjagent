@@ -10,15 +10,23 @@ session must narrate from memory.
 
 Mode-scoped exit codes::
 
-    0   the recorded-stage set grew
+    0   the recorded-stage set grew while the driver was still alive
     21  the poll timed out with no growth
     22  the driver process is no longer alive
+
+**Exit 0 is progress and never completion.** A poll that returns it has
+established that the build is *running* — the set grew and the driver is alive —
+so the card it prints must send the session back for another poll. Run mode's 0
+is a finished build, and the two share a number: the context this mode returns
+carries ``baton.MODE_WATCH`` so the card rendered for it is this mode's own
+(``baton``, the mode-scoped table). Without that, a routine progress poll
+printed "report completion" over a build hours from its last stage.
 
 **Ordering, stated explicitly.**
 Liveness is tested before growth. The composition "grew *and* gone" is
 otherwise ambiguous, and only 22 resolves it correctly: the driver may have
-recorded a stage and then stopped at a barrier, and exit 0's baton says
-"report completion". 22 sends the session to ``exit.json``, which names the
+recorded a stage and then stopped at a barrier, which exit 0 would report as a
+build still running. 22 sends the session to ``exit.json``, which names the
 terminal code for every one of those endings.
 
 **Watch writes nothing.** It touches no run directory, no KB, and no log file
@@ -40,7 +48,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .. import kb_util
-from . import baton, ledger, runlog
+from . import baton, config, ledger, runlog
 
 _log = runlog.logger("watch")
 
@@ -219,11 +227,20 @@ def sensors_for(repo_root: Path) -> Sensors:
 
 
 def mode(args: argparse.Namespace, ctx: baton.BatonContext) -> tuple[int, baton.BatonContext]:
-    """``cli``'s ``watch`` mode: resolve the root, poll, relay the render."""
+    """``cli``'s ``watch`` mode: resolve the root, poll, relay the render.
+
+    Every context this returns carries ``baton.MODE_WATCH``, which is what the
+    card is chosen on where a code means one thing here and another in a run.
+    It carries the run-directory parent too: every card this mode prints offers
+    another poll, and a poll of a run whose evidence sits outside the default
+    parent has to be told where that is — this mode takes no ``--config`` and
+    the flag is the whole of what it could read one from.
+    """
+    watched = config.run_dir_parent(args.run_dir)
     try:
         repo_root = kb_util.find_git_root()
     except kb_util.RepoRootError as exc:
-        return baton.EXIT_ENVIRONMENT, replace(ctx, detail=(str(exc),))
+        return baton.EXIT_ENVIRONMENT, replace(ctx, mode=baton.MODE_WATCH, run_dir_parent=watched, detail=(str(exc),))
 
     _log.info(
         "watching",
@@ -242,6 +259,8 @@ def mode(args: argparse.Namespace, ctx: baton.BatonContext) -> tuple[int, baton.
         runlog.relay(result.render)
     return result.exit_code, replace(
         ctx,
+        mode=baton.MODE_WATCH,
         run_dir="" if result.run_dir is None else str(result.run_dir),
+        run_dir_parent=watched,
         detail=result.detail,
     )

@@ -12,7 +12,7 @@ red-red-green, phase-5 review-fix-re-review — compose in Python with
 on every schema change.
 
 The seam sits **below** stream parsing: a replayed call is emitted as
-stream-json lines and read back through ``transport.invoke`` — the same
+stream-json lines and read back through ``inference.invoke`` — the same
 capture, the same watchdog, the same classifier a real call goes through.
 Scenarios that end badly end badly the same way too: :func:`stall` blocks
 until the watchdog kills it, and :func:`cli_rejection` emits nothing at all so
@@ -44,7 +44,7 @@ out of the composed brief — the assignment table's rows, the backticked target
 paths — because the driver chose those paths and validates them afterwards, so
 a scenario inventing one would be answering a call nobody made.
 
-**Dependency note.** This module is a leaf under ``transport``. Composing the
+**Dependency note.** This module is a leaf under ``kb_tools.inference``. Composing the
 shapes above additionally requires ``envelope`` (itself a leaf), ``briefs``
 for the step-id-from-filename grammar a replayed call's context reads, and
 ``kb_write.render`` for :func:`stamped_leaf`'s frontmatter block. Each is
@@ -491,15 +491,25 @@ def stamped_leaf(document: str, *, claims: Sequence[str]) -> str:
     return "\n".join([head, "", render.render_frontmatter_block(values), body])
 
 
-def meta_docs() -> Scenario:
-    """``p5.docs`` / ``p5.fix``: the one prose answer the stage asks for.
+def meta_docs(*, revised: bool = False) -> Scenario:
+    """``ov.docs`` / ``p5.fix``: the prose answer each of the two stages asks for.
 
     It writes no document, because neither does the seat it stands in for: the
     stage assembles ``kb_pipeline.OVERVIEW_DOC`` from this answer and the counts
     it reads out of the KB, and a return that is only prose has no structure a
     replay could get right or wrong.
+
+    **``revised`` is what the fix round returns, and the two rows may not share
+    one passage.** A fix round composing the document already on disk answered
+    its review with nothing and the run refuses it
+    (``run._assemble_overview``), so a table handing both rows the same words
+    would script every replayed fix as a failure — and would do it in the one
+    place a replay is supposed to stand in for a seat that did its job.
     """
-    return clean(f"This corpus is synthetic and has no orientation to give.\n\n{SYNTHETIC_NOTE}")
+    passage = "This corpus is synthetic and has no orientation to give."
+    if revised:
+        passage += " A reader starts at the index, there being nothing else to point at."
+    return clean(f"{passage}\n\n{SYNTHETIC_NOTE}")
 
 
 #: Every calling row of the step table and the shape each answers. Named rather
@@ -508,9 +518,9 @@ def meta_docs() -> Scenario:
 #: boundary check, and that belongs in the suite rather than in a run.
 SCENARIOS: Mapping[str, Scenario] = MappingProxyType(
     {
-        "p5.docs": meta_docs(),
+        "ov.docs": meta_docs(),
         "p5.review": clean(verdict()),
-        "p5.fix": meta_docs(),
+        "p5.fix": meta_docs(revised=True),
     }
 )
 
@@ -536,14 +546,14 @@ def dry_run_invoker() -> "ReplayInvoker":
     """The ``Invoker`` ``--dry-run`` selects.
 
     Named here rather than assembled at the call site so that ``cli.py`` keeps
-    no stage knowledge: it chooses between the real transport and this one, and
+    no stage knowledge: it chooses between the real invoker and this one, and
     which steps exist stays a fact of the step table and this module.
     """
     return ReplayInvoker(green_run())
 
 
 class ReplayInvoker:
-    """``transport.Invoker`` that runs a scenario instead of a process (``--dry-run``)."""
+    """``inference.Invoker`` that runs a scenario instead of a process (``--dry-run``)."""
 
     def __init__(self, scenario: Scenario) -> None:
         self._scenario = scenario
@@ -560,16 +570,17 @@ class ReplayInvoker:
         argv: Sequence[str],
         cwd: Path,
         env: Mapping[str, str],
-        brief_path: Path,
+        prompt_path: Path,
     ) -> "_ReplayInvocation":
         del env  # a synthetic call has no environment to overlay
         # A replayed run still composes and persists a real brief; a scenario
-        # that cannot see one is being handed a call that was never composed.
+        # that cannot see one is being handed a call that was never composed,
+        # and the brief's own filename is what says which row it answers.
         runlog.require(
-            brief_path.is_file(), "a replayed call still requires the composed brief on disk", brief=str(brief_path)
+            prompt_path.is_file(), "a replayed call still requires the composed brief on disk", brief=str(prompt_path)
         )
 
-        context = ReplayContext(argv=tuple(argv), cwd=cwd, brief_path=brief_path, call_index=self._calls)
+        context = ReplayContext(argv=tuple(argv), cwd=cwd, brief_path=prompt_path, call_index=self._calls)
         self._calls += 1
         response = self._scenario(context)
         _log.debug(

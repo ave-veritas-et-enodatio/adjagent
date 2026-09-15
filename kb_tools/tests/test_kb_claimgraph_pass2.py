@@ -793,7 +793,12 @@ def test_the_answer_vocabulary_is_closed_and_total(block):
         (Outcome.SILENCE, ask.TRANSPORT_ATTEMPTS),
         (Outcome.TIMEOUT, ask.TRANSPORT_ATTEMPTS),
         (Outcome.TRANSPORT_FAILURE, ask.TRANSPORT_ATTEMPTS),
+        # The two the driver's own transport classified and this path did not:
+        # a result the CLI marked errored is not an answer to validate, and a
+        # command that is not runnable is an environment fault reported once.
+        (Outcome.RESULT_ERROR, ask.TRANSPORT_ATTEMPTS),
         (Outcome.CLI_REJECTION, 1),
+        (Outcome.SPAWN_FAILURE, 1),
     ],
 )
 def test_a_call_that_did_not_complete_stops_the_stage_on_the_layer_s_own_verdict(declared, outcome, calls):

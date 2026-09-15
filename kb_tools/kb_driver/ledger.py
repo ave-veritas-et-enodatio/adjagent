@@ -14,8 +14,8 @@ a driver exit code in exactly one place:
 |---|---|---|
 | ``preflight`` | 0 · 1 · 2 | 0 · 14 · 14 |
 | ``graph-init`` | 0 · 1 · 2 · 3 | 0 · 11 · 14 · 14 |
-| ``start-build`` | 0 · 5 · 4 · 6 · 2 | 0 · 0 (already started reads as done) · 14 · 17 · 14 |
-| ``advance-step`` | 0 · 4 · 6 · 2 | 0 · 14 · 17 · 14 |
+| ``start-build`` | 0 · 5 · 4 · 6 · 2 | 0 · 0 (already started reads as done) · 14 · 19 · 14 |
+| ``advance-step`` | 0 · 4 · 6 · 2 | 0 · 14 · 19 · 14 |
 | ``show-status`` | 0 · 2 | 0 · 14 |
 | ``kb_docgraph`` | 0 · 1 · 2 | 0 · 11 · 14 |
 | ``kb_claimgraph`` | 0 · 1 · 2 · 3 | 0 · 11 · 14 · 14 |
@@ -27,14 +27,6 @@ An rc outside its op's vocabulary is a driver/tool contract violation, not a
 pipeline outcome: it routes through :func:`runlog.require` and exits 15.
 That rule is why the write ops' rc 8 has a row at all: enrolling it is what
 keeps "the file was contended" from reading as "the tool is broken".
-
-**Design note — the `postcondition` row.** `kb_pipeline` exit 6 (a stage's
-declared artifact is missing at record time) has no row in the driver's exit
-vocabulary. It is mapped
-to 17 (contract-failure: "a step could not produce its declared output shape"),
-which is the closest listed meaning; 17's baton text names a brief/worker
-mismatch, which is right for a worker-written artifact and only approximately
-right for the charter. Flagged rather than harmonized.
 
 **Dependency note.** ``ledger`` depends on ``runlog``. Naming an exit code
 additionally requires ``baton``, the stateless exit-code vocabulary; copying
@@ -87,13 +79,13 @@ _START_BUILD_EXITS = {
     2: baton.EXIT_ENVIRONMENT,
     4: baton.EXIT_ENVIRONMENT,
     5: baton.EXIT_OK,  # already started: the boundary exists, which is what was wanted
-    6: baton.EXIT_CONTRACT,
+    6: baton.EXIT_COVERAGE,  # a stage's own declared output is missing at record time
 }
 _ADVANCE_STEP_EXITS = {
     0: baton.EXIT_OK,
     2: baton.EXIT_ENVIRONMENT,
     4: baton.EXIT_ENVIRONMENT,  # refused out of order
-    6: baton.EXIT_CONTRACT,
+    6: baton.EXIT_COVERAGE,  # a stage's own declared output is missing at record time
 }
 _SHOW_STATUS_EXITS = {0: baton.EXIT_OK, 2: baton.EXIT_ENVIRONMENT}
 # The two build front ends. rc 1 is a red gate in both — a check the tool ran
@@ -113,7 +105,7 @@ _CLAIMGRAPH_EXITS = {
 }
 # The validator's three rungs, which keep "the validator could not run" from
 # reading as "the design is broken": rc 1 is a FAILing check (exit 11, a finding
-# a revision round can close), rc 2 is an unreadable input (exit 14).
+# a repair round can close), rc 2 is an unreadable input (exit 14).
 _VALIDATE_EXITS = {0: baton.EXIT_OK, 1: baton.EXIT_GATE_RED, 2: baton.EXIT_ENVIRONMENT}
 
 #: How many times a contended write op is re-run before its rc is mapped. The
@@ -218,7 +210,7 @@ def _run(argv: Sequence[str], *, repo_root: Path, relay: bool) -> subprocess.Com
             # UnicodeDecodeError out of `subprocess.run` — past `except OSError`
             # below, past the rc mapping, and out of the driver as a traceback
             # with no baton and no exit.json. Undecodable bytes become U+FFFD
-            # and the row keeps its verdict (transport.py does the same).
+            # and the row keeps its verdict (`inference.claude` does the same).
             errors="replace",
             check=False,
         )
@@ -431,32 +423,6 @@ def graph_init(repo_root: Path, *, runner: str | None = None) -> Outcome:
     )
 
 
-def revision_entry(repo_root: Path) -> Outcome:
-    """``pre.revision-entry`` (revision builds): kb-build.md's revision entry contract.
-
-    The runner targets installed (else exit 14), then ``kb-verify`` green (else
-    exit 11). The first is a library read — no ledger is touched — and it is an
-    environment fault with a named restore, not a gate failure.
-
-    Revision entry deliberately checks nothing else. A presence check on the
-    KB's local format contract — ``<kb-root>/CLAUDE.md`` — would look like a
-    proxy for "this spine is sound", but that file is stamped at the validation gate
-    rather than at seed time, so such a check would refuse entry to any KB
-    whose build halted earlier. ``kb-verify`` below is what actually answers
-    whether the spine is sound.
-    """
-    if not kb_util.targets_installed(repo_root):
-        return Outcome(
-            baton.EXIT_ENVIRONMENT,
-            detail=(
-                f"the KB runner targets are not installed at {repo_root} — restore: run "
-                f"'python3 -m kb_tools.kb_util {kb_util.OP_INSTALL_TARGETS}' from the repo root "
-                f"and commit the change",
-            ),
-        )
-    return run_target(repo_root, target=kb_util.TARGET_VERIFY)
-
-
 def record_start(repo_root: Path, *, charter: str) -> Outcome:
     """``start.record``: ``start-build``; rc 5 (already started) reads as done.
 
@@ -607,9 +573,8 @@ def run_target(repo_root: Path, *, target: str) -> Outcome:
     nonzero exit — and exit 11 says the KB failed a check it was really put
     through. Left unchecked, a repo that never installed the targets would stop
     the build as though its knowledge base were broken.
-    ``kb_util.targets_installed`` is the same predicate ``revision_entry``
-    already applies at the revision entry contract; running a target is the
-    other place the answer decides an exit.
+    ``kb_util.targets_installed`` is the predicate behind that reading, asked
+    here because running a target is where the answer decides an exit.
 
     A gate's report is **not relayed**. The display relay carries what a
     session pastes into its message body, and a non-barrier terminal baton says

@@ -15,7 +15,8 @@ templates/              template sources — maintenance-only, not session-visib
   family/               *.toml — one per model family, named for it (claude.toml, gemma-4.toml); the overlay anchor text a tuned render fills, schema in templates/family/README.md
   shared-chunks.toml  the single source of shared text (chunks) for both template types
 gen-defs.py             renders templates/ into a named output root's surfaces, and checks them
-tests/                  gen-defs.py's test suite — project space, never installed
+dupe_sweep.py           the duplication sweep — enumerates one-idea-two-places candidates over templates/ and kb_tools/ (justfile `sweep-prose` / `sweep-python`, CONVENTIONS.md); emits candidates for a reader to adjudicate, never verdicts, so it is an instrument and not a gate
+tests/                  the root tools' test suite — gen-defs.py and dupe_sweep.py — project space, never installed
 user-config/            published operator baseline (~/.claude/CLAUDE.md) + its README
 ```
 

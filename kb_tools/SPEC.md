@@ -21,9 +21,9 @@ run through it, and this toolchain builds and checks both:
 
 1. **Topography graph** (navigation) — a hyperlink tree: `entry-point.md` →
    domain `index.md` → subtopic `index.md` → leaf. Every non-root document
-   opens with an up-link to its parent. A container's `kind`
-   (`entry-point` | `index` | `leaf` | `leaf-as-index`) is its
-   structural-position label only; it does **not** encode claim-graph flavor.
+   opens with an up-link to its parent. A document's `kind`
+   (`entry-point` | `index` | `leaf`) is its structural-position label only;
+   it does **not** encode claim-graph flavor.
 2. **Claim graph** (the metadata spine) — an acyclic graph whose nodes are
    the corpus's formal results and whose edges record how they depend on and
    reinforce one another. Node kinds and edge classes are enumerated in
@@ -36,10 +36,9 @@ run through it, and this toolchain builds and checks both:
    against which corpus, is pinned in `<kb-root>/CLAUDE.md` — see Project
    Scoping, below.
 
-**Leaves are verbatim.** A leaf is a faithful translation of its source — no
-paraphrase, reframing, or audience simplification. This is what lets the KB
-stand in for the source, and what makes a divergence resolvable by the
-canonical direction stated next.
+**A leaf's body is verbatim.** This is what lets the KB stand in for the
+source: the derivation described next is mechanical the whole way, so no
+leaf body diverges from the corpus for anything to resolve.
 
 ### Leaf Bodies Are Derived
 
@@ -54,17 +53,17 @@ upstream to charge it to. This is what makes the verbatim property above a
 guarantee, on this path, rather than an instruction: a translation nobody
 performs cannot paraphrase.
 
-**Hand-authoring a leaf's body is the inversion, not the maintenance-path form
-of the computed case.** Adding and editing leaves, and migrating finished
-work into canonical ones, is `kb-maintainer`'s ordinary job (ARCHITECTURE.md,
-The Agent Set, the `kb-maintainer` row). The first hand-edit to a leaf's
-body, or the first claim minted or wired by hand, is the moment that leaf
-stops deriving from an extent of the corpus and becomes one: there is no
-longer an upstream original for it to be verbatim against, because past that
-moment it **is** the source. What does not change across that moment: a
-leaf's metadata still reaches the file only through the write API, and every
-derived field on it is still derived, never authored, whichever path wrote
-the body beside it.
+**Hand-authoring a leaf is a different origin, not the inversion of the
+computed case.** Adding and editing leaves, and migrating finished work into
+canonical ones, is `kb-maintainer`'s ordinary job (ARCHITECTURE.md, The Agent
+Set, the `kb-maintainer` row). A leaf the build produced is a mechanical
+rendering of one extent of the corpus, and repairing it means repairing it
+against that extent. A leaf a maintainer authors — migrating `session/` work,
+say — was never a rendering of anything, so it is the KB's own text from the
+start: there is no upstream extent for it to derive from or be checked
+against. What is the same across both origins: a leaf's metadata still
+reaches the file only through the write API, and every derived field on it is
+still derived, never authored, whichever origin wrote the body beside it.
 
 What is *said about* a leaf is inference's still: which registered claims it
 establishes, or the reason it establishes none. That declaration is metadata and
@@ -76,11 +75,13 @@ words (ARCHITECTURE.md, The Leaf-Body Renderer and The Driver).
 
 **The topography graph's shape is a function of the source, computed, down to
 the leaves. No inference authors it.** The corpus's own segmentation decides the
-tree: a source section is one KB document, a section holding no subsections is a
-leaf, and the hierarchy above them is the hierarchy the source declares. A KB
-built twice from one corpus has one tree, and the tree can be recomputed from
-the corpus at any point in a build rather than read back from something a stage
-wrote down.
+tree: a source section holding no subsections is one KB document, a leaf; a
+section that holds subsections is an index, and the prose it owns ahead of them
+becomes a leaf of its own beneath it — so a document with children carries no
+source of its own. The hierarchy above them is the hierarchy the source
+declares. A KB built twice from one corpus has one tree, and the tree can be
+recomputed from the corpus at any point in a build rather than read back from
+something a stage wrote down.
 
 Two properties follow, and they are what the toolchain guarantees rather than
 asks for:
@@ -117,19 +118,11 @@ judgement stage exists and is exercised on every build; today its heuristic
 names no section and the skeleton passes through unaltered (ARCHITECTURE.md, The
 Derived Skeleton).
 
-**Canonical direction.** Two directions run through this, and only one of
-them is permanent. Within the KB, the **`.index/*.jsonl` artifacts** and
-every derived metadata field (`solidity`, `build_status`, `build_band`,
+**Derived-layer direction.** Within the KB, the **`.index/*.jsonl` artifacts**
+and every derived metadata field (`solidity`, `build_status`, `build_band`,
 `subtree-claims`, leaf-reference footers) are always derived from the
 authored Markdown, never the reverse — on any disagreement the derived layer
-is rebuilt, unconditionally. Between the **source corpus** and the **KB
-Markdown**, canonicality runs from corpus to KB only up to the first
-hand-authored leaf body or the first claim minted or wired by hand: until
-then, the KB's leaves and claim graph are derived from the corpus, and a
-disagreement is resolved by rebuilding the KB to match it. That first
-hand-authored act inverts the direction for good: from then on the KB
-Markdown is canonical, and the corpus — if it is kept at all — is a rendered
-artifact of it, not the other way around.
+is rebuilt, unconditionally (Derived Metadata, Defined, below).
 
 ### The Document-Tree Contract
 
@@ -446,7 +439,9 @@ what other documents and code cite by point number.
     are dropped; a title page announces itself structurally, so eliding it is
     a named-marker test rather than a heuristic about what leading content
     looks like. An abstract is not apparatus — it states the document's
-    claims — and is retained as the volume index's body. Document metadata
+    claims — and is retained, with whatever else precedes the volume's first
+    heading, in a leaf beneath the volume index; the index keeps its own
+    heading. Document metadata
     splits by the same criterion, and **the criterion classifies while the list
     only enumerates the keys it has already been applied to**: the volume's
     title and its abstract are content; a byline, the author's institutional
@@ -711,8 +706,8 @@ be multiplied. A support's on-point fraction is one edge weight rather than
 a chain, and so stays multiplicative.
 
 Hand-editing a derived field is a `refresh-fixable` verify failure — the
-canonical-direction rule above is what `kb-verify`'s freshness gate enforces
-mechanically (ARCHITECTURE.md, The Derived Index).
+derived-layer direction rule above is what `kb-verify`'s freshness gate
+enforces mechanically (ARCHITECTURE.md, The Derived Index).
 
 ### The Claim-Graph Sheet
 
@@ -749,8 +744,8 @@ machine's job, over the records, not the picture's.
 ## Agent-Mediated Editing
 
 KB navigation and editing go **through** the agent set (the project contract
-mandates it), because the agents carry the canonical-direction discipline
-and the verbatim/derived rules that raw file edits would silently violate.
+mandates it), because the agents carry the verbatim and derived-field
+discipline that raw file edits would silently violate.
 The roster, and which agent owns which lifecycle stage, is in ARCHITECTURE.md,
 The Agent Set.
 
@@ -847,6 +842,26 @@ mechanically (ARCHITECTURE.md, The Driver). **A barrier is an *exit*, never
 a prompt**: the driver never blocks on a human, so the answer arrives on the
 next invocation through `--decide` or a config table.
 
+**The build is driver-controlled end to end, and there is no coordinator
+seat.** One process sequences a build: it dispatches every seat itself, reads
+every tool's exit code itself, and records every boundary itself. Nothing in
+this contract, and no artifact this toolchain produces, admits a second
+controller — human or agent — standing between an invocation and the
+driver's own step table; a build has exactly one process directing it, from
+`start` through its last stage.
+
+**A build has exactly two modes, fresh and resume, and resume is never
+configured.** Which one an invocation performs is read off the ledger
+itself — recorded stages mean resume, none mean fresh — re-derived on every
+invocation rather than chosen on a command line or in a config table.
+Revising a finished KB is not a third mode: it is the maintenance path's
+work, a maintainer and a human cooperating through the write API, and no
+driver invocation expresses it. The one thing a fresh launch must be guarded
+against is destroying what a prior build already wrote: an invocation
+finding `kb-root/` already `populated` (`kb_util.kb_root_state`) refuses,
+naming what it found; finding it `absent`, or `spine-only` — holding only
+the derived index, with no authored byte to lose — it proceeds.
+
 **A build may spend no inference and still be a finished build.**
 `--no-inference` drops every step that would cost a model call and the walk
 carries on past it, so the run produces a real KB built without them rather
@@ -860,6 +875,37 @@ driver invokes. `--through <stage>` is the one bound, naming the last stage to
 walk by stage id or by the stage's own display name. **A bounded run is not a
 failed one**: it leaves the ledger standing where it stopped, and the next
 invocation resumes there rather than redoing what landed.
+
+**Expensive work that succeeded is never discarded, and that is what decides
+where a stage boundary falls.** A step that spends inference is followed by its
+own recorded boundary, with no step that can fail standing between the two. The
+shape this forbids is cheap work, then expensive work that succeeds, then a cheap
+step whose failure throws that result away: the resume re-spends what had already
+been earned, and nothing in the ledger ever showed that it was. So a stage is as
+small as the most expensive thing in it that must not be repeated — where one
+stage would hold two such steps, each takes a boundary of its own. The
+classification this rests on already exists and already decides what
+`--no-inference` drops; it decides this too, and a step tagged as spending
+inference without a boundary behind it is a defect in the stage table rather than
+a risk to be managed at run time.
+
+**This is what makes resumption free of indeterminate state rather than merely
+tolerant of it.** Every boundary is a commit, every write lands only on success,
+and a resume returns to the last boundary and continues — so there is no state
+where work is present in the tree and absent from the ledger for a later
+invocation to reconcile, diagnose, or ask a human about. An output that no
+boundary accounts for is discarded rather than trusted, which is safe precisely
+because the rule above guarantees nothing expensive is ever in that position.
+
+**Resumption's state has exactly one home, and it is the working tree —
+never scratch.** `.claude-temp/` is disposable: wiped wholesale, without
+warning, by the tooling that manages it. A run's own evidence — its log, the
+calls it made, the briefs it composed, the barriers it raised — may
+legitimately live there, because nothing resumes from it; a person reads it
+after the fact, and its loss costs a diagnosis, never a rebuild. Where
+resumption needs a home no other artifact already supplies, the ledger is
+that home: a boundary is a commit, and a commit is in the working tree by
+construction.
 
 **The build states what it did without.** A stage's ledger boundary is
 recorded either way, and where a step was dropped the boundary names it: what
@@ -978,9 +1024,11 @@ structured `- <field>:` bullets, a `<!-- id: -->` or
 authority is cited as `["<excerpt>"](<kb-path>#<anchor>)`, the excerpt
 quoted verbatim (whitespace-normalized), one line, at most 240 characters.
 
-Scope is authored content: **leaf bodies are exempt** (verbatim source;
-their obligations live in frontmatter and markers) and **`.index/` is out of
-scope** (derived space — nothing under it is authored). Every check is
+Scope is authored content: **leaf bodies are out of scope** (converted corpus
+prose — an id or invariant name inside one is the source's own word, not a
+citation this KB makes; a leaf's own obligations live in frontmatter and
+markers, which are authored) and **`.index/` is out of scope** (derived
+space — nothing under it is authored). Every check is
 fence-aware: an example inside a fence is documentation. The one exemption
 for prose is a **declaration section** of the framework source — an
 invariant's own `### INVARIANT-*` section may name its siblings; the same
@@ -1065,7 +1113,7 @@ file's prose outside those sections may not.
   every shared computation have exactly one definition; consumers import it.
   A change flows through one constant, not scattered literals.
 - **Derived-vs-authored split.** Derived Metadata, Defined, above.
-- **Verbatim leaves + canonical direction.** What a KB Is, above.
+- **Verbatim leaves + derived-layer direction.** What a KB Is, above.
 
 ## Project Scoping
 
@@ -1094,9 +1142,23 @@ counts.
 
 **Who writes the pin.** The pin is charter prose, not metadata: no write op
 composes it and no op takes it as a value. **The build run writes it** into
-`<kb-root>/CLAUDE.md` as soon as the build is open, from what the project's
-charter states — never an agent in the KB set, which authors neither
-orientation doc.
+`<kb-root>/CLAUDE.md`, from what the project's charter states — never an agent
+in the KB set, which authors neither orientation doc. A build given no charter
+has no scope statement to write, and the document says so in as many words
+rather than carrying a blank section: a KB nobody pinned and one whose pin went
+missing are different facts, and the build is the only thing that can tell them
+apart.
+
+**When it is written, and why not earlier.** At the validation gate, with the
+rest of the KB's readiness documents — not when the build opens. The pin's home
+is a file inside `kb-root/`, and until the document graph writes the tree that
+directory holds nothing outside `.index/`; any write into it before then turns
+`kb_util.kb_root_state` from `spine-only` into `populated`, which is the
+reading a fresh build is refused on. So a build-open write would carry the pin
+by making the build that performed it refusable — the one outcome the pin is
+not worth. By the gate the tree is populated already, the stamp cannot change
+that answer, and every stage after the gate runs against a KB that carries its
+pin.
 
 The run is the shell-resident driver process a person starts in a terminal,
 and it is the only session there is. `/kb-build` prints the command line that
@@ -1105,10 +1167,11 @@ revision of this section assigned the pin to "the session holding
 `/kb-build`", which named a session that does not exist — the equivalent of a
 voicemail greeting giving another number. Agent-assisted launch and
 management of a run is later work, and the straightforward case has to work
-first: the primary process in a user's terminal. `stamp_readiness_docs`,
-`phase-3a`'s pre-commit hook, is only-if-absent: against a file the pin
-already occupies it writes nothing and reports `present, left as authored`.
-So where the pin arrived first, the canned text in
-`kb_tools/installed/CLAUDE.md.tmpl` never lands and the file written at
-the gate is the KB's whole orientation — it must carry that text as well
-as the pin.
+first: the primary process in a user's terminal.
+
+**One file arrives once, carrying both halves.** `kb_tools/installed/CLAUDE.md.tmpl`
+holds the KB's standing orientation and a slot for the pin, and the stamp fills
+the slot as it writes the file — so there is no path on which the document
+lands asserting a pin it does not carry. The stamp stays only-if-absent: against
+a `CLAUDE.md` a project authored for itself it writes nothing and reports
+`present, left as authored`, that project's pin being its own to state.

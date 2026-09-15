@@ -24,6 +24,28 @@ author adds a section. It is cut out here and becomes ``<volume>/references.md``
 a leaf under the volume index. The words are relocated, not dropped, so the
 partition still accounts for every one of them.
 
+**A document that has children carries no source of its own.** The prose a
+section owns ahead of its first subsection, and the volume's abstract and
+lead-in ahead of its first heading, are source like any other extent — so they
+become a leaf of that node rather than staying in a container. An index that
+holds source is a document a reader has to open to find out whether it is a
+signpost or an argument, and every consumer downstream then has to ask the same
+question of every index it walks. What a container keeps is its own heading,
+its up-link, its child list, and whatever summary a later stage writes below
+them.
+
+**The heading stays; only the prose beneath it moves.** A container's heading is
+what names it to a reader who opened it, and nothing downstream puts one back —
+so a container that gave its heading away would be a document with no title for
+good, and the tree would hold two shapes of index depending on whether a section
+happened to write a lead-in. The leaf gets a supplied heading of its own, the
+way the reference list does.
+
+That supplied heading is why :func:`_supplied_titles` counts one per lifted
+leaf. **The rule there is that the accounting balances**: a title this stage
+supplies is listed exactly as many times as a segment carries it, which is what
+keeps the lift a relocation rather than a word the split invented.
+
 **The two sequences are asserted aligned before either is used** — equal count,
 matching levels, matching titles, in order. They are the same headings from the
 same source, so a misalignment means a filter added or dropped one, and it fails
@@ -84,6 +106,20 @@ ASSET_DIRNAME = "assets"
 #: ``class="references"``) and it slugs to the segment the path already wanted,
 #: so the document's name and its location read the same.
 REFERENCES_TITLE = "References"
+
+#: The leaf a container's own prose is lifted into. A constant and not the
+#: section's own heading text, which would title the leaf as if it were the whole
+#: section — the confusion between a container and a leaf is what this lift exists
+#: to remove, and repeating the section's name in its child list would reintroduce
+#: it under a different path. The section keeps its own heading, so a reader who
+#: opened the index is told which section this is the overview of.
+#:
+#: Like :data:`REFERENCES_TITLE` this stage supplies it: it heads a leaf no source
+#: heading stands behind. So it heads that leaf's segment *and* is accounted in
+#: :func:`_supplied_titles`, once per leaf emitted — the two go together, and a
+#: change to either alone is what makes check B report an invented or a dropped
+#: word.
+OWN_PROSE_TITLE = "Overview"
 
 #: Citeproc's bibliography, keyed on the marker citeproc itself puts on it: the
 #: identifier ``refs`` and the class ``csl-bib-body``. Pandoc names this block
@@ -330,7 +366,7 @@ def split_bibliography(body: str) -> tuple[str, str]:
 
 
 def build_tree(*, stem: str, markdown: str, outline: Outline, volume_directory: Path) -> VolumeTree:
-    """The whole of stage 2 for one volume: align, rank, place, rewrite."""
+    """The whole of stage 2 for one volume: align, rank, lift, place, rewrite."""
     frontmatter = parse_frontmatter(markdown)
     content, bibliography = split_bibliography(frontmatter.body)
     found = headings(content)
@@ -370,6 +406,7 @@ def build_tree(*, stem: str, markdown: str, outline: Outline, volume_directory: 
     references = _references_document(bibliography, parent=index)
     if references is not None:
         index.children.append(references)
+    own_prose = _lift_own_prose(index)
 
     directory = _volume_directory_name(title, stem)
     _assign_paths(index, directory=directory)
@@ -380,10 +417,18 @@ def build_tree(*, stem: str, markdown: str, outline: Outline, volume_directory: 
             f"levels {sorted(ranks)} — point 2's ranking places one tree level per distinct heading level."
         )
 
-    label_paths = {
-        label: (index.path if section < 0 else ordered[section].path)
-        for label, section in sorted(outline.label_section.items())
-    }
+    # Point 7 asks an anchor to land on the node that holds the label, and the
+    # lift splits a section's labels in two. A heading's own identifier stays
+    # with the heading, which stays with the container; everything else a section
+    # declares before its first subsection — a Div or Span id, an equation's
+    # in-source ``\label`` — sits in the prose, and follows it to the leaf. A
+    # label past the first subsection heading maps to that subsection and neither
+    # half reaches it.
+    holders = {leaf.parent.path: leaf.path for leaf in own_prose if leaf.parent is not None}
+    label_paths: dict[str, str] = {}
+    for label, section in sorted(outline.label_section.items()):
+        declared_in = index.path if section < 0 else ordered[section].path
+        label_paths[label] = declared_in if label in outline.header_labels else holders.get(declared_in, declared_in)
     if references is not None:
         # The AST places these labels in the section the bibliography sat in.
         # Their content is in this document now, and point 7 asks an anchor to
@@ -401,13 +446,18 @@ def build_tree(*, stem: str, markdown: str, outline: Outline, volume_directory: 
         index=index,
         label_paths=label_paths,
         header_labels=set(outline.header_labels),
-        # The two titles this stage supplies rather than reads off the source —
-        # the volume's, which for a volume declaring none is its filename stem,
-        # and the reference list's, which answers to no heading at all — are
-        # accounted on both sides of the partition. ``frontmatter.body`` is the
-        # rendering *before* the bibliography was lifted out of it, which is what
-        # puts the lift itself under check B rather than beside it.
-        content_tokens=[token for name in _supplied_titles(title, bibliography) for token in markdown_tokens(name)]
+        # The titles this stage supplies rather than reads off the source — the
+        # volume's, which for a volume declaring none is its filename stem; the
+        # reference list's, which answers to no heading at all; and one per leaf
+        # the prose lift emitted — are accounted on both sides of the partition.
+        # ``frontmatter.body`` is the rendering *before* the bibliography was
+        # lifted out of it, which is what puts the lift itself under check B
+        # rather than beside it.
+        content_tokens=[
+            token
+            for name in _supplied_titles(title, bibliography, own_prose=len(own_prose))
+            for token in markdown_tokens(name)
+        ]
         + markdown_tokens(frontmatter.abstract)
         + markdown_tokens(frontmatter.body),
         distinct_levels=len(ranks),
@@ -433,8 +483,54 @@ def _references_document(bibliography: str, *, parent: Document) -> Document | N
     )
 
 
-def _supplied_titles(title: str, bibliography: str) -> list[str]:
-    return [title, REFERENCES_TITLE] if bibliography else [title]
+def _lift_own_prose(node: Document) -> list[Document]:
+    """Depth-first: every node that has children gives the prose below its heading to a leaf.
+
+    Returns the leaves emitted, in no particular order — the caller needs their
+    count for :func:`_supplied_titles` and their parents for the label map.
+
+    **The heading stays with the container and the prose moves.** A container
+    that gave its heading away would render as an up-link and a child list and
+    nothing else, and nothing downstream writes one back. The leaf carries
+    :data:`OWN_PROSE_TITLE` as its own heading instead, the way the reference
+    list carries one, and the prose beneath it is the container's byte for byte —
+    so check B sees the same relocation the bibliography lift already is.
+
+    The leaf goes **first** in the child list because its content came first: the
+    prose a section owns runs from its heading to its first subsection, and point
+    4 asks an index to list its children in the source's own document order.
+
+    A node with nothing below its heading has nothing to lift and gets no leaf.
+    That is the plain emptiness test :func:`_references_document` makes of a
+    bibliography, not a rule about headings: what would be written is a leaf with
+    a supplied title and no content, which is a document a consumer has to open
+    to learn it says nothing.
+    """
+    lifted: list[Document] = []
+    for child in node.children:
+        lifted += _lift_own_prose(child)
+    if not node.children:
+        return lifted
+    heading, _, prose = node.segment.partition("\n")
+    if not prose.strip():
+        return lifted
+    leaf = Document(title=OWN_PROSE_TITLE, rank=node.rank + 1, segment=f"# {OWN_PROSE_TITLE}\n{prose}", parent=node)
+    node.children.insert(0, leaf)
+    node.segment = heading
+    return [*lifted, leaf]
+
+
+def _supplied_titles(title: str, bibliography: str, *, own_prose: int) -> list[str]:
+    """Every title this stage supplies rather than reading off a source heading.
+
+    Listed exactly as many times as a segment carries it — the volume's own title
+    once, the reference list's once where citeproc rendered one, and
+    :data:`OWN_PROSE_TITLE` once per leaf the lift emitted. **That balance is the
+    rule**: these are the left side of check B, so a title in a segment and not
+    here reads as a word the split invented, and one here and in no segment reads
+    as a word it dropped.
+    """
+    return [title, *([REFERENCES_TITLE] if bibliography else []), *([OWN_PROSE_TITLE] * own_prose)]
 
 
 def _assert_aligned(*, stem: str, headers: list[Header], found: list[Heading]) -> None:

@@ -290,13 +290,14 @@ def test_every_stage_that_lost_rows_records_which_ones(walked_without_inference:
     }
 
     noted = {stage for stage, body in bodies.items() if config.NO_INFERENCE_FLAG in body}
-    assert noted == {stage for stage in kb_pipeline.STAGE_IDS if steps.inference_rows(stage, build_mode="fresh")}
+    assert noted == {stage for stage in kb_pipeline.STAGE_IDS if steps.inference_rows(stage)}
     # Not `depends-attributed`: its row drops in no build. The narrowing
     # settles what containment decides with no model, and the open pairs are
-    # reported by the tool rather than dropped by the table.
-    assert noted == {"claims-discovered", "phase-5"}
+    # reported by the tool rather than dropped by the table. The tail's two are
+    # the draft and the review, a model call each and a boundary each.
+    assert noted == {"claims-discovered", "overview-drafted", "phase-5"}
     for stage in noted:
-        for step_id in steps.inference_rows(stage, build_mode="fresh"):
+        for step_id in steps.inference_rows(stage):
             assert step_id in bodies[stage], stage
 
 

@@ -64,13 +64,6 @@ class Parse(StrEnum):
     SCOPE = "scope"
 
 
-class Condition(StrEnum):
-    """When a conditional row runs. The run's ``build_mode`` decides which."""
-
-    FRESH = "fresh"
-    REVISION = "revision"
-
-
 class LedgerOp(StrEnum):
     """The sanctioned ledger ops. Invoked as a subprocess by ``ledger.py``, never imported.
 
@@ -82,12 +75,13 @@ class LedgerOp(StrEnum):
     ADVANCE_STEP = kb_util.OP_ADVANCE_STEP
 
 
-# The two revision-series letters `next_round` counts by. `r` is every
-# current loop row's own series; `g` is a second series a row can open for a
-# revision reached by a different path than its first pass — no current row
-# does. A single ledger read at round-creation time decides which series a
-# new round joins, and the letter rides the filename so both counters survive
-# resume without durable state.
+# The two revision-series letters a capped loop's findings are named by. `r` is
+# every current loop row's own series; `g` is a second series a row can open for
+# a revision reached by a different path than its first pass — no current row
+# does. The letter rides the filename so that one stage's two series can never
+# name one file. It labels and never counts: a round number is the running
+# process's own, and the stage's boundary commit is what records the rounds it
+# ran.
 SERIES_INITIAL = "r"
 SERIES_GATE = "g"
 
@@ -105,13 +99,18 @@ SERIES_GATE = "g"
 # it there, and its cards render the commands that write it. A card that
 # spelled its own path could send an artifact somewhere the tool never looks.
 SCRATCH_ROOT = kb_pipeline.SCRATCH_RELROOT
-CHARTER = "build-charter.md"
 
-# Every capped loop's evidence lands in `review/` under one filename grammar,
-# because every stage and both series share one round rule — `1 + max(N)`
-# over `-<series><N>-`, never a file count. One format string, so a stage that
-# writes three files per round and a stage that writes one cannot end up with
-# two readings of the same name.
+# The charter is not a member of this layout and may not become one: it is an
+# input that must already stand when the build opens, and the `start` boundary
+# names its path permanently, so it lives at `kb_pipeline.CHARTER_RELPATH` in
+# the tracked tree. Staging deletes this one wholesale.
+
+# Every capped loop's evidence lands in `review/` under one filename grammar, so
+# that a reader can tell one round's findings from another's and one author's
+# from another's. One format string, so a stage that writes three files per round
+# and a stage that writes one cannot end up with two readings of the same name.
+# Nothing reads a round number back out of a name: a file here is evidence, and
+# the round it belongs to is the running process's own count.
 _FINDINGS_FMT = "review/{stage}-{series}{round}-{author}.md"
 FINDINGS = _FINDINGS_FMT.format(stage="<stage>", series="<series>", round="<N>", author="<author>")
 
@@ -121,12 +120,13 @@ def findings(*, stage: str, series: str, round_number: int, author: str) -> str:
     return _FINDINGS_FMT.format(stage=stage, series=series, round=round_number, author=author)
 
 
-# The seat's whole half of the meta-documentation stage: one prose answer, which
+# The seat's whole half of the meta-documentation stages: one prose answer, which
 # the driver persists here and then substitutes into the packaged overview
 # template beside the counts it read out of the KB. Deliberately not under
-# `review/` — that grammar is the findings loop's and a file there is a round —
-# and deliberately one path rather than one per round: the latest answer is the
-# one the document stands on, and the round bookkeeping is the loop's own.
+# `review/` — that grammar is the findings loop's, and a file there belongs to
+# one of its rounds — and deliberately one path rather than one per round: the
+# latest answer is the one the document stands on, and the round bookkeeping is
+# the loop's own.
 _PROSE_FMT = "{stage}/overview-prose.md"
 OVERVIEW_PROSE = _PROSE_FMT.format(stage="<stage>")
 
@@ -140,7 +140,6 @@ def overview_prose(*, stage: str) -> str:
 #: block: every path the driver constructs or briefs a seat with is a member,
 #: so single-sourcing is a question asked of a tuple instead of a region.
 SCRATCH_LAYOUT: tuple[str, ...] = (
-    CHARTER,
     FINDINGS,
     OVERVIEW_PROSE,
 )
@@ -227,8 +226,8 @@ NOTHING = "(none)"
 #: The path slots a brief must carry a real path for. Each names something an
 #: earlier stage has already produced, so an absent one is that stage having
 #: failed quietly rather than an input this build may not have: ``kb-root`` is
-#: the tree the head wrote, ``readme-path`` is what ``p5.docs`` assembles in the
-#: row immediately before the review, and ``conventions-path`` is what
+#: the tree the head wrote, ``readme-path`` is what ``ov.docs`` assembles in the
+#: stage immediately before the review, and ``conventions-path`` is what
 #: ``phase-3a``'s readiness stamp seeds two stages earlier.
 REQUIRED_PATH_SLOTS: frozenset[str] = frozenset({"kb-root", "readme-path", "conventions-path"})
 
@@ -340,7 +339,6 @@ class Step:
     parses: tuple[Parse, ...] = ()
     raises: tuple[str, ...] = ()
     series: tuple[LoopSeries, ...] = ()
-    when: Condition | None = None
     ledger_op: LedgerOp | None = None
     #: This row's seat authors register entries. Every graded field the KB
     #: has — a claim's rigor, a support's rigor, a warrant edge's on-point
@@ -356,8 +354,8 @@ class Step:
     #: flag of this driver reaches — ``kb_claimgraph``'s ``ask.SeatAsk``. Every
     #: other call a run makes is the driver's own dispatch, which ``replay.py``
     #: substitutes for, so this property is exactly the set of rows a
-    #: ``--no-inference`` run cannot walk. :func:`stages_without_own_inference`
-    #: reads it; nothing else does.
+    #: ``--dry-run`` cannot stand in for. :attr:`spends_inference` is what reads
+    #: it; nothing else does.
     spends_own_inference: bool = False
 
     @property
@@ -388,6 +386,7 @@ _CLAIMS_DECLARED = "claims-declared"
 _CLAIMS_DISCOVERED = "claims-discovered"
 _DEPENDS_ATTRIBUTED = "depends-attributed"
 _PHASE_3A = "phase-3a"
+_OVERVIEW_DRAFTED = "overview-drafted"
 _PHASE_5 = "phase-5"
 
 
@@ -409,20 +408,28 @@ STEPS: tuple[Step, ...] = (
     # lock, not the run directory's, so a second `--run-dir` cannot slip past
     # it. A live pid there is exit 16.
     Step(id="pre.lock", stage=_START, unit=Unit.DRIVER_OP, writer=Writer.DRIVER),
-    # Preflight's stdout is relayed verbatim; rc != 0 is exit 14. Its
-    # `runner-file` FACT line is the detection source for `start.runner-choice`,
-    # which `seed.graph-init` raises when it needs `--runner` and config named none.
+    # Preflight's stdout is relayed verbatim; rc != 0 is exit 14. Nothing is
+    # read back off it: its `runner-file` FACT is a statement to the operator,
+    # and `seed.graph-init` — which needs the same answer to decide whether to
+    # raise `spine-seed.runner-choice` — asks the working tree itself. This row
+    # is a `start` row, and a resume skips the stage whole, so an answer carried
+    # from here would be absent on exactly the invocations that resume.
     Step(id="pre.preflight", stage=_START, unit=Unit.DRIVER_OP),
     # A charter is optional and is never composed here: the row resolves
     # whether one stands at the configured path, so the record and the two
     # briefs that quote it read one answer instead of each asking the
     # filesystem their own question.
     Step(id="pre.charter", stage=_START, unit=Unit.DRIVER_OP),
-    Step(id="pre.mode", stage=_START, unit=Unit.DRIVER_OP, raises=("start.build-mode", "start.proceed")),
-    # kb-build.md's revision entry contract: the runner targets installed (else
-    # exit 14), then kb-verify green (else exit 11). See `ledger.py`'s
-    # `revision_entry` for why kb-verify is what answers the question.
-    Step(id="pre.revision-entry", stage=_START, unit=Unit.DRIVER_OP, when=Condition.REVISION),
+    Step(id="pre.proceed", stage=_START, unit=Unit.DRIVER_OP, raises=("start.proceed",)),
+    # The launch guard, and it is a launch guard because of where it sits: every
+    # row of this stage is skipped once `start` is recorded, so this row runs on
+    # the invocation that opens a build and on no other. A resume therefore
+    # never meets it, which is what lets it refuse the one state that destroys
+    # work — a build opened over a `kb-root/` somebody else's build filled — and
+    # still let the same populated tree through on every invocation after.
+    # Last before `start.record` on purpose: nothing between the reading and the
+    # first write can change the answer.
+    Step(id="pre.kb-root", stage=_START, unit=Unit.DRIVER_OP),
     # `start-build`, carrying `--charter <path>` only where a charter stands;
     # rc 5 (already started) reads as done.
     Step(
@@ -445,14 +452,14 @@ STEPS: tuple[Step, ...] = (
     # own rather than a row of `start`: its preflight refuses the dirty worktree
     # the document graph has just created.
     #
-    # Each tool row is `Condition.FRESH`. A revision build enters against a KB
-    # its own entry check has already found `kb-verify` green (`pre.revision-entry`),
-    # so the head's product is there — and re-deriving the tree over it would
-    # overwrite the very documents the spine is stamped into.
+    # No row here is conditional. Each runs on the invocation that walks its
+    # stage and never again, because a recorded stage is not re-walked — so
+    # what keeps `dg.build` off a tree a finished build stamped is the ledger,
+    # and what keeps it off a tree nobody here built is `pre.kb-root`.
     # --- document-graph — LaTeX volumes in, the Markdown tree out -------------
     # `kb_docgraph`: rc 1 (a check failed) → exit 11; rc 2 (a source or the
     # bibliography is not there) → exit 14.
-    Step(id="dg.build", stage=_DOCUMENT_GRAPH, unit=Unit.DRIVER_OP, writer=Writer.TOOL, when=Condition.FRESH),
+    Step(id="dg.build", stage=_DOCUMENT_GRAPH, unit=Unit.DRIVER_OP, writer=Writer.TOOL),
     Step(
         id="dg.record",
         stage=_DOCUMENT_GRAPH,
@@ -465,13 +472,14 @@ STEPS: tuple[Step, ...] = (
     # stage above not having produced one; rc 2 → exit 14; rc 1 → 11. The one
     # barrier the head raises, and it is the same question it has always asked:
     # a repository carrying neither runner file cannot be told where the include
-    # line goes, and no other row of the build can answer it either.
+    # line goes, and no other row of the build can answer it either. The row
+    # reads that condition off the working tree when it runs, so the barrier is
+    # reachable on a resume as well as on a launch.
     Step(
         id="seed.graph-init",
         stage=_SPINE_SEED,
         unit=Unit.DRIVER_OP,
         writer=Writer.TOOL,
-        when=Condition.FRESH,
         raises=("spine-seed.runner-choice",),
     ),
     Step(
@@ -487,7 +495,6 @@ STEPS: tuple[Step, ...] = (
         stage=_CLAIMS_DECLARED,
         unit=Unit.DRIVER_OP,
         writer=Writer.TOOL,
-        when=Condition.FRESH,
     ),
     Step(
         id="declared.record",
@@ -514,7 +521,6 @@ STEPS: tuple[Step, ...] = (
         stage=_CLAIMS_DISCOVERED,
         unit=Unit.DRIVER_OP,
         writer=Writer.TOOL,
-        when=Condition.FRESH,
         spends_own_inference=True,
     ),
     Step(
@@ -540,7 +546,6 @@ STEPS: tuple[Step, ...] = (
         stage=_DEPENDS_ATTRIBUTED,
         unit=Unit.DRIVER_OP,
         writer=Writer.TOOL,
-        when=Condition.FRESH,
     ),
     Step(
         id="depends.record",
@@ -564,7 +569,7 @@ STEPS: tuple[Step, ...] = (
         writer=Writer.TOOL,
         ledger_op=LedgerOp.ADVANCE_STEP,
     ),
-    # --- phase-5 — meta-documentation -----------------------------------------
+    # --- overview-drafted — the overview document, written --------------------
     # **The stage assembles the document; the seat is never asked to compose
     # one.** Every count the overview document states already sits in `.index/`
     # or in the tree, so it is read and substituted rather than written out by a
@@ -575,13 +580,22 @@ STEPS: tuple[Step, ...] = (
     # the artifact, persisted under the scratch layout, and `run._meta_docs`
     # substitutes it.
     #
-    # `p5.docs` and `p5.fix` share one template and one slot list: there is no
-    # separate fix template for this stage, and the two calls differ only in
-    # whether a reviewer's findings are the input — which is a slot, filled with
-    # a named absence on the first pass.
+    # **The draft is a stage of its own because it spends a model call and the
+    # review that follows it spends another.** A stage holding both would leave
+    # the draft's answer behind a review that can fail, and a resume would buy it
+    # a second time; the boundary below is what earns it once
+    # (`kb_pipeline.STAGES`, the granularity comment).
+    #
+    # The docent check runs *first* for the same reason read the other way: it
+    # can fail, so it may not stand behind the call. An incomplete install is
+    # also cheaper to meet before a seat is dispatched than after. A driver-op
+    # over an imported constant: the docent commands are what make a finished KB
+    # navigable, and their absence is an incomplete install (exit 14), never a
+    # barrier — there is no answer that would install them.
+    Step(id="ov.docent-check", stage=_OVERVIEW_DRAFTED, unit=Unit.DRIVER_OP),
     Step(
-        id="p5.docs",
-        stage=_PHASE_5,
+        id="ov.docs",
+        stage=_OVERVIEW_DRAFTED,
         unit=Unit.SINGLE,
         writer=Writer.DRIVER,
         seat="tech-writer",
@@ -589,6 +603,20 @@ STEPS: tuple[Step, ...] = (
         slots=("kb-root", "remediation-source-path"),
         outputs=(OVERVIEW_PROSE,),
     ),
+    Step(
+        id="ov.record",
+        stage=_OVERVIEW_DRAFTED,
+        unit=Unit.DRIVER_OP,
+        writer=Writer.TOOL,
+        ledger_op=LedgerOp.ADVANCE_STEP,
+    ),
+    # --- phase-5 — the review cycle over what was drafted ---------------------
+    # `ov.docs` and `p5.fix` share one template and one slot list: there is no
+    # separate fix template, and the two calls differ only in whether a
+    # reviewer's findings are the input — which is a slot, filled with a named
+    # absence on the first pass. The template's name carries the stage the pair
+    # used to share; it is the prompt set's, not this table's, and renaming it is
+    # not this table's to do.
     Step(
         id="p5.review",
         stage=_PHASE_5,
@@ -619,10 +647,6 @@ STEPS: tuple[Step, ...] = (
             ),
         ),
     ),
-    # A driver-op over an imported constant: the docent commands are what make a
-    # finished KB navigable, and their absence is an incomplete install (exit
-    # 14), never a barrier — there is no answer that would install them.
-    Step(id="p5.docent-check", stage=_PHASE_5, unit=Unit.DRIVER_OP),
     Step(
         id="p5.record",
         stage=_PHASE_5,
@@ -641,38 +665,32 @@ def steps_for(stage: str) -> tuple[Step, ...]:
     return tuple(step for step in STEPS if step.stage == stage)
 
 
-def applies(step: Step, *, build_mode: str, spend_inference: bool = True) -> bool:
-    """Whether a row runs in this run: its own condition, and what the run will spend.
+def applies(step: Step, *, spend_inference: bool = True) -> bool:
+    """Whether a row runs in this run — the one condition a run still carries.
 
-    Two conditions, cutting differently. ``build_mode`` is the table's: a
-    conditional row states the mode it belongs to, and :class:`Condition`'s
-    members are the build-mode strings themselves, so this is a comparison
-    rather than a mapping — a second table pairing the two vocabularies would be
-    a second place for them to disagree. ``spend_inference`` is the run's, and
-    it is **row-level rather than a bound**: a run spending none drops every row
-    that would cost a model call and walks every stage regardless, so the stages
-    around an excluded row still run and the build still closes out.
+    ``spend_inference`` is **row-level rather than a bound**: a run spending none
+    drops every row that would cost a model call and walks every stage
+    regardless, so the stages around an excluded row still run and the build
+    still closes out.
 
-    A stage's ledger row is never one of these — a record dispatches no seat and
-    invokes no tool that spawns one — which is what lets the walk continue past
-    a stage whose work it dropped.
+    There is no second condition. A row used to be able to name the build mode
+    it belonged to, which is how a build entering against a KB it had not built
+    skipped the rows that would overwrite it; the modes are gone, and what keeps
+    those rows off such a tree is the ledger (a recorded stage is not re-walked)
+    and the launch guard that refuses to open a build over one.
+
+    A stage's ledger row never costs a model call — a record dispatches no seat
+    and invokes no tool that spawns one — which is what lets the walk continue
+    past a stage whose work it dropped.
     """
-    if not spend_inference and step.spends_inference:
-        return False
-    return step.when is None or step.when.value == build_mode
+    return spend_inference or not step.spends_inference
 
 
-def inference_rows(stage: str, *, build_mode: str) -> tuple[str, ...]:
+def inference_rows(stage: str) -> tuple[str, ...]:
     """The ids of ``stage``'s rows a run spending no inference does without.
 
-    Derived from :attr:`Step.spends_inference` and :func:`applies`, never from a
-    stage id: a stage that gains or loses an inference-spending row moves this
-    answer without an edit here. ``build_mode`` is what makes it a run's — a
-    revision build's head rows do not apply at all, so it has none to drop
-    there.
+    Derived from :attr:`Step.spends_inference`, never from a stage id: a stage
+    that gains or loses an inference-spending row moves this answer without an
+    edit here.
     """
-    return tuple(
-        step.id
-        for step in steps_for(stage)
-        if step.spends_inference and applies(step, build_mode=build_mode, spend_inference=True)
-    )
+    return tuple(step.id for step in steps_for(stage) if step.spends_inference)

@@ -13,13 +13,11 @@ You maintain an existing knowledge base. You take finished work and incremental 
 
 @!kb-assigned-targets!@
 
-## Canonical Source
-
-When the KB is the derived side, a disagreement is re-distilled into the leaf — never resolved by editing the declared canonical artifact from this end.
-
 ## What you modify, and how
 
-**You write by hand**: leaf body content (prose, math, tables), up-links, and cross-references — the document's prose, and nothing structured.
+**You write by hand**: leaf body prose, math and tables, up-links, and cross-references — the document's words, and nothing structured.
+
+**A built leaf's body is the corpus's words; a leaf you author is your own.** Migrating `session/` work means writing whole leaves, and those are yours end to end. A leaf the build produced is a mechanical rendering of one extent of the corpus — repair it against that extent, and put anything that says more than the source says (a summary, a rationale, an analysis) in its own document, cross-referenced from the leaf, rather than over the rendering.
 
 @!kb-metadata-write!@
 
@@ -42,7 +40,7 @@ A leaf, a claim entry, a dependency edge, or a cross-reference needs to change. 
 
 A leaf you add by hand carries the same three parts a built one does:
 - The up-link, on every document you write below the entry point: @!kb-uplink!@
-- A frontmatter block, stamped by `set-frontmatter`: the document's `kind` — its topography position, `leaf`/`leaf-as-index`/`index`/`entry-point` — and, on a content leaf, either the claim ids it hosts or the reason it hosts none. A leaf hosting more than one claim also takes a marker per claim, placed by `mark-claim-in-leaf` from a locator in the leaf's own words.
+- A frontmatter block, stamped by `set-frontmatter`: the document's `kind` — its topography position, `leaf`/`index`/`entry-point` — and, on a content leaf, either the claim ids it hosts or the reason it hosts none. A leaf hosting more than one claim also takes a marker per claim, placed by `mark-claim-in-leaf` from a locator in the leaf's own words.
 - Cross-references use the `> Related:` blockquote form — never paraphrase the target.
 
 Incremental edits preserve the existing structure; do not reformat beyond the change. **Preserve author-adjudication markers verbatim** (e.g. author adjudication notes, walk-back annotations) — never strip them in an edit or migration.

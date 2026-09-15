@@ -1,4 +1,4 @@
-"""The build-out stages: ``phase-3a`` and ``phase-5``.
+"""The build-out stages: ``phase-3a``, ``overview-drafted`` and ``phase-5``.
 
 The KB tree this driver walks over is no longer this driver's own output: the
 distillation stages (``phase-0`` through ``phase-3``) that used to derive it
@@ -10,8 +10,10 @@ end. What survives here is everything downstream of an already-built tree:
   run. No round is spent and no seat is dispatched, because each verifier
   compares one mechanically-produced artifact against another and a red one is
   a defect in a tool or in what was authored.
-* **``phase-5`` still runs a capped cycle**, over documents a seat wrote:
-  write, review, fix from the findings, re-review, escalate at the cap.
+* **``overview-drafted`` writes the overview document and ``phase-5`` reviews
+  it.** Two stages and two boundaries, because each spends a model call and
+  neither may pay for the other's failure; the review side still runs the capped
+  cycle — review, fix from the findings, re-review, escalate at the cap.
 
 The fixture's ``repo`` starts at the state the pandoc pipeline hands off: a KB
 spine, with every domain's leaves already distilled (:func:`distilled`) by the
@@ -50,6 +52,12 @@ DOMAINS = ("dynamics", "foundations", "policy")
 #: any case here drives.
 RECORDED_THROUGH_3A_PREDECESSOR = ("start",)
 RECORDED_THROUGH_3A = (*RECORDED_THROUGH_3A_PREDECESSOR, "phase-3a")
+
+#: The two meta-documentation stages, walked together by every case below that
+#: wants the review: the draft is what the review is handed, and it lands in the
+#: stage before — so a case walking the cycle alone would hand a reviewer a
+#: README that was never written.
+META_STAGES = ("overview-drafted", "phase-5")
 
 
 # ---------------------------------------------------------------------------
@@ -183,16 +191,30 @@ class FakeLedger:
         recorded: Sequence[str] = (),
         verify: Sequence[ledger.Outcome] = (),
         preflight_stdout: str = PREFLIGHT,
+        refuses: Sequence[str] = (),
     ) -> None:
         self.recorded = list(recorded)
+        #: Each stage's boundary-commit body, as the record row supplied it. The
+        #: rounds a findings loop ran are an attribute of that entry and are
+        #: recorded nowhere else, so this is where a case reads them.
+        self.notes: dict[str, str] = {}
         self.targets: list[str] = []
         self._repo_root: Path | None = None
         self._verify = list(verify)
         self._verifies = 0
         self._preflight_stdout = preflight_stdout
+        #: Stages whose record fails once, and the way a killed process leaves
+        #: one: the stage's work ran and no boundary accounts for it. A second
+        #: invocation records it, because the kill was the process's and not the
+        #: stage's.
+        self._refuses = set(refuses)
 
     def _advance(self, *, stage: str, note: str = "", no_inference: bool = False) -> ledger.Outcome:
+        if stage in self._refuses:
+            self._refuses.discard(stage)
+            return ledger.Outcome(baton.EXIT_ENVIRONMENT, detail=(f"the boundary commit for {stage} did not land",))
         self.recorded.append(stage)
+        self.notes[stage] = note
         return ledger.Outcome(baton.EXIT_OK)
 
     def _run_target(self, *, target: str) -> ledger.Outcome:
@@ -211,7 +233,6 @@ class FakeLedger:
             graph_init=lambda *, runner: ledger.Outcome(baton.EXIT_OK),
             document_graph=lambda *, sources, bibliographies, kb_root: ledger.Outcome(baton.EXIT_OK),
             claim_graph=lambda *, flags: ledger.Outcome(baton.EXIT_OK),
-            revision_entry=lambda: ledger.Outcome(baton.EXIT_OK),
             start_build=lambda *, charter: ledger.Outcome(baton.EXIT_OK),
             advance_step=self._advance,
             show_status=lambda *, relay: ledger.Outcome(baton.EXIT_OK, stdout=render_for(self.recorded)),
@@ -262,9 +283,8 @@ def repo(tmp_path: Path) -> Path:
     a fixture detail.
     """
     root = tmp_path / "repo"
-    charter = root / config.DEFAULT_CHARTER_FILE
-    charter.parent.mkdir(parents=True)
-    charter.write_text("# Build charter\n\nBoth volumes.\n", encoding="utf-8")
+    (root / steps.SCRATCH_ROOT).mkdir(parents=True)
+    (root / kb_pipeline.CHARTER_RELPATH).write_text("# Build charter\n\nBoth volumes.\n", encoding="utf-8")
 
     index_dir = kb_util.index_dir(root)
     index_dir.mkdir(parents=True)
@@ -309,12 +329,9 @@ def drive(
     fake: FakeLedger,
     stages: Sequence[str],
     decisions: Mapping[str, str] = (),
-    build_mode: str | None = None,
     ops: run.LedgerOps | None = None,
 ) -> run.Result:
     body = ["[run]", f"sources = {json.dumps(list(SOURCES))}", 'permission_mode = "acceptEdits"']
-    if build_mode is not None:
-        body.append(f'build_mode = "{build_mode}"')
     for pair, answer in dict(decisions).items():
         stage, _, kind = pair.rpartition(".")
         body += ["", f'[barriers."{stage}"."{kind}"]', f'decision = "{answer}"']
@@ -341,16 +358,23 @@ def drive(
 # ---------------------------------------------------------------------------
 
 
-#: What the seat returns at ``p5.docs`` / ``p5.fix``: the passage, and nothing
+#: What the seat returns at ``ov.docs`` / ``p5.fix``: the passage, and nothing
 #: else. It writes no file, because the stage assembles the document.
 PASSAGE = "This corpus is three volumes of synthetic material. Start at the first."
+
+#: What the seat returns at ``p5.fix``, and it differs from :data:`PASSAGE` on
+#: purpose: a fix round composing the document already on disk is refused, so a
+#: scenario that scripts the draft's own answer back is scripting a failure.
+#: :func:`test_a_fix_round_that_changes_nothing_fails_the_round` is where that
+#: is the point.
+FIXED_PASSAGE = "This corpus is three volumes of synthetic material, and index.md is where a reader starts."
 
 
 def phase_5_script(*, rounds: Sequence[envelope.Verdict] = (CLEAN,)) -> Script:
     return Script(
         {
-            "p5.docs": PASSAGE,
-            "p5.fix": PASSAGE,
+            "ov.docs": PASSAGE,
+            "p5.fix": FIXED_PASSAGE,
             # `replay.verdict` composes the line `envelope.parse_verdict` reads,
             # so a scripted round cannot spell a format the driver would refuse.
             "p5.review": [
@@ -475,12 +499,10 @@ def test_the_stage_assembles_the_overview_document_reviews_it_and_records(
     fake = FakeLedger(recorded=RECORDED_THROUGH_3A)
     script = phase_5_script()
 
-    result = drive(
-        repo_root=repo, tmp_path=tmp_path, templates=templates, script=script, fake=fake, stages=("phase-5",)
-    )
+    result = drive(repo_root=repo, tmp_path=tmp_path, templates=templates, script=script, fake=fake, stages=META_STAGES)
 
     assert result.exit_code == baton.EXIT_OK
-    assert script.order == ["p5.docs", "p5.review"]
+    assert script.order == ["ov.docs", "p5.review"]
     assert fake.recorded[-1] == "phase-5"
 
     document = (kb_util.kb_root(repo) / kb_pipeline.OVERVIEW_DOC).read_text(encoding="utf-8")
@@ -505,12 +527,120 @@ def test_a_critical_finding_runs_one_fix_cycle_and_then_escalates_to_phase_5s_ow
         templates=templates,
         script=script,
         fake=FakeLedger(recorded=RECORDED_THROUGH_3A),
-        stages=("phase-5",),
+        stages=META_STAGES,
     )
 
     assert result.exit_code == baton.EXIT_GATE_RED
     assert result.pair == "phase-5.cap-exhausted"
     assert script.count("p5.fix") == kb_pipeline.PHASE_5_FIX_CAP
+
+
+def test_a_fix_round_that_changes_nothing_fails_the_round(repo: Path, tmp_path: Path, templates: Path) -> None:
+    """The seat answers the findings with the draft's own passage, so the document does not move.
+
+    This is the failure the stage's boundary check cannot see. That check runs
+    once, after the last round, and by then the overview differs from ``HEAD``
+    because the draft created it — so it is satisfied identically whether the
+    fix repaired anything or returned what it was already given. The comparison
+    that can tell them apart is between the bytes the round composed and the
+    bytes standing when it composed them, and it lives where the round runs.
+
+    Exit 17 and not the cap: the cap is what bounds a seat that keeps finding
+    work, and this seat did none. Spending the rest of the budget re-reviewing a
+    document nobody touched would turn a contract failure into a timeout.
+    """
+    distilled(repo)
+    # The draft's answer, returned again as the fix. Every other word of the
+    # document is the template's or the index's and neither moved, so the
+    # composed bytes are the standing bytes.
+    script = Script({"ov.docs": PASSAGE, "p5.fix": PASSAGE, "p5.review": replay.verdict(critical=1)})
+    fake = FakeLedger(recorded=RECORDED_THROUGH_3A)
+
+    result = drive(repo_root=repo, tmp_path=tmp_path, templates=templates, script=script, fake=fake, stages=META_STAGES)
+
+    assert result.exit_code == baton.EXIT_CONTRACT
+    assert script.count("p5.fix") == 1, "the round is refused where it composed, not after another review"
+    assert "phase-5" not in fake.recorded, "a stage whose fix answered nothing does not reach its boundary"
+    document = (kb_util.kb_root(repo) / kb_pipeline.OVERVIEW_DOC).read_text(encoding="utf-8")
+    assert PASSAGE in document, "the standing document is left as the draft wrote it"
+
+
+def _findings_path(repo: Path, *, round_number: int) -> Path:
+    """Where one round's findings land — the path the review row declares."""
+    return (
+        repo
+        / steps.SCRATCH_ROOT
+        / steps.findings(
+            stage="phase-5",
+            series=steps.SERIES_INITIAL,
+            round_number=round_number,
+            author=steps.META_REVIEW_SEAT,
+        )
+    )
+
+
+def test_a_findings_file_a_dead_process_left_is_not_a_round_and_spends_no_fix_budget(
+    repo: Path, tmp_path: Path, templates: Path
+) -> None:
+    """A round is recorded by the stage's boundary, so a file on disk is not one.
+
+    The zero-byte file is what a process killed mid-write leaves. Counted as a
+    completed round it made the next review round 2, which is one revision spent
+    against a cap of one — so the crash exhausted the stage's whole fix budget
+    and the build escalated instead of repairing anything.
+    """
+    distilled(repo)
+    orphan = _findings_path(repo, round_number=1)
+    orphan.parent.mkdir(parents=True, exist_ok=True)
+    orphan.touch()
+    fake = FakeLedger(recorded=RECORDED_THROUGH_3A)
+    script = phase_5_script(rounds=(CRITICAL, CLEAN))
+
+    result = drive(repo_root=repo, tmp_path=tmp_path, templates=templates, script=script, fake=fake, stages=META_STAGES)
+
+    assert result.exit_code == baton.EXIT_OK
+    assert result.pair == "", "the orphan spent the cap and escalated"
+    assert script.count("p5.fix") == 1
+    assert fake.recorded[-1] == "phase-5"
+    # The rounds that ran are 1 and 2, round 1 landing over the orphan. A count
+    # that started high would have produced a round 3 instead.
+    assert _findings_path(repo, round_number=2).is_file()
+    assert not _findings_path(repo, round_number=3).exists()
+
+
+@pytest.mark.parametrize(
+    ("rounds", "expected"),
+    [((CLEAN,), "review: 1 round(s), 0 fix round(s)"), ((CRITICAL, CLEAN), "review: 2 round(s), 1 fix round(s)")],
+    ids=["no-fix", "one-fix"],
+)
+def test_the_stages_own_boundary_is_what_records_the_rounds_its_cycle_ran(
+    repo: Path,
+    tmp_path: Path,
+    templates: Path,
+    rounds: Sequence[envelope.Verdict],
+    expected: str,
+) -> None:
+    """The rounds are an attribute of the stage's one ledger entry and of nothing else.
+
+    There is no per-round entry — the ledger's entries are the stage vocabulary —
+    so the boundary commit's body is the whole record of how many rounds the
+    stage took, and a stage that ran no cycle carries no such clause.
+    """
+    distilled(repo)
+    fake = FakeLedger(recorded=RECORDED_THROUGH_3A_PREDECESSOR)
+
+    drive(
+        repo_root=repo,
+        tmp_path=tmp_path,
+        templates=templates,
+        script=phase_5_script(rounds=rounds),
+        fake=fake,
+        stages=("phase-3a", *META_STAGES),
+    )
+
+    assert expected in fake.notes["phase-5"]
+    assert fake.notes["phase-3a"] == "", "a stage with no findings loop has no rounds to record"
+    assert fake.notes["overview-drafted"] == "", "the draft spends no round either, and says nothing about one"
 
 
 def test_a_warning_and_a_note_are_carried_past_the_gate_and_the_stage_records(
@@ -527,9 +657,7 @@ def test_a_warning_and_a_note_are_carried_past_the_gate_and_the_stage_records(
     fake = FakeLedger(recorded=RECORDED_THROUGH_3A)
     script = phase_5_script(rounds=(CARRIED,))
 
-    result = drive(
-        repo_root=repo, tmp_path=tmp_path, templates=templates, script=script, fake=fake, stages=("phase-5",)
-    )
+    result = drive(repo_root=repo, tmp_path=tmp_path, templates=templates, script=script, fake=fake, stages=META_STAGES)
 
     assert result.exit_code == baton.EXIT_OK
     assert result.pair == "", "a warning is reported, and a report is not a barrier"
@@ -575,7 +703,7 @@ def test_the_round_reports_its_counts_by_severity_and_where_the_findings_are(
             templates=templates,
             script=script,
             fake=FakeLedger(recorded=RECORDED_THROUGH_3A),
-            stages=("phase-5",),
+            stages=META_STAGES,
         )
 
     line = next(
@@ -601,19 +729,17 @@ def test_the_fix_call_reads_the_reviewers_findings_and_the_first_pass_does_not(
         templates=templates,
         script=script,
         fake=FakeLedger(recorded=RECORDED_THROUGH_3A),
-        stages=("phase-5",),
+        stages=META_STAGES,
     )
 
-    assert field(script.brief("p5.docs"), "Findings") == steps.NOTHING
+    assert field(script.brief("ov.docs"), "Findings") == steps.NOTHING
     findings = steps.findings(
         stage="phase-5", series=steps.SERIES_INITIAL, round_number=1, author=steps.META_REVIEW_SEAT
     )
     assert field(script.brief("p5.fix"), "Findings").endswith(Path(findings).name)
 
 
-def test_every_path_a_brief_hands_a_seat_resolves_without_a_base(
-    repo: Path, tmp_path: Path, templates: Path
-) -> None:
+def test_every_path_a_brief_hands_a_seat_resolves_without_a_base(repo: Path, tmp_path: Path, templates: Path) -> None:
     """A relative path here is one a seat resolves against a cwd no brief states.
 
     Measured: a review handed ``kb-root/README.md`` searched for a directory of
@@ -629,13 +755,13 @@ def test_every_path_a_brief_hands_a_seat_resolves_without_a_base(
         templates=templates,
         script=script,
         fake=FakeLedger(recorded=RECORDED_THROUGH_3A),
-        stages=("phase-5",),
+        stages=META_STAGES,
     )
 
     stated = {
-        ("p5.docs", "KB"): repo / "kb-root",
-        ("p5.review", "README"): repo / "kb-root" / kb_pipeline.META_DOCS[0],
-        ("p5.review", "CONVENTIONS"): repo / "kb-root" / kb_pipeline.META_DOCS[1],
+        ("ov.docs", "KB"): repo / "kb-root",
+        ("p5.review", "README"): repo / "kb-root" / kb_pipeline.OVERVIEW_DOC,
+        ("p5.review", "CONVENTIONS"): repo / "kb-root" / kb_pipeline.CONVENTIONS_DOC,
         ("p5.fix", "Findings"): repo
         / steps.SCRATCH_ROOT
         / steps.findings(stage="phase-5", series=steps.SERIES_INITIAL, round_number=1, author=steps.META_REVIEW_SEAT),
@@ -649,25 +775,106 @@ def test_every_path_a_brief_hands_a_seat_resolves_without_a_base(
 def test_missing_docent_commands_stop_the_build_with_preflights_own_restore_line(
     repo: Path, tmp_path: Path, templates: Path
 ) -> None:
-    """Exit 14 and a relayed ``restore:``, never a barrier — no answer would install them."""
+    """Exit 14 and a relayed ``restore:``, never a barrier — no answer would install them.
+
+    **It stops before the draft is asked for, and that is where the row sits for
+    this reason.** The check can fail, so it may not stand behind a call: after
+    one, its failure would throw away an answer the ledger never accounted for.
+    In front of one, an incomplete install costs the run nothing but the stage.
+    """
     distilled(repo)
     (repo / kb_util.CLAUDE_DIRNAME / kb_util.COMMANDS_DIRNAME / kb_util.DOCENT_COMMAND_FILENAMES[1]).unlink()
     fake = FakeLedger(recorded=RECORDED_THROUGH_3A, preflight_stdout=PREFLIGHT_MISSING_DOCENT)
+    script = phase_5_script()
 
     result = drive(
         repo_root=repo,
         tmp_path=tmp_path,
         templates=templates,
-        script=phase_5_script(),
+        script=script,
         fake=fake,
-        stages=("phase-5",),
+        stages=META_STAGES,
     )
 
     assert result.exit_code == baton.EXIT_ENVIRONMENT
     assert result.pair == "", "a missing install is an exit, not a barrier"
     assert any(kb_util.DOCENT_COMMAND_FILENAMES[1] in line for line in result.detail)
     assert any("restore:" in line for line in result.detail)
-    assert "phase-5" not in fake.recorded
+    assert script.calls == [], "the check stands in front of the call, so nothing was spent on this stop"
+    assert [stage for stage in META_STAGES if stage in fake.recorded] == []
+
+
+# ---------------------------------------------------------------------------
+# What a resume re-spends: the boundary is the whole of the answer
+#
+# The seat is replayed, so the "expensive" row costs a scripted return here. The
+# property under test is what the walk *asks for* a second time, which is a
+# decision it takes from the ledger and from nothing else — and asking it of a
+# real model would price the same assertion in hours.
+# ---------------------------------------------------------------------------
+
+
+def _overview_prose(repo: Path) -> Path:
+    """The draft row's own declared artifact, under the scratch layout."""
+    return repo / steps.SCRATCH_ROOT / steps.overview_prose(stage=META_STAGES[0])
+
+
+def test_a_resume_past_a_recorded_boundary_does_not_buy_the_draft_again(
+    repo: Path, tmp_path: Path, templates: Path
+) -> None:
+    """The boundary landed, so the stage is behind the build and its call is not re-issued.
+
+    This is the guarantee the split exists for: the draft's answer is accounted
+    for by a commit of its own the moment it is earned, so no later failure in
+    the review cycle can send a resume back through it.
+    """
+    distilled(repo)
+    fake = FakeLedger(recorded=RECORDED_THROUGH_3A)
+    first = phase_5_script()
+
+    drive(repo_root=repo, tmp_path=tmp_path, templates=templates, script=first, fake=fake, stages=(META_STAGES[0],))
+    assert first.count("ov.docs") == 1
+    assert META_STAGES[0] in fake.recorded
+
+    second = phase_5_script()
+    result = drive(repo_root=repo, tmp_path=tmp_path, templates=templates, script=second, fake=fake, stages=META_STAGES)
+
+    assert result.exit_code == baton.EXIT_OK
+    assert second.count("ov.docs") == 0, "a recorded stage is not re-walked, so its call is not re-issued"
+    assert second.order == ["p5.review"]
+
+
+def test_a_resume_after_a_lost_boundary_re_runs_the_draft_over_the_answer_on_disk(
+    repo: Path, tmp_path: Path, templates: Path
+) -> None:
+    """No boundary accounts for it, so it is discarded — the artifact on disk included.
+
+    The first invocation's record fails, which is the state a killed process
+    leaves: the answer and the document assembled from it are on disk and the
+    ledger says the stage never happened. The resume re-asks rather than adopting
+    them, because an artifact no boundary accounts for cannot be told from one a
+    dying process half-wrote.
+    """
+    distilled(repo)
+    fake = FakeLedger(recorded=RECORDED_THROUGH_3A, refuses=(META_STAGES[0],))
+    first = phase_5_script()
+
+    stopped = drive(
+        repo_root=repo, tmp_path=tmp_path, templates=templates, script=first, fake=fake, stages=(META_STAGES[0],)
+    )
+
+    assert stopped.exit_code == baton.EXIT_ENVIRONMENT
+    assert META_STAGES[0] not in fake.recorded
+    assert first.count("ov.docs") == 1
+    prose = _overview_prose(repo)
+    assert prose.is_file() and (kb_util.kb_root(repo) / kb_pipeline.OVERVIEW_DOC).is_file()
+
+    second = phase_5_script()
+    result = drive(repo_root=repo, tmp_path=tmp_path, templates=templates, script=second, fake=fake, stages=META_STAGES)
+
+    assert result.exit_code == baton.EXIT_OK
+    assert second.count("ov.docs") == 1, "the stage is unrecorded, so its work is re-run rather than read off disk"
+    assert fake.recorded[-1] == META_STAGES[-1]
 
 
 # ---------------------------------------------------------------------------

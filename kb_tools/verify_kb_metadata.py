@@ -354,7 +354,7 @@ def check_tier1_coverage(files: list[tuple[Path, dict | None]]):
         if fm is None:
             continue
         kind = fm.get("kind")
-        if kind not in ("leaf", "leaf-as-index"):
+        if kind != "leaf":
             continue
         has_claims = "claims" in fm and bool(fm["claims"])
         has_no_claim = "no-claim" in fm and bool(fm["no-claim"])
@@ -1438,7 +1438,7 @@ def main(argv: list[str] | None = None) -> int:
 
     n_files = len(files)
     n_with_fm = sum(1 for _, fm in files if fm is not None)
-    n_leaves = sum(1 for _, fm in files if fm and fm.get("kind") in ("leaf", "leaf-as-index"))
+    n_leaves = sum(1 for _, fm in files if fm and fm.get("kind") == "leaf")
     n_with_claims = sum(1 for _, fm in files if fm and fm.get("claims"))
     n_no_claim = sum(1 for _, fm in files if fm and fm.get("no-claim"))
     n_multi = sum(1 for _, fm in files if fm and len(fm.get("claims", [])) >= 2)

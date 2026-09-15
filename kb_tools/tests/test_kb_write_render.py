@@ -170,7 +170,7 @@ def _frontmatter_no_claim() -> str:
 
 
 def _frontmatter_hosts() -> str:
-    """A container hosting an experiment and two supports.
+    """A leaf hosting an experiment and two supports.
 
     No ``experiments:`` reference list: an owning experiment leaf must not also
     reference foreign experiments, which is the one exclusivity that survives
@@ -178,7 +178,7 @@ def _frontmatter_hosts() -> str:
     """
     return render.render_frontmatter_block(
         render.FrontmatterValues(
-            kind="leaf-as-index",
+            kind="leaf",
             no_claim="hosts an experiment and two support nodes only",
             experiment_nodes=(
                 render.ExperimentDecl(exp_id="exp-gg7777", status="run", strengthens=(("clm-aa1111", 0.8),)),

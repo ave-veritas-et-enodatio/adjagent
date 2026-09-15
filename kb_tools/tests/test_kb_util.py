@@ -16,6 +16,7 @@ override — proving the walk-up discovery works through the module boundary.
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -28,7 +29,7 @@ from pathlib import Path, PurePosixPath
 import pytest
 
 from kb_tools import kb_pipeline, kb_util
-from kb_tools.kb_driver import baton
+from kb_tools.kb_driver import baton, runlog
 from kb_tools.kb_survey import manifest as survey_manifest
 from kb_tools.kb_survey import skeleton as survey_skeleton
 from kb_tools.tests._manifests import surveyed_manifest
@@ -772,7 +773,7 @@ def test_preflight_reports_the_kb_root_tri_state(tmp_path: Path, populate: str |
     line = _item(result.stdout, "kb-root")
     assert "FACT" in line
     assert expected in line
-    # A tri-state fact never gates: the fresh-vs-revision call stays the user's.
+    # A tri-state fact never gates here: acting on it is the driver's launch guard's.
     assert result.returncode == 0, result.stdout
 
 
@@ -876,6 +877,13 @@ def _subjects(repo: Path) -> list[str]:
         ["git", "log", "--reverse", "--format=%s"], cwd=repo, capture_output=True, text=True, check=True
     )
     return [line for line in result.stdout.splitlines() if line.startswith(kb_pipeline.LEDGER_PREFIX)]
+
+
+def _commit_body(repo: Path) -> str:
+    """The newest commit's body paragraph, stripped — the ledger's per-stage detail."""
+    return subprocess.run(
+        ["git", "log", "-1", "--format=%b"], cwd=repo, capture_output=True, text=True, check=True
+    ).stdout.strip()
 
 
 def _commit_count(repo: Path) -> int:
@@ -998,6 +1006,7 @@ def test_show_status_exposes_the_frozen_stage_vocabulary_in_order(tmp_path: Path
         "claims-discovered",
         "depends-attributed",
         "phase-3a",
+        "overview-drafted",
         "phase-5",
     ]
 
@@ -1070,6 +1079,30 @@ def test_start_build_sweeps_the_uncommitted_seed_into_the_first_commit(tmp_path:
     assert status.stdout.strip() == ""
 
 
+def test_the_start_boundary_says_which_of_the_two_charter_states_held(tmp_path: Path) -> None:
+    """A build with no charter is recorded as having none, not recorded silently.
+
+    A charter is optional (SPEC.md, The Driver's Contract), so opening without
+    one is a legal build rather than something to refuse. What is not legal is a
+    boundary that says nothing: an empty body is equally what a caller that
+    dropped the argument leaves behind, and the start commit is the only durable
+    place the two can be told apart — so a user who wrote a charter this build
+    never looked at finds that out by reading the ledger.
+    """
+    named = _pipeline_repo(tmp_path / "with-charter")
+    _lay_down_artifacts(named, only={"docs/charter.md"})
+    absent = _pipeline_repo(tmp_path / "without-charter")
+
+    assert _op(named, "start-build", "--charter", "docs/charter.md").returncode == 0
+    assert _op(absent, "start-build").returncode == 0
+
+    named_body, absent_body = _commit_body(named), _commit_body(absent)
+    assert "docs/charter.md" in named_body
+    assert absent_body == kb_pipeline.NO_CHARTER_BODY
+    # Neither boundary is silent, and the two do not read alike.
+    assert named_body and absent_body and named_body != absent_body
+
+
 def test_start_build_refuses_a_second_start(tmp_path: Path) -> None:
     repo = _pipeline_repo(tmp_path / "consumer")
     _lay_down_artifacts(repo, only={"docs/charter.md"})
@@ -1121,7 +1154,7 @@ def test_advance_step_sweeps_worktree_changes_into_the_boundary(tmp_path: Path) 
     (repo / kb_util.SCRATCH_DIRNAME).mkdir(exist_ok=True)
     (repo / kb_util.SCRATCH_DIRNAME / "noise.txt").write_text("junk\n", encoding="utf-8")
 
-    assert _op(repo, "advance-step", "--stage", "phase-5").returncode == 0
+    assert _op(repo, "advance-step", "--stage", "overview-drafted").returncode == 0
 
     tracked = subprocess.run(
         ["git", "ls-files"], cwd=repo, capture_output=True, text=True, check=True
@@ -1170,6 +1203,125 @@ def test_advance_step_refuses_an_out_of_order_stage(tmp_path: Path) -> None:
         assert missing in result.stderr
     assert _commit_count(repo) == before
     assert _checklist(result.stdout)
+
+
+# --- the scope pin: phase-3a's readiness stamp -----------------------------
+#
+# `kb-root/CLAUDE.md` asserts that this KB's scope is pinned in it, so the pin
+# has to actually be there. It is charter prose, and the stamp that writes the
+# document is what fills it.
+
+_PIN_CHARTER = "This KB distills the Ave corpus: the governance-bifurcation papers and nothing else.\n"
+
+
+def _charter_build_repo(root: Path, charter: str | None = _PIN_CHARTER) -> Path:
+    """A pipeline repo advanced to just before ``phase-3a``, carrying ``charter``.
+
+    ``charter`` of ``None`` opens the build with no ``--charter`` at all, which
+    is the legitimate charterless build rather than an error.
+    """
+    repo = _pipeline_repo(root)
+    _lay_down_artifacts(repo)
+    if charter is not None:
+        (repo / "docs" / "charter.md").write_text(charter, encoding="utf-8")
+    subprocess.run(
+        [sys.executable, "-m", "kb_tools.refresh_kb_metadata"],
+        cwd=repo,
+        env=_subprocess_env(),
+        capture_output=True,
+        check=True,
+    )
+    opened = _op(repo, "start-build", *(("--charter", "docs/charter.md") if charter is not None else ()))
+    assert opened.returncode == 0, opened.stderr
+    for stage_id in kb_pipeline.STAGE_IDS[1 : kb_pipeline.STAGE_IDS.index("phase-3a")]:
+        result = _op(repo, "advance-step", "--stage", stage_id)
+        assert result.returncode == 0, f"{stage_id}: {result.stdout}\n{result.stderr}"
+    # The stamp is only-if-absent, and this document is the one it must write.
+    (repo / "kb-root" / kb_pipeline.SCOPE_PIN_DOC).unlink(missing_ok=True)
+    return repo
+
+
+def test_scope_pin_reaches_the_document_that_claims_to_carry_it(tmp_path: Path) -> None:
+    repo = _charter_build_repo(tmp_path / "consumer")
+
+    result = _op(repo, "advance-step", "--stage", "phase-3a")
+
+    assert result.returncode == 0, result.stderr
+    stamped = (repo / "kb-root" / kb_pipeline.SCOPE_PIN_DOC).read_text(encoding="utf-8")
+    assert _PIN_CHARTER.strip() in stamped
+    # And no slot survives into the consumer's own file.
+    assert kb_pipeline.SCOPE_PIN_FIELD not in stamped
+    assert kb_pipeline.PROJECT_NAME_FIELD not in stamped
+
+
+def test_charterless_build_states_the_absence_as_the_pin(tmp_path: Path) -> None:
+    """A charter is optional, so the document says there is none rather than standing blank."""
+    repo = _charter_build_repo(tmp_path / "consumer", charter=None)
+
+    result = _op(repo, "advance-step", "--stage", "phase-3a")
+
+    assert result.returncode == 0, result.stderr
+    stamped = (repo / "kb-root" / kb_pipeline.SCOPE_PIN_DOC).read_text(encoding="utf-8")
+    assert kb_pipeline.NO_CHARTER_PIN in stamped
+    assert kb_pipeline.SCOPE_PIN_FIELD not in stamped
+
+
+def test_readiness_stamp_does_not_change_the_kb_root_state(tmp_path: Path) -> None:
+    """The constraint the pin's placement answers to.
+
+    ``pre.kb-root`` refuses a fresh build over a populated ``kb-root/`` by
+    reading this tri-state, so a build-open write that flipped it would make the
+    guard refuse the build that performed the write. Stamping at the validation
+    gate cannot: the tree is already populated by then.
+    """
+    repo = _charter_build_repo(tmp_path / "consumer")
+    before = kb_util.kb_root_state(repo)
+
+    result = _op(repo, "advance-step", "--stage", "phase-3a")
+
+    assert result.returncode == 0, result.stderr
+    assert (repo / "kb-root" / kb_pipeline.SCOPE_PIN_DOC).is_file()
+    assert kb_util.kb_root_state(repo) == before == kb_util.KB_ROOT_POPULATED
+
+
+def test_a_build_open_pin_write_would_have_changed_the_kb_root_state(tmp_path: Path) -> None:
+    """Why the pin is not written when the build opens — the demonstration, not an assertion.
+
+    At build-open ``kb-root/`` holds nothing outside ``.index/``. Any file
+    written into it there — the pin's document included — turns the reading
+    ``pre.kb-root`` refuses on.
+    """
+    repo = _pipeline_repo(tmp_path / "consumer")
+    shutil.rmtree(repo / "kb-root")
+    (repo / "kb-root" / kb_util.INDEX_DIRNAME).mkdir(parents=True)
+    assert kb_util.kb_root_state(repo) == kb_util.KB_ROOT_SPINE_ONLY
+
+    (repo / "kb-root" / kb_pipeline.SCOPE_PIN_DOC).write_text("# pinned\n", encoding="utf-8")
+
+    assert kb_util.kb_root_state(repo) == kb_util.KB_ROOT_POPULATED
+
+
+def test_recorded_charter_reads_the_start_boundary(tmp_path: Path) -> None:
+    """The ledger is where the charter's path durably stands, and an absence is stated there too."""
+    with_charter = _charter_build_repo(tmp_path / "with-charter")
+    without = _charter_build_repo(tmp_path / "without-charter", charter=None)
+
+    assert kb_pipeline.recorded_charter(with_charter) == "docs/charter.md"
+    assert kb_pipeline.recorded_charter(without) is None
+    # An unopened build has no boundary to read, and names no charter either.
+    assert kb_pipeline.recorded_charter(_pipeline_repo(tmp_path / "unopened")) is None
+
+
+def test_stamp_refuses_a_recorded_charter_that_is_no_longer_on_disk(tmp_path: Path) -> None:
+    """Writing the stated absence over a charter the ledger names would put a lie in the pin."""
+    repo = _charter_build_repo(tmp_path / "consumer")
+    (repo / "docs" / "charter.md").unlink()
+
+    result = _op(repo, "advance-step", "--stage", "phase-3a")
+
+    assert result.returncode != 0
+    assert "docs/charter.md" in result.stdout + result.stderr
+    assert not (repo / "kb-root" / kb_pipeline.SCOPE_PIN_DOC).exists()
 
 
 # --- the seeded-spine cases: postcondition and completion ------------------
@@ -1315,7 +1467,7 @@ def test_the_walk_records_every_stage_and_ends_complete(
         "the ledger's boundary subjects, in order": _subjects(final.tree),
         "artifact-gated stages missing from the ledger": sorted({s for s, _ in _CHECKED_STAGES} - recorded),
         "commits the phase-5 boundary added": _commit_count(ladder["phase-5"].tree)
-        - _commit_count(ladder["phase-3a"].tree),
+        - _commit_count(ladder[_predecessor_of("phase-5")].tree),
         "the world-state named at completion": "complete" in final.status.stdout,
         "checklist markers at completion": sorted({marker for marker, _ in _checklist(final.status.stdout)}),
         "cards rendered by a complete process": _cards(final.status.stdout),
@@ -1480,8 +1632,13 @@ def test_pre_start_renders_the_start_card(tmp_path: Path) -> None:
 
     cards = _cards(result.stdout)
     assert cards[0] == f"{kb_pipeline.CARD_PREFIX} next action — start (build started):"
-    assert any("into a values file" in line for line in cards)
-    assert any("dispatch the first coordinator" in line for line in cards)
+    assert any(kb_pipeline.CHARTER_RELPATH in line for line in cards)
+    # What follows the opening boundary is the driver's own next stage. The card
+    # used to direct a dispatch here, and the build has no such route: a card is
+    # an operator's next action, so one naming a seat that does not exist is a
+    # defect rather than a stale phrasing.
+    assert any("nothing is dispatched here" in line for line in cards)
+    assert not any("coordinator" in line for line in cards)
 
 
 def test_advance_step_card_is_its_baton(tmp_path: Path) -> None:
@@ -1491,7 +1648,7 @@ def test_advance_step_card_is_its_baton(tmp_path: Path) -> None:
 
     result = _op(repo, "advance-step", "--stage", "phase-3a")
 
-    assert _cards(result.stdout)[0].startswith(f"{kb_pipeline.CARD_PREFIX} next action — phase-5 ")
+    assert _cards(result.stdout)[0].startswith(f"{kb_pipeline.CARD_PREFIX} next action — overview-drafted ")
 
 
 def test_refusals_still_render_the_current_card(tmp_path: Path) -> None:
@@ -1547,13 +1704,18 @@ def test_checklist_block_stays_contiguous_and_uniquely_parseable(tmp_path: Path)
     assert not _CHECKLIST_RE.match(f"{kb_pipeline.CARD_PREFIX} · record")
 
 
-def test_start_build_baton(tmp_path: Path) -> None:
+def test_start_build_directs_no_coordinator(tmp_path: Path) -> None:
+    """R-D: the build is driver-controlled end to end, so no card names a coordinator seat."""
     repo = _pipeline_repo(tmp_path / "consumer")
     _lay_down_artifacts(repo, only={"docs/charter.md"})
 
     result = _op(repo, "start-build", "--charter", "docs/charter.md")
 
-    assert "[kb-build] next: dispatch the coordinator" in result.stdout
+    assert result.returncode == 0, result.stderr
+    assert "coordinator" not in result.stdout
+    # The render still hands the reader its next action: the card for the
+    # stage the checklist now points at.
+    assert kb_pipeline.CARD_PREFIX in result.stdout
 
 
 def test_preflight_baton_on_success_only(tmp_path: Path) -> None:
@@ -1598,11 +1760,11 @@ def test_record_line_carries_the_full_invocation_for_its_own_stage(tmp_path: Pat
     assert len(record) == 1, lines
 
     if stage.id == kb_pipeline.FIRST_STAGE_ID:
-        assert f"{_OP_PREFIX}open-build --charter-values <values-file>" in record[0]
+        assert f"{_OP_PREFIX}start-build [--charter {kb_pipeline.CHARTER_RELPATH}]" in record[0]
         assert "advance-step" not in record[0]
     else:
         assert f"{_OP_PREFIX}advance-step --stage {stage.id}" in record[0]
-        assert "open-build" not in record[0]
+        assert "start-build" not in record[0]
         # No other stage's id may appear in this stage's record line.
         others = [other for other in kb_pipeline.STAGE_IDS if other != stage.id]
         tail = record[0].split(f"--stage {stage.id}", 1)[1]
@@ -1665,8 +1827,8 @@ _CAPPED_CARD_LINES = [
     (
         "phase-5",
         "PHASE_5_FIX_CAP",
-        f"the stage assembles {kb_pipeline.OVERVIEW_DOC} from the index and one passage tech-writer answers with"
-        "; tech-writer-reviewer, fix-cycle cap {cap}; findings persisting -> escalate",
+        "tech-writer-reviewer reviews the documents the stage before this one wrote, tech-writer "
+        "answers each round's findings; fix-cycle cap {cap}; findings persisting -> escalate",
     ),
 ]
 _CAPPED_IDS = [stage_id for stage_id, _, _ in _CAPPED_CARD_LINES]
@@ -1755,7 +1917,7 @@ def test_in_progress_renders_the_starred_stages_card(ladder: dict[str, Rung]) ->
 
 def test_cap_lines_are_rendered_through_the_running_tool(ladder: dict[str, Rung]) -> None:
     """End-to-end: the number an agent actually reads comes from the constant."""
-    cards = _cards(ladder["phase-3a"].status.stdout)
+    cards = _cards(ladder[_predecessor_of("phase-5")].status.stdout)
 
     assert any(f"fix-cycle cap {kb_pipeline.PHASE_5_FIX_CAP};" in line for line in cards)
     # The pre-constant phrasing, which said the same number twice.
@@ -1826,17 +1988,35 @@ def test_start_refuses_when_the_charter_was_never_written(tmp_path: Path) -> Non
     assert _commit_count(repo) == before
 
 
-def test_meta_documentation_requires_both_documents(branch_at: Callable[[str], Path]) -> None:
+def test_meta_documentation_requires_the_overview_and_not_the_stamped_document(
+    branch_at: Callable[[str], Path],
+) -> None:
+    """One check, two boundaries, and it asks for the document these stages produce.
+
+    ``CONVENTIONS.md`` comes from ``phase-3a``'s readiness stamp, so a boundary
+    here that asked for it would be satisfied by an earlier stage's work — a
+    unit that cannot fail and therefore tells a caller nothing. Asserted both
+    ways from one tree: its absence does not refuse the boundary, and the
+    overview's does.
+    """
     repo = branch_at("phase-3a")
-    (repo / "kb-root" / "CONVENTIONS.md").unlink()
+    (repo / "kb-root" / kb_pipeline.CONVENTIONS_DOC).unlink()
     before = _commit_count(repo)
 
-    result = _op(repo, "advance-step", "--stage", "phase-5")
+    stamped_gone = _op(repo, "advance-step", "--stage", "overview-drafted")
 
-    assert result.returncode == kb_pipeline.EXIT_POSTCONDITION_FAILED
-    assert "CONVENTIONS.md" in result.stderr
-    assert "README.md" not in result.stderr  # only what is actually missing
-    assert _commit_count(repo) == before
+    assert stamped_gone.returncode == 0, stamped_gone.stderr
+    assert _commit_count(repo) == before + 1
+
+    (repo / "kb-root" / kb_pipeline.OVERVIEW_DOC).unlink()
+    overview_gone = _op(repo, "advance-step", "--stage", "phase-5")
+
+    assert overview_gone.returncode == kb_pipeline.EXIT_POSTCONDITION_FAILED
+    assert kb_pipeline.OVERVIEW_DOC in overview_gone.stderr
+    # Only what this stage owes: the document an earlier stage stamped is gone
+    # from the tree and the refusal has nothing to say about it.
+    assert kb_pipeline.CONVENTIONS_DOC not in overview_gone.stderr
+    assert _commit_count(repo) == before + 1
 
 
 def test_only_one_unit_is_satisfied_with_nothing_to_check(branch_at: Callable[[str], Path]) -> None:
@@ -1878,9 +2058,9 @@ def test_a_stage_that_found_its_artifacts_says_nothing(tmp_path: Path, branch_at
     """The other direction, over both kinds of unit that can carry the flag.
 
     A build given a charter is the same argument-derived unit as above with a
-    value to find; phase-5 is an ordinary existence unit satisfied by the two
-    documents that are there. Neither may emit the line, or it degrades into
-    noise a reader stops reading.
+    value to find; ``overview-drafted`` is an ordinary existence unit satisfied by
+    the document that is there. Neither may emit the line, or it degrades
+    into noise a reader stops reading.
     """
     repo = _pipeline_repo(tmp_path / "consumer")
     _lay_down_artifacts(repo, only={"docs/charter.md"})
@@ -1889,7 +2069,7 @@ def test_a_stage_that_found_its_artifacts_says_nothing(tmp_path: Path, branch_at
     assert started.returncode == 0, started.stderr
     assert _nothing_to_check(started.stdout) == []
 
-    documented = _op(branch_at("phase-3a"), "advance-step", "--stage", "phase-5")
+    documented = _op(branch_at("phase-3a"), "advance-step", "--stage", "overview-drafted")
 
     assert documented.returncode == 0, documented.stderr
     assert _nothing_to_check(documented.stdout) == []
@@ -1969,7 +2149,12 @@ _PARTIAL_COVERAGE: dict[str, Callable[[Path], None]] = {
     # The head's exit is the same gate the tail enters on, so it fails the same way.
     "depends-attributed": _break_a_link,
     "phase-3a": _break_a_link,
-    "phase-5": _remove("kb-root/CONVENTIONS.md"),
+    # Both meta-documentation boundaries read one check, and the overview is
+    # what it asks for. Removing CONVENTIONS.md would refuse neither: the
+    # readiness stamp owns that document and no boundary after phase-3a asks
+    # whether it stands.
+    "overview-drafted": _remove("kb-root/README.md"),
+    "phase-5": _remove("kb-root/README.md"),
 }
 
 
@@ -2012,25 +2197,36 @@ def test_the_read_and_the_refusal_name_one_set_of_missing_units(
     assert _missing_ids(read.stdout)
 
 
-def test_the_read_reports_a_covered_stage_and_a_missing_unit_beside_it(branch_at: Callable[[str], Path]) -> None:
-    """A partially covered phase-5: what landed and what did not, per document.
+def test_the_read_reports_phase_5s_one_unit_covered_and_then_missing(branch_at: Callable[[str], Path]) -> None:
+    """What landed and what did not, with the path either way.
 
     The paths are the point. A coordinator resuming here dispatches against the
-    MISSING line's path, which no other verb renders.
+    MISSING line's path, which no other verb renders — and reads the COVERED
+    line's to know it need not. One unit, so the two renders are taken from the
+    same tree either side of one deletion rather than from two units at once.
     """
     repo = branch_at("phase-3a")
     # The tool resolves its root from the working directory, so the paths it
     # prints are that resolution's, not the fixture path's spelling of it.
     kb = repo.resolve() / "kb-root"
+    fact = (
+        f"{kb_pipeline.STAGE_STATUS_TAG} {kb_pipeline.FACT} phase-5 (meta-documentation) — 1 coverage unit(s) declared"
+    )
+
+    covered = _op(repo, "show-stage-status", "--stage", "phase-5")
+
+    assert covered.returncode == 0, covered.stderr
+    assert _stage_status_lines(covered.stdout) == [
+        fact,
+        f"{kb_pipeline.STAGE_STATUS_TAG} {kb_pipeline.COVERED} README.md ({kb / 'README.md'})",
+    ]
+
     (kb / "README.md").unlink()
+    missing = _op(repo, "show-stage-status", "--stage", "phase-5")
 
-    result = _op(repo, "show-stage-status", "--stage", "phase-5")
-
-    assert result.returncode == 0, result.stderr
-    assert _stage_status_lines(result.stdout) == [
-        f"{kb_pipeline.STAGE_STATUS_TAG} {kb_pipeline.FACT} phase-5 (meta-documentation) — "
-        f"2 coverage unit(s) declared",
-        f"{kb_pipeline.STAGE_STATUS_TAG} {kb_pipeline.COVERED} CONVENTIONS.md ({kb / 'CONVENTIONS.md'})",
+    assert missing.returncode == 0, missing.stderr
+    assert _stage_status_lines(missing.stdout) == [
+        fact,
         f"{kb_pipeline.STAGE_STATUS_TAG} {kb_pipeline.MISSING} README.md "
         f"({kb / 'README.md'}) — this document was never written",
     ]
@@ -2057,7 +2253,7 @@ def test_the_read_renders_no_checklist_and_no_card(branch_at: Callable[[str], Pa
 
 def test_the_zero_argument_read_is_the_stage_the_checklist_stars(branch_at: Callable[[str], Path]) -> None:
     """One ``current_stage`` decision behind the marker, the card and this read."""
-    repo = branch_at("phase-3a")
+    repo = branch_at(_predecessor_of("phase-5"))
     starred = [stage_id for marker, stage_id in _checklist(_op(repo, "show-status").stdout) if marker == "*"]
 
     asked = _op(repo, "show-stage-status")
@@ -2093,8 +2289,8 @@ def test_a_recorded_stage_and_an_unreached_stage_both_report(branch_at: Callable
     """Neither position refuses the question: a resume reads back, a lookahead reads forward.
 
     Both report every unit they declare, and here both find them: the walk lays
-    its artifacts down before it starts, so phase-5's two documents are on disk
-    long before phase-5 is reached. That is the tree, and the read
+    its artifacts down before it starts, so the document phase-5 declares is on
+    disk long before phase-5 is reached. That is the tree, and the read
     reports the tree rather than the ledger's opinion of it.
     """
     repo = branch_at("phase-3a")
@@ -2129,6 +2325,127 @@ def test_the_read_outside_a_git_repo_exits_two(tmp_path: Path) -> None:
 
     assert result.returncode == 2
     assert "working directory" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# The run lock, read from outside the driver (show-run-lock)
+#
+# The question is `kb_driver.runlog`'s and so is the answer; what is asserted
+# here is that a caller that is not the driver can ask it — the three states told
+# apart in the output rather than in the exit status, the lock file untouched by
+# the asking, and the liveness judgement reaching the output from `runlog` rather
+# than from a second test on this side.
+# ---------------------------------------------------------------------------
+
+
+def _lock_repo(root: Path, *, payload: str | None) -> Path:
+    """A repo carrying a ``.git`` entry and, where ``payload`` is given, a run lock holding it.
+
+    Deliberately no ``kb-root/``: the op anchors on the git root alone, which is
+    what lets the caller that is about to remove the KB tree — or that has just
+    removed it — still ask whether a build is running.
+    """
+    repo = _make_repo(root, kb=False)
+    if payload is not None:
+        lock = runlog.repo_lock_path(repo)
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text(payload, encoding="utf-8")
+    return repo
+
+
+def _reported(stdout: str) -> dict[str, str]:
+    """The op's output as a shell reads it: one ``key=value`` per line, split at the first ``=``."""
+    return dict(line.split("=", 1) for line in stdout.splitlines())
+
+
+def test_show_run_lock_reports_a_live_holder_and_names_it(tmp_path: Path) -> None:
+    """A lock naming a pid that is alive — this test process — reads live, holder and all.
+
+    The holder fields travel with the verdict because a caller refusing to wipe a
+    workspace has to say whose run it refused for, and the pid and the run id are
+    what it says it with.
+    """
+    started = "2026-09-12T00:00:00+00:00"
+    payload = json.dumps({"pid": os.getpid(), "run_id": "run-alive", "token": "t", "started": started})
+    repo = _lock_repo(tmp_path / "live", payload=payload)
+
+    result = _op(repo, "show-run-lock")
+
+    assert result.returncode == 0, result.stderr
+    reported = _reported(result.stdout)
+    assert list(reported) == list(kb_util.RUN_LOCK_KEYS)
+    assert reported["state"] == runlog.LOCK_LIVE
+    assert reported["pid"] == str(os.getpid())
+    assert reported["run_id"] == "run-alive"
+    assert reported["started"] == started
+    assert reported["lock"] == str(runlog.repo_lock_path(repo.resolve()))
+
+
+@pytest.mark.parametrize("flavour", ["reaped-holder", "unparseable"])
+def test_show_run_lock_reports_a_stale_lock_and_clears_nothing(tmp_path: Path, flavour: str) -> None:
+    """Stale is an answer, not an act: the lock is still there afterwards, byte for byte.
+
+    Two flavours, because ``runlog`` judges both alike: a lock naming a pid that
+    has been reaped, and one whose payload will not parse — which is a lock no
+    holder can be read out of rather than a lock with none, so it names nobody
+    and is stale all the same.
+    """
+    if flavour == "reaped-holder":
+        reaped = subprocess.Popen([sys.executable, "-c", "pass"])
+        reaped.wait()
+        payload = json.dumps({"pid": reaped.pid, "run_id": "run-gone", "token": "t"})
+        expected_pid = str(reaped.pid)
+    else:
+        payload = "not json at all"
+        expected_pid = ""
+    repo = _lock_repo(tmp_path / flavour, payload=payload)
+
+    result = _op(repo, "show-run-lock")
+
+    assert result.returncode == 0, result.stderr
+    reported = _reported(result.stdout)
+    assert reported["state"] == runlog.LOCK_STALE
+    assert reported["pid"] == expected_pid
+    assert runlog.repo_lock_path(repo).read_text(encoding="utf-8") == payload
+
+
+def test_show_run_lock_reports_an_absent_lock_in_the_same_shape(tmp_path: Path) -> None:
+    """No lock file is the third answer, and it arrives shaped like the other two.
+
+    The key set is closed and total, so a shell branches on the value of
+    ``state`` and never on which keys turned up.
+    """
+    repo = _lock_repo(tmp_path / "absent", payload=None)
+
+    result = _op(repo, "show-run-lock")
+
+    assert result.returncode == 0, result.stderr
+    reported = _reported(result.stdout)
+    assert list(reported) == list(kb_util.RUN_LOCK_KEYS)
+    assert reported["state"] == runlog.LOCK_ABSENT
+    assert [reported[key] for key in ("pid", "run_id", "started")] == ["", "", ""]
+    assert reported["lock"] == str(runlog.repo_lock_path(repo.resolve()))
+    assert not runlog.repo_lock_path(repo).exists()
+
+
+def test_show_run_lock_takes_its_liveness_from_runlog_rather_than_re_deriving_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The op reports ``runlog``'s judgement, so moving that judgement moves the answer.
+
+    Driven in-process because that is what lets the judgement be moved under it:
+    with ``runlog``'s pid probe answering *gone*, a lock naming this very
+    process — alive by construction — must read stale. An op carrying an
+    ``os.kill`` test of its own would go on saying live, which is the duplication
+    this asserts the absence of.
+    """
+    repo = _lock_repo(tmp_path / "routed", payload=json.dumps({"pid": os.getpid(), "run_id": "run-x"}))
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(runlog, "_pid_alive", lambda pid: False)
+
+    assert kb_util.main(["show-run-lock"]) == 0
+
+    assert _reported(capsys.readouterr().out)["state"] == runlog.LOCK_STALE
 
 
 # ---------------------------------------------------------------------------
@@ -2585,11 +2902,12 @@ def test_the_published_invocation_constants_are_what_the_cards_render(tmp_path: 
 
 
 # ---------------------------------------------------------------------------
-# The build's opening gate (show-confirmation / open-build)
+# The build's opening gate (show-confirmation)
 #
-# One read before the gate and one write after it. What is asserted below is
-# what each call leaves behind — the render's content, the artifacts on disk,
-# the ledger, and the worktree — never the wording of a line.
+# One read in front of the gate; what the answer releases is `start-build`,
+# tested above. What is asserted below is what the read leaves behind — the
+# render's content, and that it writes nothing outside the scratch directory
+# preflight creates — never the wording of a line.
 # ---------------------------------------------------------------------------
 
 
@@ -2604,33 +2922,18 @@ def _bare_repo(root: Path, *, sources: bool = True) -> Path:
     return _git_repo(root, files=files)
 
 
-def _open_build_repo(root: Path) -> Path:
-    """``_bare_repo`` plus the document tree, which is what opening a build needs.
-
-    The tree is the document-graph front end's product and the seed's
-    precondition, so a repository that can be opened is one that already has it.
-    """
-    return _git_repo(root, files=_with_tree(**{"sources/book.tex": "\\documentclass{article}\n"}))
-
-
 def _charter_values(repo: Path, charter: str, name: str = "charter.toml") -> Path:
     """A charter values file in the repo's scratch tree, where an input belongs.
 
     Written under ``.claude-temp/`` deliberately: it is the call's input rather
     than a build artifact, and an uncommitted file anywhere else would fail the
-    clean-worktree check the seed runs.
+    clean-worktree check the seed that follows this read runs.
     """
     path = repo / kb_util.SCRATCH_DIRNAME / name
     path.parent.mkdir(parents=True, exist_ok=True)
     body = charter.replace("'''", "")
     path.write_text(f"[[entry]]\ncharter = '''\n{body}'''\n", encoding="utf-8")
     return path
-
-
-def _worktree_dirty(repo: Path) -> list[str]:
-    """Every uncommitted entry, staged or not — the state preflight gates on."""
-    result = subprocess.run(["git", "status", "--porcelain"], cwd=repo, capture_output=True, text=True, check=True)
-    return [line for line in result.stdout.splitlines() if line.strip()]
 
 
 # --- show-confirmation: the render is the message --------------------------
@@ -2694,7 +2997,13 @@ def test_confirmation_writes_nothing_but_the_scratch_directory(tmp_path: Path) -
 
 
 def test_confirmation_names_the_runner_default_only_where_it_is_unsettled(tmp_path: Path) -> None:
-    """A fact the repository already answers is not a question to put to the user."""
+    """A fact the repository already answers is not a question to put to the user.
+
+    The runner is the only entry the section carries, so a repository that
+    answers it leaves nothing unsettled: the heading goes with the entries
+    rather than standing over an empty section. What the rest of the answer
+    becomes is not conditional on that, and is still said.
+    """
     bare = _run_installer(_bare_repo(tmp_path / "bare"), "show-confirmation", "--source", "sources")
     with_runner = _run_installer(
         _git_repo(tmp_path / "runner", files={"justfile": _JUSTFILE_BODY, "sources/b.tex": "x\n"}),
@@ -2707,10 +3016,11 @@ def test_confirmation_names_the_runner_default_only_where_it_is_unsettled(tmp_pa
     # The repo with no runner file is asked, and told what it gets by default.
     assert "Task runner" in _unsettled_block(bare.stdout)
     assert kb_util.runner_filename(kb_util.DEFAULT_RUNNER) in _unsettled_block(bare.stdout)
-    # The repo carrying a justfile is not asked at all, and still has the facts
-    # that no repository can answer for itself.
-    assert "Task runner" not in _unsettled_block(with_runner.stdout)
-    assert "Canonical direction" in _unsettled_block(with_runner.stdout)
+    # The repo carrying a justfile is not asked at all, and the section it
+    # would have been the only entry of does not print.
+    assert "Task runner" not in with_runner.stdout
+    assert "Unsettled" not in with_runner.stdout
+    assert "you say is charter text" in with_runner.stdout
 
 
 def _unsettled_block(stdout: str) -> str:
@@ -2724,30 +3034,31 @@ def _unsettled_block(stdout: str) -> str:
     )
 
 
-def test_confirmation_reports_kb_root_state_without_asserting_fresh_or_revision(tmp_path: Path) -> None:
-    """A populated kb-root/ is kb_docgraph's ordinary output, not an asserted revision.
+def test_confirmation_reports_kb_root_state_with_what_it_means_for_opening_a_build(tmp_path: Path) -> None:
+    """The tri-state, and the one consequence a reader can still act on.
 
-    Under the current build order the document tree is written before any
-    claim-graph metadata exists, so a populated kb-root/ is the normal fresh
-    case — the determination states that fact plainly, and the fresh-or-revision
-    question (nothing on disk can answer it) moves to the unsettled facts,
-    asked only where there is a tree to be ambiguous about.
+    A populated kb-root/ is what the driver's launch guard refuses over, so the
+    confirmation says so where there is still a choice to make — and says
+    nothing of the kind where the tree is absent, there being no refusal to
+    warn about. It states and never gates: whether this invocation is opening a
+    build or continuing one is the ledger's answer, and the checklist printed
+    below carries it.
     """
-    fresh = _run_installer(_bare_repo(tmp_path / "fresh"), "show-confirmation", "--source", "sources")
-    populated = _git_repo(tmp_path / "revision", files={"kb-root/entry-point.md": "# KB\n", "sources/b.tex": "x\n"})
+    empty = _run_installer(_bare_repo(tmp_path / "empty"), "show-confirmation", "--source", "sources")
+    populated = _git_repo(tmp_path / "populated", files={"kb-root/entry-point.md": "# KB\n", "sources/b.tex": "x\n"})
 
     with_tree = _run_installer(populated, "show-confirmation", "--source", "sources")
 
-    assert "does not exist yet" in fresh.stdout
-    assert "Fresh or revision" not in fresh.stdout
+    assert "does not exist yet" in empty.stdout
+    assert "refused" not in empty.stdout
     assert "holds a document tree" in with_tree.stdout
-    assert "Fresh or revision" in with_tree.stdout
+    assert "a build opened over it is refused" in with_tree.stdout
     assert with_tree.returncode == 0, with_tree.stderr
 
 
 def test_confirmation_blocks_on_a_source_that_is_not_there(tmp_path: Path) -> None:
     """The one input from outside the repository, checked where it can still be fixed."""
-    repo = _open_build_repo(tmp_path / "consumer")
+    repo = _bare_repo(tmp_path / "consumer")
 
     result = _run_installer(repo, "show-confirmation", "--source", "sources/book.tex", "--source", "sources/gone.tex")
 
@@ -2768,7 +3079,7 @@ def test_confirmation_blocks_on_a_preflight_failure(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("body", "reason"),
     [
-        ("op = 'open-build'\n[[entry]]\ncharter = '''x'''\n", "op"),
+        ("op = 'show-confirmation'\n[[entry]]\ncharter = '''x'''\n", "op"),
         ("[[entry]]\ncharter = '''a'''\n[[entry]]\ncharter = '''b'''\n", "one build has one charter"),
         ("[[entry]]\ncharter_text = '''x'''\n", "charter_text"),
         ("[[entry]]\ncharter = '''   '''\n", "charter"),
@@ -2776,159 +3087,19 @@ def test_confirmation_blocks_on_a_preflight_failure(tmp_path: Path) -> None:
     ],
 )
 def test_a_refused_charter_values_file_writes_nothing_and_names_the_key(tmp_path: Path, body: str, reason: str) -> None:
-    """The values grammar refuses before either op reaches the repository."""
-    repo = _open_build_repo(tmp_path / "consumer")
+    """The values grammar refuses before the op reaches the repository."""
+    repo = _bare_repo(tmp_path / "consumer")
     values = repo / kb_util.SCRATCH_DIRNAME / "bad.toml"
     values.parent.mkdir(parents=True, exist_ok=True)
     values.write_text(body, encoding="utf-8")
     before = _tree_snapshot(repo)
 
-    result = _run_installer(repo, "open-build", "--charter-values", str(values))
+    result = _run_installer(repo, "show-confirmation", "--source", "sources", "--charter-values", str(values))
 
     assert result.returncode == 2
     assert reason in result.stderr
     assert _tree_snapshot(repo) == before
     assert not _subjects(repo)
-
-
-# --- open-build: one act or none -------------------------------------------
-
-
-def test_open_build_seeds_writes_the_charter_and_records_the_start(tmp_path: Path) -> None:
-    """The post-gate call, whole: three parts, one invocation, one commit.
-
-    The charter lands where the ledger can keep naming it — tracked, outside the
-    scratch tree a restage wipes — and the start commit sweeps it up with the
-    seed, so the worktree is clean again when the call returns.
-    """
-    repo = _open_build_repo(tmp_path / "consumer")
-    values = _charter_values(repo, "Build the KB from sources/book.tex.\nNo canonicality constraints.\n")
-
-    result = _run_installer(repo, "open-build", "--charter-values", str(values))
-
-    assert result.returncode == 0, f"stdout={result.stdout}\nstderr={result.stderr}"
-    charter = repo / kb_pipeline.CHARTER_RELPATH
-    assert charter.read_text(encoding="utf-8") == (
-        "Build the KB from sources/book.tex.\nNo canonicality constraints.\n"
-    )
-    assert kb_util.SCRATCH_DIRNAME not in kb_pipeline.CHARTER_RELPATH
-    _, claims = _seeded_paths(repo)
-    assert claims.is_file()
-    assert kb_util.INSTALL_LINE_MAKE in (repo / "Makefile").read_text(encoding="utf-8").splitlines()
-    assert [subject.split(" | ")[0] for subject in _subjects(repo)] == [
-        f"{kb_pipeline.LEDGER_PREFIX} {kb_pipeline.FIRST_STAGE_ID}"
-    ]
-    assert not _worktree_dirty(repo)
-
-
-def test_open_build_records_the_charter_path_in_the_start_commit(tmp_path: Path) -> None:
-    """The ledger names the charter, and the path it names is one the tool owns."""
-    repo = _open_build_repo(tmp_path / "consumer")
-
-    assert _run_installer(repo, "open-build", "--charter-values", str(_charter_values(repo, "x\n"))).returncode == 0
-
-    body = subprocess.run(
-        ["git", "log", "-1", "--format=%b"], cwd=repo, capture_output=True, text=True, check=True
-    ).stdout
-    assert kb_pipeline.CHARTER_RELPATH in body
-
-
-def test_open_build_takes_the_runner_the_answer_named(tmp_path: Path) -> None:
-    repo = _open_build_repo(tmp_path / "consumer")
-
-    result = _run_installer(
-        repo, "open-build", "--charter-values", str(_charter_values(repo, "x\n")), "--runner", "just"
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert kb_util.INSTALL_LINE_JUST in (repo / "justfile").read_text(encoding="utf-8").splitlines()
-    assert not (repo / "Makefile").exists()
-
-
-def test_open_build_stops_when_kb_root_holds_no_document_tree(tmp_path: Path) -> None:
-    """The missing prerequisite surfaces here rather than disappearing.
-
-    A ``kb-root/`` with no tree in it is not an environment fault, so it keeps
-    its own exit code and its own advisement: the document-graph front end has
-    not run, and it is what runs next. No charter is written, because the seed
-    runs first — a missing prerequisite is better reported before a file lands
-    than after.
-    """
-    repo = _git_repo(tmp_path / "consumer", files={"sources/b.tex": "x\n"})
-    values = _charter_values(repo, "x\n")
-    before = _tree_snapshot(repo)
-
-    result = _run_installer(repo, "open-build", "--charter-values", str(values))
-
-    assert result.returncode == kb_util.EXIT_NO_DOCUMENT_TREE
-    assert "no document tree" in result.stderr
-    assert not (repo / kb_pipeline.CHARTER_RELPATH).exists()
-    assert not _subjects(repo)
-    assert _tree_snapshot(repo) == before
-
-
-def test_open_build_refuses_an_already_started_build(tmp_path: Path) -> None:
-    repo = _open_build_repo(tmp_path / "consumer")
-    values = _charter_values(repo, "first\n")
-    assert _run_installer(repo, "open-build", "--charter-values", str(values)).returncode == 0
-    charter_before = (repo / kb_pipeline.CHARTER_RELPATH).read_bytes()
-
-    result = _run_installer(repo, "open-build", "--charter-values", str(_charter_values(repo, "second\n", "two.toml")))
-
-    assert result.returncode == kb_pipeline.EXIT_ALREADY_STARTED
-    assert (repo / kb_pipeline.CHARTER_RELPATH).read_bytes() == charter_before
-    assert len(_subjects(repo)) == 1
-
-
-def test_open_build_leaves_nothing_behind_when_the_record_fails(tmp_path: Path) -> None:
-    """All-or-nothing, at the last part: the seed and the charter go back too.
-
-    The record is where a partial failure hurts most — the seed has landed, the
-    charter is written, and ``git add -A`` has staged both. A commit that fails
-    there used to leave a repository nobody could re-run the call in, because
-    the retry's preflight gates on a clean worktree. The failure names the part
-    it stopped at, and every trace of the attempt is gone: files, include line,
-    and the index the sweep touched.
-    """
-    repo = _open_build_repo(tmp_path / "consumer")
-    hook = repo / ".git" / "hooks" / "pre-commit"
-    hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
-    hook.chmod(0o755)
-    values = _charter_values(repo, "x\n")
-    before = _tree_snapshot(repo)
-
-    result = _run_installer(repo, "open-build", "--charter-values", str(values))
-
-    assert result.returncode == kb_pipeline.EXIT_GIT_FAILURE
-    assert kb_pipeline.RECORD_PART in result.stderr
-    assert not (repo / kb_pipeline.CHARTER_RELPATH).exists()
-    # The tree stays — it was there before the call. What goes is everything the
-    # call itself wrote, the derived index included.
-    assert not (repo / "kb-root" / ".index").exists()
-    assert not (repo / "Makefile").exists()
-    assert not _subjects(repo)
-    # Clean, not merely emptied: the sweep's staged entries are gone with it.
-    assert not _worktree_dirty(repo)
-    assert _tree_snapshot(repo) == before
-
-
-def test_open_build_leaves_a_seeded_spine_it_did_not_create(tmp_path: Path) -> None:
-    """The undo is this call's own writes and never the repository's history."""
-    repo = _git_repo(
-        tmp_path / "consumer",
-        files=_with_tree(**{"justfile": _JUSTFILE_BODY, "kb-root/.index/.keep": "", "sources/b.tex": "x\n"}),
-    )
-    hook = repo / ".git" / "hooks" / "pre-commit"
-    hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
-    hook.chmod(0o755)
-
-    result = _run_installer(repo, "open-build", "--charter-values", str(_charter_values(repo, "x\n")))
-
-    assert result.returncode == kb_pipeline.EXIT_GIT_FAILURE
-    assert (repo / "kb-root" / ".index" / ".keep").is_file()
-    assert (repo / "justfile").read_text(encoding="utf-8").startswith(_JUSTFILE_BODY)
-    assert not (repo / kb_pipeline.CHARTER_RELPATH).exists()
-    assert not _worktree_dirty(repo)
 
 
 def test_the_charter_lands_outside_the_scratch_tree_and_outside_the_kb(tmp_path: Path) -> None:

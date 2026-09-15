@@ -55,8 +55,6 @@ _log = runlog.logger("barriers")
 # form (lowercase, hyphens); these fix the words, so a raise site comparing
 # against one cannot drift from the set the config validator admits.
 
-ANSWER_FRESH = "fresh"
-ANSWER_REVISION = "revision"
 ANSWER_YES = "yes"
 ANSWER_NO = "no"
 ANSWER_JUST = "just"
@@ -66,7 +64,6 @@ ANSWER_AUTHORIZE_ONE_MORE = "authorize-one-more"
 
 # --- the pairs, named -------------------------------------------------------
 
-START_BUILD_MODE = "start.build-mode"
 START_PROCEED = "start.proceed"
 #: Raised where the spine seed needs a runner file and this repository carries
 #: neither. It is the seeding stage's, not `start`'s: a pair names the stage
@@ -135,14 +132,6 @@ def _cap_spec(stage: str) -> BarrierSpec:
 _SPECS: tuple[BarrierSpec, ...] = (
     BarrierSpec(
         stage="start",
-        kind="build-mode",
-        answers=(ANSWER_FRESH, ANSWER_REVISION),
-        stopping=frozenset(),
-        exit_code=baton.EXIT_BARRIER,
-        question="Is this a fresh build, or a revision of an existing knowledge base?",
-    ),
-    BarrierSpec(
-        stage="start",
         kind="proceed",
         answers=(ANSWER_YES, ANSWER_NO),
         stopping=frozenset({ANSWER_NO}),
@@ -191,9 +180,9 @@ class Resolver:
     on the design gate from an infinite loop into a stop.
 
     ``authorize-one-more`` grants are counted here because they are
-    deliberately **not durable**: a resume rebuilds round counts from disk, so
-    a grant that outlived its process would be re-consumed by every later
-    resume.
+    deliberately **not durable**: a round count belongs to the process that ran
+    the rounds, so a grant that outlived its process would be re-consumed by
+    every later resume.
     """
 
     def __init__(self, *, config_decisions: Mapping[str, Decision], cli_decisions: Sequence[Decision] = ()) -> None:
@@ -218,9 +207,10 @@ class Resolver:
     def unconsumed(self) -> tuple[str, ...]:
         """The ``--decide`` values whose pair was never raised in this run.
 
-        Reported in ``exit.json`` and named in the baton rather than silently
-        dropped, so an operator resuming past an already-recorded gate learns
-        that their answer did nothing.
+        Reported rather than silently dropped, so an operator resuming past an
+        already-recorded stage learns that their answer did nothing:
+        ``run._report_unconsumed`` states this list on stderr and in the run
+        log, and it is additionally named in the baton and in ``exit.json``.
         """
         return tuple(sorted(decision.spec for pair, decision in self._cli.items() if pair not in self._raised))
 
@@ -258,27 +248,6 @@ class Resolver:
             extra={"context": {"pair": pair, "answer": decision.answer, "source": decision.source}},
         )
         return decision
-
-    def resolve(self, pair: str, *, fallback: str) -> Decision:
-        """Take ``pair``, falling back to a config-side answer that is not a barrier table.
-
-        The one pair this serves is ``start.build-mode``: ``[run] build_mode`` is
-        a validated enum with a default and is the carrier of the build mode
-        into four consumers, while the barrier table is the override door.
-        A fallback is an answer, not a stop, so this never raises a record.
-        """
-        decision = self.take(pair)
-        if decision is not None:
-            return decision
-        registered = spec(pair)
-        runlog.require(
-            fallback in registered.answers,
-            "the fallback answer for this barrier is not admissible",
-            pair=pair,
-            fallback=fallback,
-        )
-        _log.info("barrier answered from config", extra={"context": {"pair": pair, "answer": fallback}})
-        return Decision(stage=registered.stage, kind=registered.kind, answer=fallback, source="run-config")
 
     def grants(self, pair: str) -> int:
         """How many ``authorize-one-more`` grants this process has recorded for ``pair``."""

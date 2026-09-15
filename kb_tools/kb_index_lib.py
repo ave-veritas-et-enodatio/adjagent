@@ -458,7 +458,7 @@ class ClaimEntry:
 
 @dataclass(frozen=True)
 class LeafRecord:
-    """A leaf or leaf-as-index file's parsed metadata.
+    """A leaf file's parsed metadata.
 
     ``experiments_ref`` holds the exp-ids a leaf REFERENCES via its optional
     ``experiments:`` frontmatter field (the exact analog of ``claims:`` for
@@ -1784,17 +1784,16 @@ def parse_work_entries(path: Path, kb_root: Path) -> list[ExternalWork]:
 
 
 def parse_leaf(path: Path, kb_root: Path) -> LeafRecord | None:
-    """Parse a leaf or leaf-as-index file's frontmatter and Tier 2 markers.
+    """Parse a leaf file's frontmatter and Tier 2 markers.
 
-    Returns None if the file has no frontmatter or its kind is not
-    ``leaf``/``leaf-as-index``.
+    Returns None if the file has no frontmatter or its kind is not ``leaf``.
     """
     text = path.read_text(encoding="utf-8")
     fm = parse_frontmatter(text)
     if not fm:
         return None
     kind = fm.get("kind", "")
-    if kind not in ("leaf", "leaf-as-index"):
+    if kind != "leaf":
         return None
     claims = tuple(fm.get("claims", []) or ())
     no_claim_value = fm.get("no-claim")
@@ -1852,9 +1851,9 @@ def parse_experiment_leaf(path: Path, kb_root: Path) -> list[ExperimentNode]:
 
     A KB leaf is a **container**: it may host ANY number of ``exp`` node-bodies
     (no one-per-leaf cap). Experiment-ness is conferred by a leaf HOSTING an
-    ``exp-id``, not by a ``kind``: any ``kind: leaf`` / ``leaf-as-index``
-    container carrying one or more well-formed ``exp-id:`` keys originates that
-    many experiment nodes, regardless of whether it ALSO carries ``claims:`` /
+    ``exp-id``, not by a ``kind``: any ``kind: leaf`` container carrying one or
+    more well-formed ``exp-id:`` keys originates that many experiment nodes,
+    regardless of whether it ALSO carries ``claims:`` /
     ``sup-id:`` (orthogonal node-bodies in one container). Returns ``[]`` if the
     file has no frontmatter, is not a leaf-kind container, or declares no
     ``exp-id``.
@@ -1920,7 +1919,7 @@ def parse_experiment_leaf(path: Path, kb_root: Path) -> list[ExperimentNode]:
                 if value:
                     has_experiments_ref = True
 
-    if kind not in ("leaf", "leaf-as-index"):
+    if kind != "leaf":
         return []
     if not exp_ids:
         return []
@@ -1984,8 +1983,8 @@ def parse_support_leaf(path: Path, kb_root: Path) -> list[SupportNode]:
     A KB leaf is a **container**: it may host ANY number of ``sup`` node-bodies
     (no one-per-leaf cap). Support-ness is conferred by a leaf HOSTING a
     ``sup-id`` (parallel to how an ``exp-id`` confers experiment-ness): any
-    ``kind: leaf`` / ``leaf-as-index`` container carrying one or more well-formed
-    ``sup-id:`` keys originates that many support nodes, regardless of whether it
+    ``kind: leaf`` container carrying one or more well-formed ``sup-id:`` keys
+    originates that many support nodes, regardless of whether it
     ALSO carries ``claims:`` / ``exp-id:`` / ``no-claim:`` (orthogonal
     node-bodies). Returns ``[]`` if the file has no frontmatter, is not a
     leaf-kind container, or declares no ``sup-id``.
@@ -2038,7 +2037,7 @@ def parse_support_leaf(path: Path, kb_root: Path) -> list[SupportNode]:
                 sup_ids.append(value)
                 supports_pairs.append([])
 
-    if kind not in ("leaf", "leaf-as-index"):
+    if kind != "leaf":
         return []
     if not sup_ids:
         return []

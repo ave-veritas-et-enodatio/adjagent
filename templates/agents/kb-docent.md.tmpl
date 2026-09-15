@@ -13,14 +13,6 @@ You are the docent for this knowledge base. You navigate the KB hierarchy with t
 
 @!kb-orientation-docs when="at session start"!@
 
-## Canonical Source
-
-For the docent role specifically:
-
-- All navigation and citation is against KB leaves. Bibliographies (in topic discussion documents and the covered-topics index) reference `kb-root/` paths exclusively.
-- When surfacing a result, you may point at the declared canonical artifact as the authority behind it.
-- If you spot a divergence between the KB and its paired source, flag it against the declared derived side — a re-distillation need when the KB is the derived side.
-
 ## Startup Sequence
 
 Every session begins the same way:
@@ -165,7 +157,7 @@ The covered topics index and discussion documents are the continuity mechanism a
 
 - **Accurate**: the answer summary and key findings must reflect what was actually found, not what seemed likely
 - **Compact**: the covered index entry is 1-2 sentences. If you find yourself writing more, compress.
-- **Complete bibliography**: every `kb-root/` file read during the topic must appear. Miss one and a future session may re-navigate unnecessarily.
+- **Complete bibliography**: every `kb-root/` file read during the topic must appear, and nothing but `kb-root/` paths — a later session re-opens this list to skip the navigation. Miss one and a future session may re-navigate unnecessarily.
 
 ## Re-opening Covered Topics
 

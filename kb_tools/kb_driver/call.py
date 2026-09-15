@@ -1,22 +1,31 @@
 """Call **policy**: transport retry, contract validation, the one re-ask, persistence.
 
-The other half of the call wrapper. ``transport.py`` owns mechanism —
+The driver's half of one call. ``kb_tools.inference`` owns the mechanism —
 spawn, capture, watchdog, kill/reap — and classifies how a call ended without
-ever naming an exit code. This module owns everything downstream of that
-classification:
+ever naming an exit code; it is shared with every other tool that asks a seat
+something, so nothing of this driver's policy lives there. This module is that
+policy, and owns everything downstream of the classification:
 
 * **Retry.** A retryable transport death (a mid-stream failure, a silence
-  wedge, an expired total bound) is retried on ``[retry] transport_attempts``
-  with ``backoff_seconds``; exhaustion is exit 12. A **CLI rejection** — the
-  zero-event classification — is never retried, because three identical
-  failures and a misleading exit 12 is the whole reason that classifier runs
-  first; it is exit 13, with the stderr line as the diagnostic.
+  wedge, an expired total bound, a ``result`` event the CLI marked failed) is
+  retried on ``[retry] transport_attempts`` with ``backoff_seconds``;
+  exhaustion is exit 12. Two classifications are never retried, and each earns
+  a different exit than the exhaustion would give it. A **CLI rejection** — the
+  zero-event classification — is exit 13, with the stderr line as the
+  diagnostic, because three identical failures and a misleading exit 12 is the
+  whole reason that classifier runs first. A **spawn failure** — a
+  ``[claude] command`` that is not runnable — is exit 14, the code
+  ``ledger.py`` already gives a tool it could not spawn: the fault is in the
+  environment the run was launched in, and both the exit and its card say so
+  rather than naming a defect in the driver.
 * **Contract validation — existence and parse only.** Declared artifacts exist
   and are non-empty; the envelope parses; the ``VERDICT`` line parses;
   the ``SCOPE`` line parses. Never content quality — that is the
   reviewers' job. A **second ``init``** fails this check rather than passing on
-  the premature success it announces (the transport-side defense against
-  async-by-default dispatch; the brief-side one is ``{dispatch_discipline}``).
+  the premature success it announces. That is a *step-model* rule and so it is
+  here: one call is one turn for this driver, where the layer below promises no
+  such thing and returns the same call as an ordinary success having counted
+  the events (the brief-side defense is ``{dispatch_discipline}``).
 * **The one re-ask.** A contract failure re-briefs the *same* step once, with
   the validator's complaint appended to the identical composed brief; a second
   failure is exit 17, naming the step and the complaint. It is not a barrier:
@@ -24,7 +33,8 @@ classification:
   output shape twice.
 * **Persistence, three routes**, keyed to the seat's own definition.
   ``driver`` — a never-writer SINGLE's returned text *is* the artifact, and
-  this module writes it to a contract path the model never chose.
+  this module writes it to a contract path the model never chose, through a temp
+  and a rename so the path never holds bytes nobody finished writing.
   ``wave-session`` and ``worker`` — the call wrote its own artifacts and this
   module only validates them. The routes are the mechanism, not a sandbox: the
   CLI does not enforce a definition's tool list, so a never-writer that writes
@@ -36,33 +46,54 @@ here are exactly two — the composed brief in the run directory, and the
 driver-persisted artifact under the scratch layout root — and the second is
 held by a boundary check rather than by convention.
 
-The driver never passes ``--model``, and no brief text ever reaches argv;
-both are ``transport.py``'s to enforce and neither has a parameter here.
+**The boundary checks are this driver's own**, because what they are is a
+driver defect the run must stop on with exit 15: a cwd or a composed brief that
+is not there, a capture directory the run never made, a bound the config let
+through non-positive, and a ``[claude] command`` prefix smuggling a
+``--model``. The layer below refuses the same states as ordinary
+``ValueError``s at its own door; a tool asking a seat something has no exit
+ladder for them to land on, which is why they are stated twice rather than
+moved down. No brief text can reach argv at all — ``inference.build_argv``
+has no parameter through which it could.
 
 **What this module deliberately does not do.** It parses the envelope and hands
 it back; appending its deviations to ``deviations.jsonl`` needs the run id and
 the stage, which are the run loop's. It counts nothing about rounds, caps, or
 position, and it selects no successor.
 
-**Dependency note.** ``call`` depends on ``{transport, prompt_templates, envelope,
+**Dependency note.** ``call`` depends on ``{inference, prompt_templates, envelope,
 runlog, config}``. Naming an exit code additionally requires ``baton``, and executing a
 row requires ``steps`` — both leaves, both imported for the reason
 ``ledger.py`` states for ``baton``: copying those constants here would be
-exactly the drift single-sourcing exists to prevent.
+exactly the drift single-sourcing exists to prevent. The atomic write is
+``kb_survey.manifest.write_text_atomic``, the toolchain's own, imported for the
+same reason — a second implementation of a write that must not tear is a second
+thing to get right.
 
 Stdlib only.
 """
 
+import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import baton, prompt_templates, runlog, steps, transport
+from .. import inference
+from ..kb_survey.manifest import write_text_atomic
+from . import baton, prompt_templates, runlog, steps
 from .config import DriverConfig
 from .envelope import Envelope, ParseError, Scope, Verdict, parse_envelope, parse_scope, parse_verdict
 
 _log = runlog.logger("call")
+
+# The flag the driver never passes, in both spellings argparse accepts. An
+# explicit `--model` overrides a seat's frontmatter pin, so "the pin is
+# authoritative" holds only while the flag is absent — and exact list membership
+# reads `--model haiku` and misses `--model=haiku`, the identical override
+# applied to every seat with no log line and no change of exit code.
+MODEL_FLAG = "--model"
 
 # The re-ask's brief and captures carry this suffix. It belongs to the brief
 # filename grammar, so it is `prompt_templates`' — named here only because this
@@ -125,8 +156,9 @@ class CallOutcome:
     """What one step's call produced, and the driver exit that holds if it failed.
 
     ``exit_code`` is :data:`baton.EXIT_OK` when the step met its contract, and
-    12, 13, or 17 otherwise. ``detail`` is the baton's extra ASK lines —
-    for exit 17, the step and the validator's complaint.
+    12, 13, 14, or 17 otherwise. ``detail`` is the baton's extra ASK lines —
+    for exit 17, the step and the validator's complaint; for exit 14, the
+    ``restore:`` line that card is printed to carry.
     """
 
     exit_code: int
@@ -147,8 +179,45 @@ class CallOutcome:
 class _Ask:
     """One ask's transport history: how it ended, and how many invocations that took."""
 
-    result: transport.CallResult
+    result: inference.CallResult
     attempts: int
+
+
+@dataclass(frozen=True)
+class Bounds:
+    """The two per-call bounds. Both come from config; neither has a default here."""
+
+    silence_seconds: float
+    total_seconds: float
+
+
+_spawn_lock = threading.Lock()
+_call_is_live = False
+
+
+@contextmanager
+def _single_flight() -> Iterator[None]:
+    """Exactly one ``claude`` subprocess at a time. Parallelism lives inside a wave.
+
+    A driver policy and not the layer below's, which serves callers that make no
+    such promise: a tool asking a seat a question is not a build and owns its own
+    concurrency.
+    """
+    global _call_is_live
+    with _spawn_lock:
+        runlog.require(not _call_is_live, "a call would be spawned while another is still live")
+        _call_is_live = True
+    try:
+        yield
+    finally:
+        with _spawn_lock:
+            _call_is_live = False
+
+
+def _require_no_model(tokens: Sequence[str], **context: object) -> None:
+    """Refuse a ``--model`` in either spelling argparse accepts. Exit 15 for both."""
+    smuggled = [token for token in tokens if token == MODEL_FLAG or token.startswith(f"{MODEL_FLAG}=")]
+    runlog.require(not smuggled, "the driver never passes --model", smuggled=" ".join(smuggled), **context)
 
 
 def is_wave(step: steps.Step, *, members: int) -> bool:
@@ -209,7 +278,7 @@ class Caller:
     spending its own backoff.
     """
 
-    invoker: transport.Invoker
+    invoker: inference.Invoker
     config: DriverConfig
     repo_root: Path
     paths: runlog.RunPaths
@@ -276,7 +345,7 @@ class Caller:
                         "context": {
                             "step": step.id,
                             "complaint": complaint,
-                            "stream": str(ask.result.stream_path),
+                            "stream": str(ask.result.capture_path),
                             "re_ask": re_ask,
                         }
                     },
@@ -355,11 +424,11 @@ class Caller:
 
     # --- transport, with the retry policy ------------------------------------
 
-    def _bounds(self, step: steps.Step, *, wave: bool) -> transport.Bounds:
+    def _bounds(self, step: steps.Step, *, wave: bool) -> Bounds:
         """The two per-call bounds: the silence watchdog, and a total that a step may override."""
         timeouts = self.config.timeouts
         default = timeouts.wave_seconds if wave else timeouts.single_seconds
-        return transport.Bounds(
+        return Bounds(
             silence_seconds=timeouts.silence_seconds,
             total_seconds=timeouts.by_step.get(step.id, default),
         )
@@ -369,10 +438,30 @@ class Caller:
         pauses: Sequence[int] = self.config.retry.backoff_seconds
         return float(pauses[min(attempt - 1, len(pauses) - 1)]) if pauses else 0.0
 
+    def _check_call(self, *, brief_path: Path, stream_path: Path, bounds: Bounds, step: steps.Step) -> None:
+        """The spawn boundary: what must hold before a call is worth making, as exit 15.
+
+        A non-positive bound reaches here from ``[timeouts.by_step]`` alone —
+        every other duration is refused at load — which is the one of these four
+        a config file can produce rather than a defect in this driver.
+        """
+        runlog.require(self.repo_root.is_dir(), "the call's cwd does not exist", cwd=str(self.repo_root))
+        runlog.require(brief_path.is_file(), "the composed brief is not on disk", brief=str(brief_path))
+        runlog.require(brief_path.stat().st_size > 0, "the composed brief is empty", brief=str(brief_path))
+        runlog.require(stream_path.parent.is_dir(), "the capture directory does not exist", stream=str(stream_path))
+        runlog.require(
+            bounds.silence_seconds > 0 and bounds.total_seconds > 0,
+            "call bounds must be positive",
+            step=step.id,
+            silence_seconds=bounds.silence_seconds,
+            total_seconds=bounds.total_seconds,
+        )
+
     def _ask(self, request: CallRequest, *, brief_path: Path, label: str, wave: bool) -> _Ask:
         """One ask: invocations up to the attempt budget, stopping at the first that stands."""
         step = request.step
-        argv = transport.build_argv(
+        _require_no_model(self.config.claude.command, command=" ".join(self.config.claude.command))
+        argv = inference.build_argv(
             command=self.config.claude.command,
             permission_mode=self.config.run.permission_mode,
             agent=None if wave else step.seat,
@@ -381,15 +470,19 @@ class Caller:
         budget = self.config.retry.transport_attempts
 
         for attempt in range(1, budget + 1):
-            result = transport.invoke(
-                invoker=self.invoker,
-                argv=argv,
-                cwd=self.repo_root,
-                brief_path=brief_path,
-                stream_path=runlog.call_stream_path(self.paths, seq=request.seq, label=label, attempt=attempt),
-                bounds=bounds,
-                env=self.config.claude.env,
-            )
+            stream_path = runlog.call_stream_path(self.paths, seq=request.seq, label=label, attempt=attempt)
+            self._check_call(brief_path=brief_path, stream_path=stream_path, bounds=bounds, step=step)
+            with _single_flight():
+                result = inference.invoke(
+                    invoker=self.invoker,
+                    argv=argv,
+                    cwd=self.repo_root,
+                    prompt_path=brief_path,
+                    capture_path=stream_path,
+                    silence_seconds=bounds.silence_seconds,
+                    total_seconds=bounds.total_seconds,
+                    env=self.config.claude.env,
+                )
             # A CLI rejection is not retried: the classifier ran first precisely
             # so that a bad flag is not three identical failures and an exit 12.
             if result.ok or not result.outcome.retryable or attempt == budget:
@@ -412,10 +505,31 @@ class Caller:
         raise runlog.BoundaryError(f"[retry] transport_attempts must be positive, got {budget}")
 
     def _transport_failure(self, request: CallRequest, *, ask: _Ask, attempts: int) -> CallOutcome:
-        """A call that never returned a usable stream: exit 13 if the CLI refused it, else 12."""
+        """A call that never returned a usable stream: 14 if it never started, 13 if refused, else 12."""
         result = ask.result
         stderr = tuple(line for line in result.stderr.strip().splitlines() if line.strip())
-        if result.outcome is transport.Outcome.CLI_REJECTION:
+        if result.outcome is inference.Outcome.SPAWN_FAILURE:
+            # The command is not runnable, which is a fault in the environment
+            # the run was launched in and not in the driver. Exit 14 is where
+            # `ledger._run` already puts the same fault when a runner or a tool
+            # cannot be spawned, and its card is the one that fits: relay the
+            # `restore:` line and re-run after it.
+            command = self.config.claude.command[0]
+            _log.error(
+                "the call could not be spawned; not retried",
+                extra={"context": {"step": request.step.id, "command": command}},
+            )
+            return CallOutcome(
+                exit_code=baton.EXIT_ENVIRONMENT,
+                attempts=attempts,
+                detail=(
+                    f"{request.step.id}: could not spawn {command} — restore: install it, or point "
+                    "[claude] command at where it is, and re-run",
+                    *stderr,
+                ),
+            )
+
+        if result.outcome is inference.Outcome.CLI_REJECTION:
             _log.error(
                 "the CLI refused the invocation; not retried",
                 extra={"context": {"step": request.step.id, "exit_status": result.exit_status}},
@@ -433,7 +547,7 @@ class Caller:
                     "step": request.step.id,
                     "outcome": result.outcome.value,
                     "attempts": ask.attempts,
-                    "stream": str(result.stream_path),
+                    "stream": str(result.capture_path),
                 }
             },
         )
@@ -442,14 +556,14 @@ class Caller:
             attempts=attempts,
             detail=(
                 f"{request.step.id}: {result.outcome.value} after {ask.attempts} attempt(s)",
-                f"last capture: {result.stream_path}",
+                f"last capture: {result.capture_path}",
                 *stderr,
             ),
         )
 
     # --- contract validation and the three persistence routes ----------------
 
-    def _accept(self, request: CallRequest, *, result: transport.CallResult, attempts: int) -> CallOutcome:
+    def _accept(self, request: CallRequest, *, result: inference.CallResult, attempts: int) -> CallOutcome:
         """Validate the return, persist it where the route says, and check the artifacts.
 
         Raises :class:`ParseError` — the one re-ask's trigger — for every way a
@@ -459,11 +573,18 @@ class Caller:
         read is a file this module did not write and the seat did.
         """
         step = request.step
-        if result.discipline_violation:
+        if result.init_count > 1:
+            # One call is one turn for this driver, and the layer below promises
+            # no such thing — so the count is its answer and the violation is
+            # this module's reading of it.
+            _log.error(
+                "more than one init event in one call: the session dispatched asynchronously",
+                extra={"context": {"stream": str(result.capture_path), "inits": result.init_count}},
+            )
             raise ParseError(
                 f"{result.init_count} init events in one call: the session dispatched asynchronously and "
                 f"answered before its members did (every member call needs run_in_background: false); "
-                f"capture: {result.stream_path}"
+                f"capture: {result.capture_path}"
             )
 
         text = result.result_text
@@ -504,7 +625,16 @@ class Caller:
         )
 
     def _persist(self, request: CallRequest, *, text: str) -> Path:
-        """The driver-persists route: a never-writer's returned text becomes the artifact."""
+        """The driver-persists route: a never-writer's returned text becomes the artifact.
+
+        **The write is a temp and a rename, so the target name never holds a
+        partial file.** Every reader of these paths asks presence and
+        non-emptiness and nothing else — the contract check below, and the
+        resume that skips a step whose artifacts are already there — so bytes a
+        dying process left half-written would be read as work that finished. A
+        rename is what makes the target either the previous file or the whole
+        new one, with no third state for a reader to meet.
+        """
         target = request.outputs[0]
         if not text.strip():
             raise ParseError(f"the returned text is empty, and it is the artifact this step declares ({target.name})")
@@ -518,8 +648,7 @@ class Caller:
             target=str(target),
             scratch_root=str(self.scratch_root),
         )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(text if text.endswith("\n") else text + "\n", encoding="utf-8")
+        write_text_atomic(text if text.endswith("\n") else text + "\n", target)
         _log.debug("driver persisted a never-writer return", extra={"context": {"artifact": str(target)}})
         return target
 

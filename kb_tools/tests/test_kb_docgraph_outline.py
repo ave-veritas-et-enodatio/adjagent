@@ -95,11 +95,15 @@ def test_the_tree_is_built_from_the_zip(tmp_path) -> None:
     assert tree.title == "Volume One"
     assert [node.path for node in tree.documents] == [
         "volume-one/index.md",
+        "volume-one/overview.md",
         "volume-one/alpha.md",
         "volume-one/beta.md",
     ]
-    assert "The claim." in tree.index.segment
-    assert "lead-in" in tree.index.segment
+    # The volume's abstract and lead-in are source, so they land in a leaf and
+    # not in the index that lists it. The index keeps its own heading.
+    assert tree.index.segment == "# Volume One"
+    overview = tree.index.children[0]
+    assert overview.segment == "# Overview\n\nThe claim.\n\nlead-in"
 
 
 def test_ranking_closes_an_interior_gap(tmp_path) -> None:
@@ -117,7 +121,12 @@ def test_ranking_closes_an_interior_gap(tmp_path) -> None:
     )
 
     assert tree.distinct_levels == 2
-    assert [node.path for node in tree.documents] == ["v/index.md", "v/alpha/index.md", "v/alpha/beta.md"]
+    assert [node.path for node in tree.documents] == [
+        "v/index.md",
+        "v/alpha/index.md",
+        "v/alpha/overview.md",
+        "v/alpha/beta.md",
+    ]
 
 
 def test_a_heading_inside_an_authored_block_leaves_the_tree_undivided(tmp_path) -> None:
@@ -321,6 +330,111 @@ def test_a_bibliography_label_moves_to_the_document_its_content_moved_to(tmp_pat
     assert tree.label_paths["ref-keynes1936"] == "v/references.md"
 
 
+# ---------------------------------------------------------------------------
+# A container's own prose
+#
+# The second relocation, on the bibliography's terms: a node that has children
+# hands its segment to a leaf rather than holding source a consumer has to open
+# an index to find. Both sites are one rule — the volume root's abstract and
+# lead-in, and a section's prose ahead of its first subsection.
+# ---------------------------------------------------------------------------
+
+
+_A_SECTION_WITH_BOTH_PROSE_AND_SUBSECTIONS = "---\ntitle: V\n---\n\n# Alpha\n\nalpha lead\n\n## Gamma\n\ngamma body\n"
+
+
+def test_a_section_holding_both_prose_and_subsections_keeps_its_heading_and_nothing_else(tmp_path) -> None:
+    """The leaf is first, because a section's own prose runs ahead of its first subsection."""
+    tree = outline.build_tree(
+        stem="vol",
+        markdown=_A_SECTION_WITH_BOTH_PROSE_AND_SUBSECTIONS,
+        outline=_outline((1, "", "Alpha"), (2, "", "Gamma")),
+        volume_directory=tmp_path,
+    )
+    alpha = next(node for node in tree.documents if node.path == "v/alpha/index.md")
+
+    assert alpha.segment == "# Alpha"
+    assert [child.title for child in alpha.children] == ["Overview", "Gamma"]
+    assert [node.path for node in tree.documents] == [
+        "v/index.md",
+        "v/alpha/index.md",
+        "v/alpha/overview.md",
+        "v/alpha/gamma.md",
+    ]
+    # The prose is carried byte for byte under a supplied heading, and that
+    # heading is accounted on check B's other side, once per leaf emitted. One
+    # here: this volume writes nothing ahead of its first section, so the volume
+    # index has no prose of its own to lift.
+    assert alpha.children[0].segment == "# Overview\n\nalpha lead\n"
+    assert tree.index.segment == "# V"
+    assert tree.content_tokens.count("Overview") == 1
+
+
+def test_every_container_renders_its_own_heading_whether_or_not_it_had_prose(tmp_path) -> None:
+    """One shape of index, not two: nothing downstream writes a container's heading back."""
+    both = outline.build_tree(
+        stem="vol",
+        markdown=_A_SECTION_WITH_BOTH_PROSE_AND_SUBSECTIONS,
+        outline=_outline((1, "", "Alpha"), (2, "", "Gamma")),
+        volume_directory=tmp_path,
+    )
+    subsections_only = outline.build_tree(
+        stem="vol",
+        markdown="---\ntitle: V\n---\n\n# Alpha\n\n## Gamma\n\ngamma body\n",
+        outline=_outline((1, "", "Alpha"), (2, "", "Gamma")),
+        volume_directory=tmp_path,
+    )
+
+    for tree in (both, subsections_only):
+        alpha = next(node for node in tree.documents if node.path == "v/alpha/index.md")
+        assert outline.render(alpha, tree_root="entry-point.md").splitlines()[2] == "# Alpha"
+
+
+def test_a_section_whose_prose_all_sits_in_its_subsections_gets_no_leaf(tmp_path) -> None:
+    """Nothing below the heading is nothing to lift — the empty bibliography's own answer."""
+    rendered = "---\ntitle: V\n---\n\n# Alpha\n\n## Gamma\n\ngamma body\n"
+
+    tree = outline.build_tree(
+        stem="vol", markdown=rendered, outline=_outline((1, "", "Alpha"), (2, "", "Gamma")), volume_directory=tmp_path
+    )
+
+    assert [node.path for node in tree.documents] == ["v/index.md", "v/alpha/index.md", "v/alpha/gamma.md"]
+    assert "Overview" not in tree.content_tokens
+
+
+def test_the_lift_splits_a_section_s_labels_between_the_heading_and_the_prose(tmp_path) -> None:
+    """Point 7 on both halves: an anchor lands on the node that holds the label.
+
+    The section's own identifier is on its heading, which stays with the
+    container; a ``\\label`` its lead-in declares is in the prose, which does
+    not. A label past the first subsection heading belongs to that subsection and
+    is reached by neither.
+    """
+    rendered = (
+        '---\ntitle: V\n---\n\n# Alpha\n\nsee <a href="#sec:beta" data-reference="sec:beta">2</a> and '
+        '<a href="#thm:bound" data-reference="thm:bound">1</a>\n\n'
+        '# Beta\n\n<span id="thm:bound">beta lead</span>\n\n## Gamma\n\ngamma body\n'
+    )
+    walked = Outline(
+        headers=[
+            Header(level=1, identifier="", tokens=("Alpha",)),
+            Header(level=1, identifier="sec:beta", tokens=("Beta",)),
+            Header(level=2, identifier="", tokens=("Gamma",)),
+        ],
+        label_section={"sec:beta": 1, "thm:bound": 1},
+        header_labels={"sec:beta"},
+        anchored_labels={"thm:bound"},
+    )
+
+    tree = outline.build_tree(stem="vol", markdown=rendered, outline=walked, volume_directory=tmp_path)
+    alpha = next(node for node in tree.documents if node.path == "v/alpha.md")
+
+    assert tree.label_paths["sec:beta"] == "v/beta/index.md"
+    assert tree.label_paths["thm:bound"] == "v/beta/overview.md"
+    assert 'href="beta/index.md#beta"' in alpha.body
+    assert 'href="beta/overview.md#thm:bound"' in alpha.body
+
+
 def test_navigation_is_composed_at_render_and_is_not_part_of_the_body(tmp_path) -> None:
     """Which is what makes a heading in a parent's child list not a duplication."""
     tree = outline.build_tree(
@@ -387,4 +501,4 @@ def test_an_unquoted_title_reaches_the_slug_and_the_link_text_it_feeds() -> None
     # character in the middle of a directory name nobody would question.
     assert outline._volume_directory_name(frontmatter.title, "lamb") == "mary-and-her-lamb-an-account"
     assert outline._plain(frontmatter.title) == "Mary and Her Lamb An Account"
-    assert outline._supplied_titles(frontmatter.title, "") == ["Mary and Her Lamb: An Account"]
+    assert outline._supplied_titles(frontmatter.title, "", own_prose=0) == ["Mary and Her Lamb: An Account"]

@@ -732,17 +732,16 @@ def test_the_census_reports_every_state_whether_or_not_the_corpus_reached_it(con
 
 
 @pytest.mark.parametrize(
-    "path, has_children, hosts_claim, kind",
+    "path, has_children, kind",
     [
-        ("entry-point.md", False, False, "entry-point"),
-        ("vol/leaf.md", False, False, "leaf"),
-        ("vol/leaf.md", False, True, "leaf"),
-        ("vol/index.md", True, False, "index"),
-        ("vol/index.md", True, True, "leaf-as-index"),
+        ("entry-point.md", False, "entry-point"),
+        ("entry-point.md", True, "entry-point"),
+        ("vol/leaf.md", False, "leaf"),
+        ("vol/index.md", True, "index"),
     ],
 )
-def test_the_kind_vocabulary_is_used_as_specified(path, has_children, hosts_claim, kind):
-    assert tree.document_kind(path, has_children=has_children, hosts_claim=hosts_claim) == kind
+def test_the_kind_vocabulary_is_used_as_specified(path, has_children, kind):
+    assert tree.document_kind(path, has_children=has_children) == kind
 
 
 def test_a_register_lands_in_its_claim_s_own_domain():
